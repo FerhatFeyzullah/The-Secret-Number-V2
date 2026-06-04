@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
-import { getStats } from '@/storage';
-import { MenuButton } from '@/ui/menu-button';
+import { getLastMode, getStats, setLastMode, type GameMode } from '@/storage';
+import { ModeSegment } from '@/ui/mode-segment';
+import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
 import { formatStat, StatChip } from '@/ui/stat-chip';
 import { colors, mono } from '@/ui/theme';
@@ -18,6 +19,17 @@ export default function MenuScreen() {
   // oturum açıkken profiles.username, kapalıyken yerel ad.
   const { name, refresh: refreshName } = useProfile();
   const [stats, setStats] = useState({ gamesPlayed: 0, bestScore: null as number | null });
+  const [mode, setMode] = useState<GameMode>('solo');
+
+  // Son seçilen modu hatırla (yereldir, profil verisi değil).
+  useEffect(() => {
+    getLastMode().then(setMode);
+  }, []);
+
+  const selectMode = (next: GameMode) => {
+    setMode(next);
+    setLastMode(next);
+  };
 
   // Ayarlardan veya oyundan dönünce profil adı ve istatistikleri tazele.
   useFocusEffect(
@@ -33,6 +45,15 @@ export default function MenuScreen() {
       router.push('/online');
     } else {
       router.push({ pathname: '/auth', params: { next: '/online' } });
+    }
+  };
+
+  // OYNA: seçili moda göre mevcut navigasyon davranışı aynen korunur.
+  const play = () => {
+    if (mode === 'solo') {
+      router.push('/offline-setup');
+    } else {
+      goOnline();
     }
   };
 
@@ -68,28 +89,15 @@ export default function MenuScreen() {
       </View>
 
       <View style={styles.menu}>
-        <MenuButton
-          icon="person-outline"
-          title="Tek Kişilik"
-          subtitle="Tek başına, çevrimdışı"
-          variant="primary"
-          onPress={() => router.push('/offline-setup')}
-        />
-        <MenuButton
-          icon="globe-outline"
-          title="Çok Oyunculu"
-          subtitle="Arkadaşına karşı, online"
-          variant="secondary"
-          badge="Çok Yakında"
-          onPress={goOnline}
-        />
-        <MenuButton
-          icon="help-circle-outline"
-          title="Nasıl Oynanır"
-          subtitle="Kurallar ve örnek"
-          variant="outline"
+        <ModeSegment value={mode} onChange={selectMode} />
+        <PlayButton mode={mode} onPress={play} />
+        <Pressable
           onPress={() => router.push('/how-to-play')}
-        />
+          hitSlop={8}
+          style={styles.howToPlay}>
+          <Ionicons name="help-circle-outline" size={16} color={colors.dim} />
+          <Text style={styles.howToPlayText}>Nasıl Oynanır</Text>
+        </Pressable>
       </View>
 
       <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
@@ -179,8 +187,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   menu: {
-    gap: 16,
+    gap: 18,
     marginTop: 8,
+  },
+  howToPlay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  howToPlayText: {
+    color: colors.dim,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   version: {
     textAlign: 'center',
