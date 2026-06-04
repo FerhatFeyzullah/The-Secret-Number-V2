@@ -39,7 +39,8 @@ Thumbs.db
 # üretilen ses efektleri — node scripts/generate-sfx.js ile yeniden üretilir
 assets/sfx/*.wav
 
-# local env files
+# local env files — gizli anahtarlar repoya girmez (.env.example şablondur)
+.env
 .env*.local
 
 # typescript

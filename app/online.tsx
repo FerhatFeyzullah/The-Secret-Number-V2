@@ -12,9 +12,9 @@ export default function OnlineScreen() {
       <View style={styles.center}>
         <GlassCard style={styles.card}>
           <Ionicons name="globe-outline" size={48} color={colors.amber} />
-          <Text style={styles.title}>Çok Yakında!</Text>
+          <Text style={styles.title}>Online lobi yakında</Text>
           <Text style={styles.detail}>
-            Arkadaşlarınla kapışacağın çevrim içi mod üzerinde çalışıyoruz.
+            Hesabın bağlandı! Arkadaşlarınla kapışacağın çevrim içi lobi üzerinde çalışıyoruz.
           </Text>
         </GlassCard>
       </View>
