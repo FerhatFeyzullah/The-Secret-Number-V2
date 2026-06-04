@@ -3,13 +3,15 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import { getProfileName, getToggle, setProfileName, setToggle } from '@/storage';
+import { useAuth } from '@/auth';
+import { getProfileName, getToggle, setToggle } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors } from '@/ui/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { session, signOut, updateName } = useAuth();
   const [name, setName] = useState('');
   const [sound, setSound] = useState(true);
   const [haptics, setHaptics] = useState(true);
@@ -28,7 +30,14 @@ export default function SettingsScreen() {
 
   const changeName = (value: string) => {
     setName(value);
-    setProfileName(value);
+    updateName(value); // yerel ad + (oturum açıksa) remote profil
+  };
+
+  // Hesabı değiştir: önce mevcut oturumu kapat, sonra giriş ekranına git.
+  // Yeni hesapla girilince auth context profili çekip adı/avatarı tazeler.
+  const switchAccount = async () => {
+    await signOut();
+    router.push('/auth');
   };
   const changeSound = (value: boolean) => {
     setSound(value);
@@ -83,6 +92,37 @@ export default function SettingsScreen() {
               thumbColor={haptics ? colors.cyan : undefined}
             />
           </View>
+        </GlassCard>
+
+        <GlassCard>
+          <Text style={styles.sectionTitle}>Hesap</Text>
+          {session ? (
+            <>
+              <Text style={styles.label}>Bağlı hesap</Text>
+              <Text style={styles.email}>{session.user.email}</Text>
+              <View style={styles.accountButtons}>
+                <GlassButton small label="Hesabı Değiştir" onPress={switchAccount} />
+                <GlassButton
+                  small
+                  label="Çıkış Yap"
+                  accent={colors.danger}
+                  onPress={() => signOut()}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.accountHint}>
+                Online modda oynamak için hesabını bağla. Offline mod hesapsız çalışmaya devam
+                eder.
+              </Text>
+              <GlassButton
+                small
+                label="Hesabını Bağla / Giriş Yap"
+                onPress={() => router.push('/auth')}
+              />
+            </>
+          )}
         </GlassCard>
 
         <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
@@ -149,5 +189,20 @@ const styles = StyleSheet.create({
   about: {
     color: colors.dim,
     lineHeight: 22,
+  },
+  email: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  accountButtons: {
+    gap: 10,
+    marginTop: 14,
+  },
+  accountHint: {
+    color: colors.dim,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
   },
 });

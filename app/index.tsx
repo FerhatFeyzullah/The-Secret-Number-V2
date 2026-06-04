@@ -4,23 +4,34 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { DEFAULT_NAME, getProfileName, getStats } from '@/storage';
+import { useAuth } from '@/auth';
+import { getStats } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen } from '@/ui/screen';
 import { colors, mono } from '@/ui/theme';
 
 export default function MenuScreen() {
   const router = useRouter();
-  const [name, setName] = useState(DEFAULT_NAME);
+  // Görünen ad tek kaynaktan: oturum açıkken remote profil, kapalıyken yerel ad.
+  const { displayName: name, session, refreshDisplayName } = useAuth();
   const [stats, setStats] = useState({ gamesPlayed: 0, bestScore: null as number | null });
 
   // Ayarlardan veya oyundan dönünce profil adı ve istatistikleri tazele.
   useFocusEffect(
     useCallback(() => {
-      getProfileName().then(setName);
+      refreshDisplayName();
       getStats().then(setStats);
-    }, []),
+    }, [refreshDisplayName]),
   );
+
+  // Online yalnızca burada oturum ister; oturum yoksa giriş ekranına yönlendir.
+  const goOnline = () => {
+    if (session) {
+      router.push('/online');
+    } else {
+      router.push({ pathname: '/auth', params: { next: '/online' } });
+    }
+  };
 
   return (
     <Screen>
@@ -48,7 +59,7 @@ export default function MenuScreen() {
           label="Çok Oyunculu"
           accent={colors.amber}
           badge="Çok Yakında"
-          onPress={() => router.push('/online')}
+          onPress={goOnline}
         />
         <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
       </View>
