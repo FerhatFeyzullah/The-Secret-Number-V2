@@ -1,56 +1,52 @@
-# Welcome to your Expo app 👋
+# Gizemli Sayılar 🔢
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+3 haneli gizli sayıyı bulmaya çalıştığın bir tahmin oyunu. **Offline mod hazır** — çok oyunculu online mod yakında!
 
-## Get started
+## Oyun Kuralları
 
-1. Install dependencies
+- Gizli sayı; **1-9 arası, birbirinden farklı 3 rakamdan** oluşur (sıfır yok).
+- Her tahminde **kaç rakamın doğru olduğu** söylenir — ama hangileri ve hangi pozisyonda olduğu **asla** söylenmez.
+- Üç rakamın üçü de doğru ama sıra yanlışsa: *"rakamlar doğru, yerleri yanlış"*.
+- Rakamları doğru sıraya koyduğunda kazanırsın! 🎉
 
-   ```bash
-   npm install
-   ```
+**Modlar:** Tahmin Hakkı (5/7/10/12 hak — biterse kaybedersin) · Süreli (30 sn / 1 dk / 2 dk / özel — süre dolarsa kaybedersin)
 
-2. Start the app
+## Teknoloji Yığını
 
-   ```bash
-   npx expo start
-   ```
+- [Expo SDK 54](https://expo.dev) (mağazadaki Expo Go ile uyumlu) + React Native 0.81
+- TypeScript (oyun mantığı katmanında sıkı tipleme)
+- Expo Router (dosya tabanlı navigasyon)
+- AsyncStorage (profil, ayarlar, istatistikler — tamamen yerel)
+- expo-audio (sentezlenmiş ses efektleri) + expo-haptics (titreşim)
+- Jest + jest-expo (birim testler)
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Kurulum
 
 ```bash
-npm run reset-project
+npm install                      # bağımlılıklar (postinstall sesleri otomatik üretir)
+node scripts/generate-sfx.js     # ses efektlerini elle üretmek istersen
+npx expo start                   # dev server — QR'ı Expo Go ile okut
+npm test                         # birim testler
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+> **Not:** `assets/sfx/` altındaki WAV dosyaları repoya dahil değildir; `scripts/generate-sfx.js` ile koddan sentezlenir (`npm install` sonrası otomatik çalışır).
 
-### Other setup steps
+## Klasör Yapısı
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+app/                # ekranlar (Expo Router)
+  index.tsx         #   ana menü
+  offline-setup.tsx #   mod seçimi (hak / süre)
+  offline.tsx       #   offline oyun ekranı
+  online.tsx        #   çok oyunculu (yakında)
+  settings.tsx      #   profil + ayarlar
+  how-to-play.tsx   #   kurallar
+src/
+  game/             # saf TS oyun mantığı + testler (sıkı tipli çekirdek)
+  ui/               # tema, camsı bileşenler, animasyonlu arka plan
+  storage.ts        # AsyncStorage yardımcıları
+  sfx.ts            # ses efekti hook'u
+scripts/
+  generate-sfx.js   # WAV ses efektlerini sentezler
+assets/sfx/         # üretilen sesler (gitignore'da)
+```
