@@ -197,14 +197,14 @@ const styles = StyleSheet.create({
     marginLeft: 12, // letterSpacing'in sağdaki boşluğunu dengele
   },
   logoBottom: {
-    color: colors.cyan,
+    color: colors.ice, // beyazımsı metin + mavi glow = "ışıldayan beyaz neon"
     fontSize: 46,
     fontWeight: '900',
     fontFamily: mono,
     letterSpacing: 6,
     marginLeft: 6,
     marginTop: 2,
-    textShadowColor: colors.cyanDim,
+    textShadowColor: colors.cyan,
     textShadowRadius: 18,
   },
   secretBoxes: {
