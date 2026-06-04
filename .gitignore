@@ -26,11 +26,21 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# logs
+*.log
+
 # macOS
 .DS_Store
 *.pem
 
-# local env files
+# Windows
+Thumbs.db
+
+# üretilen ses efektleri — node scripts/generate-sfx.js ile yeniden üretilir
+assets/sfx/*.wav
+
+# local env files — gizli anahtarlar repoya girmez (.env.example şablondur)
+.env
 .env*.local
 
 # typescript
