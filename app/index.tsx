@@ -6,8 +6,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
 import { getStats } from '@/storage';
-import { GlassButton, GlassCard } from '@/ui/glass';
+import { MenuButton } from '@/ui/menu-button';
 import { Screen } from '@/ui/screen';
+import { formatStat, StatChip } from '@/ui/stat-chip';
 import { colors, mono } from '@/ui/theme';
 
 export default function MenuScreen() {
@@ -42,7 +43,16 @@ export default function MenuScreen() {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
           </View>
-          <Text style={styles.profileName}>{name}</Text>
+          <Text style={styles.profileName} numberOfLines={1}>
+            {name}
+          </Text>
+        </View>
+        <View style={styles.chips}>
+          <StatChip icon="game-controller-outline" value={formatStat(stats.gamesPlayed)} />
+          <StatChip
+            icon="trophy-outline"
+            value={stats.bestScore === null ? '—' : formatStat(stats.bestScore)}
+          />
         </View>
         <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
           <Ionicons name="settings-outline" size={26} color={colors.cyan} />
@@ -50,35 +60,37 @@ export default function MenuScreen() {
       </View>
 
       <View style={styles.hero}>
+        <Text style={styles.heroGhost}>?</Text>
         <Text style={styles.logoLine}>● ● ●</Text>
-        <Text style={styles.logo}>GİZEMLİ{'\n'}SAYILAR</Text>
+        <Text style={styles.logoTop}>GİZEMLİ</Text>
+        <Text style={styles.logoBottom}>SAYILAR</Text>
         <Text style={styles.tagline}>şifreyi kır, sayıyı bul</Text>
       </View>
 
       <View style={styles.menu}>
-        <GlassButton label="Tek Kişilik" onPress={() => router.push('/offline-setup')} />
-        <GlassButton
-          label="Çok Oyunculu"
-          accent={colors.amber}
+        <MenuButton
+          icon="person-outline"
+          title="Tek Kişilik"
+          subtitle="Tek başına, çevrimdışı"
+          variant="primary"
+          onPress={() => router.push('/offline-setup')}
+        />
+        <MenuButton
+          icon="globe-outline"
+          title="Çok Oyunculu"
+          subtitle="Arkadaşına karşı, online"
+          variant="secondary"
           badge="Çok Yakında"
           onPress={goOnline}
         />
-        <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
+        <MenuButton
+          icon="help-circle-outline"
+          title="Nasıl Oynanır"
+          subtitle="Kurallar ve örnek"
+          variant="outline"
+          onPress={() => router.push('/how-to-play')}
+        />
       </View>
-
-      <GlassCard style={styles.stats}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{stats.gamesPlayed}</Text>
-          <Text style={styles.statLabel}>Oynanan Oyun</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>
-            {stats.bestScore === null ? '—' : stats.bestScore}
-          </Text>
-          <Text style={styles.statLabel}>En İyi (tahmin)</Text>
-        </View>
-      </GlassCard>
 
       <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
     </Screen>
@@ -89,18 +101,19 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
     paddingVertical: 12,
   },
   profile: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flexShrink: 1,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.cyan,
@@ -109,33 +122,53 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: colors.cyan,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   profileName: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    flexShrink: 1,
+  },
+  chips: {
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: 'auto',
   },
   hero: {
     alignItems: 'center',
-    marginTop: 36,
-    marginBottom: 28,
-    gap: 8,
+    marginTop: 34,
+    marginBottom: 30,
+    gap: 6,
+  },
+  heroGhost: {
+    position: 'absolute',
+    top: -36,
+    color: 'rgba(130, 150, 255, 0.07)',
+    fontSize: 190,
+    fontWeight: 'bold',
+    fontFamily: mono,
   },
   logoLine: {
     color: colors.amber,
-    fontSize: 14,
+    fontSize: 13,
     letterSpacing: 6,
   },
-  logo: {
+  logoTop: {
+    color: colors.dim,
+    fontSize: 25,
+    fontWeight: '300',
+    fontFamily: mono,
+    letterSpacing: 14,
+    marginTop: 2,
+  },
+  logoBottom: {
     color: colors.cyan,
-    fontSize: 44,
+    fontSize: 46,
     fontWeight: 'bold',
     fontFamily: mono,
-    textAlign: 'center',
-    letterSpacing: 6,
-    lineHeight: 54,
+    letterSpacing: 7,
     textShadowColor: colors.cyanDim,
     textShadowRadius: 18,
   },
@@ -143,33 +176,11 @@ const styles = StyleSheet.create({
     color: colors.dim,
     fontSize: 13,
     letterSpacing: 2,
+    marginTop: 4,
   },
   menu: {
-    gap: 18,
+    gap: 16,
     marginTop: 8,
-  },
-  stats: {
-    flexDirection: 'row',
-    marginTop: 28,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: colors.glassBorder,
-  },
-  statValue: {
-    color: colors.amber,
-    fontSize: 24,
-    fontWeight: 'bold',
-    fontFamily: mono,
-  },
-  statLabel: {
-    color: colors.dim,
-    fontSize: 12,
   },
   version: {
     textAlign: 'center',
