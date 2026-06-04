@@ -10,20 +10,20 @@ import {
 } from 'react';
 
 import { fetchProfile, upsertProfile } from './profile';
-import { DEFAULT_NAME, getProfileName, setProfileName } from './storage';
+import { DEFAULT_NAME, getProfileName, getRawProfileName, setProfileName } from './storage';
 import { supabase } from './supabase';
 
 type AuthContextValue = {
   session: Session | null;
   /** İlk oturum kontrolü tamamlanana kadar true. */
   initializing: boolean;
-  /** Oturum açıkken remote profil adı, kapalıyken yerel (offline) ad. */
+  /** Oturum açıkken HER ZAMAN profiles.username, kapalıyken yerel (offline) ad. */
   displayName: string;
   /** Başarıda null, hatada Türkçe mesaj döner. */
   signIn(email: string, password: string): Promise<string | null>;
   signUp(email: string, password: string): Promise<string | null>;
   signOut(): Promise<void>;
-  /** Yerel adı her zaman, oturum açıksa remote profili de günceller. */
+  /** Oturum açıkken yalnızca DB'yi, kapalıyken yalnızca yerel adı günceller. */
   updateName(name: string): Promise<void>;
   /** Görünen adı doğru kaynaktan yeniden yükler (ör. ekrana dönünce). */
   refreshDisplayName(): Promise<void>;
@@ -54,19 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastUserId = useRef<string | null>(null);
 
   /** Görünen adı oturum durumuna göre TEK yerden besler:
-   *  oturum açık → remote profil (yoksa e-posta kullanıcı adı), kapalı → yerel ad. */
+   *  oturum açık → profiles.username (DB esas), kapalı → yerel ad.
+   *  İlk girişte remote ad hâlâ varsayılansa eldeki offline adı bir
+   *  defalığına DB'ye taşır; sonrasında DB tek doğruluk kaynağıdır. */
   const loadDisplayName = useCallback(async (current: Session | null) => {
-    if (current) {
-      const profile = await fetchProfile();
-      if (profile?.name) {
-        setDisplayName(profile.name);
-        return;
-      }
-      // profiles tablosu henüz kurulmadıysa hesaba özgü makul bir ada düş.
-      setDisplayName(current.user.email?.split('@')[0] || DEFAULT_NAME);
-    } else {
+    if (!current) {
       setDisplayName(await getProfileName());
+      return;
     }
+    let profile = await fetchProfile();
+    const emailPrefix = current.user.email?.split('@')[0] ?? '';
+    const localName = await getRawProfileName();
+    const isDefaultUsername = !profile?.username || profile.username === emailPrefix;
+    if (profile && isDefaultUsername && localName && localName !== profile.username) {
+      if (await upsertProfile(localName)) profile = await fetchProfile();
+    }
+    setDisplayName(profile?.username || emailPrefix || DEFAULT_NAME);
   }, []);
 
   /** Hesap değişti / kapandı: online'a özel önbelleği sıfırla.
@@ -122,9 +125,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateName = useCallback(
     async (name: string) => {
-      await setProfileName(name); // yerel ad oturumdan bağımsız her zaman saklanır
-      setDisplayName(name.trim() || DEFAULT_NAME);
-      if (session) await upsertProfile(name);
+      const trimmed = name.trim();
+      if (session) {
+        // Oturum açık: tek kaynak DB. Optimistic göster, sunucu teyidiyle tazele.
+        // AsyncStorage'daki offline ada DOKUNULMAZ.
+        setDisplayName(trimmed || DEFAULT_NAME);
+        if (await upsertProfile(trimmed)) {
+          const profile = await fetchProfile();
+          if (profile?.username) setDisplayName(profile.username);
+        }
+      } else {
+        await setProfileName(name);
+        setDisplayName(trimmed || DEFAULT_NAME);
+      }
     },
     [session],
   );
@@ -152,4 +165,17 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth, AuthProvider içinde kullanılmalı');
   return ctx;
+}
+
+/** Profil adının TEK doğruluk kaynağı: oturum açıkken profiles.username,
+ *  kapalıyken yerel ad. Ana ekran ve ayarlar İKİSİ DE bunu kullanır. */
+export function useProfile() {
+  const { displayName, updateName, refreshDisplayName, session } = useAuth();
+  return {
+    name: displayName,
+    updateName,
+    refresh: refreshDisplayName,
+    /** true → ad DB'den geliyor (oturum açık). */
+    isRemote: session !== null,
+  };
 }

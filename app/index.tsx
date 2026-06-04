@@ -4,7 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useAuth } from '@/auth';
+import { useAuth, useProfile } from '@/auth';
 import { getStats } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen } from '@/ui/screen';
@@ -12,16 +12,18 @@ import { colors, mono } from '@/ui/theme';
 
 export default function MenuScreen() {
   const router = useRouter();
-  // Görünen ad tek kaynaktan: oturum açıkken remote profil, kapalıyken yerel ad.
-  const { displayName: name, session, refreshDisplayName } = useAuth();
+  const { session } = useAuth();
+  // Görünen ad TEK kaynaktan (ayarlarla aynı hook):
+  // oturum açıkken profiles.username, kapalıyken yerel ad.
+  const { name, refresh: refreshName } = useProfile();
   const [stats, setStats] = useState({ gamesPlayed: 0, bestScore: null as number | null });
 
   // Ayarlardan veya oyundan dönünce profil adı ve istatistikleri tazele.
   useFocusEffect(
     useCallback(() => {
-      refreshDisplayName();
+      refreshName();
       getStats().then(setStats);
-    }, [refreshDisplayName]),
+    }, [refreshName]),
   );
 
   // Online yalnızca burada oturum ister; oturum yoksa giriş ekranına yönlendir.

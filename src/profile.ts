@@ -1,38 +1,37 @@
 import { supabase } from './supabase';
 
-// NOT: 'profiles' tablosu bir sonraki adımda kurulacak (TODO). Tablo henüz
-// yokken bu yardımcılar hata fırlatmadan sessizce no-op kalır.
+export type RemoteProfile = { username: string };
 
-export type RemoteProfile = { name: string };
-
-/** Oturum açık kullanıcının remote profilini getirir; yoksa/hata olursa null. */
-export async function fetchProfile(): Promise<RemoteProfile | null> {
+async function currentUserId(): Promise<string | null> {
   if (!supabase) return null;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const userId = data.session?.user.id;
-    if (!userId) return null;
-    const { data: row, error } = await supabase
-      .from('profiles')
-      .select('name')
-      .eq('id', userId)
-      .maybeSingle();
-    if (error || !row?.name) return null;
-    return { name: row.name };
-  } catch {
-    return null;
-  }
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
 }
 
-/** Remote profil adını yazar/günceller; tablo yoksa sessizce geçer. */
-export async function upsertProfile(name: string): Promise<void> {
-  if (!supabase) return;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const userId = data.session?.user.id;
-    if (!userId) return;
-    await supabase.from('profiles').upsert({ id: userId, name: name.trim() });
-  } catch {
-    // tablo henüz yok — sessiz geç
-  }
+/** Oturum açık kullanıcının remote profilini getirir; oturum/satır yoksa null. */
+export async function fetchProfile(): Promise<RemoteProfile | null> {
+  if (!supabase) return null;
+  const userId = await currentUserId();
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { username: data.username ?? '' };
+}
+
+/** Remote profil adını günceller; başarıda true döner.
+ *  Satırı her zaman handle_new_user trigger'ı açar; RLS gereği istemci
+ *  insert edemez, bu yüzden upsert değil kendi satırına UPDATE atılır. */
+export async function upsertProfile(name: string): Promise<boolean> {
+  if (!supabase) return false;
+  const userId = await currentUserId();
+  if (!userId) return false;
+  const { error } = await supabase
+    .from('profiles')
+    .update({ username: name.trim() })
+    .eq('id', userId);
+  return !error;
 }

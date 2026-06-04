@@ -16,6 +16,13 @@ export async function getProfileName() {
   return name?.trim() || DEFAULT_NAME;
 }
 
+/** Varsayılana düşmeden ham yerel adı döndürür; hiç kaydedilmemişse null.
+ *  (İlk girişte offline adı bir defalığına DB'ye taşımak için kullanılır.) */
+export async function getRawProfileName() {
+  const name = await AsyncStorage.getItem(KEYS.name);
+  return name?.trim() || null;
+}
+
 export async function setProfileName(name: string) {
   await AsyncStorage.setItem(KEYS.name, name.trim());
 }
