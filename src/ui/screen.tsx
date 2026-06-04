@@ -14,6 +14,22 @@ export function Screen({ children }: { children: ReactNode }) {
     <LinearGradient
       colors={[colors.bgTop, colors.bgMid, colors.bgBottom]}
       style={styles.fill}>
+      {/* Köşe vinyeti: dikey + yatay kenar koyulaşması köşelerde üst üste binip
+          merkezden dışa radyal koyulaşma hissi verir. Merkez saydam kalır. */}
+      <LinearGradient
+        colors={[colors.vignette, colors.vignetteClear, colors.vignetteClear, colors.vignette]}
+        locations={[0, 0.3, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={[colors.vignette, colors.vignetteClear, colors.vignetteClear, colors.vignette]}
+        locations={[0, 0.3, 0.7, 1]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <FloatingDigits />
       <SafeAreaView style={styles.content}>{children}</SafeAreaView>
     </LinearGradient>
