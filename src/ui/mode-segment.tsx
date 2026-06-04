@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getToggle, type GameMode } from '../storage';
-import { colors } from './theme';
+import { colors, cyanAlpha } from './theme';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 
@@ -49,7 +49,7 @@ export function ModeSegment({
                 {
                   borderColor: accent,
                   backgroundColor:
-                    mode === 'solo' ? 'rgba(52, 224, 255, 0.14)' : 'rgba(255, 200, 87, 0.14)',
+                    mode === 'solo' ? cyanAlpha(0.14) : 'rgba(255, 200, 87, 0.14)',
                   shadowColor: accent,
                 },
               ],

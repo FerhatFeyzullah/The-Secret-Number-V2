@@ -11,7 +11,7 @@ import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
 import { StatCard } from '@/ui/stat-card';
 import { formatStat, StatChip } from '@/ui/stat-chip';
-import { colors, mono } from '@/ui/theme';
+import { colors, cyanAlpha, mono } from '@/ui/theme';
 
 type Stats = Awaited<ReturnType<typeof getStats>>;
 
@@ -216,9 +216,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 9,
-    backgroundColor: 'rgba(52, 224, 255, 0.06)',
+    backgroundColor: cyanAlpha(0.06),
     borderWidth: 1,
-    borderColor: 'rgba(52, 224, 255, 0.28)',
+    borderColor: cyanAlpha(0.28),
     alignItems: 'center',
     justifyContent: 'center',
   },

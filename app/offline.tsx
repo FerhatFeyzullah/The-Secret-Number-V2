@@ -9,7 +9,7 @@ import { useSfx, type SfxName } from '@/sfx';
 import { getToggle, recordLoss, recordWin } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen, ScreenHeader } from '@/ui/screen';
-import { colors, mono } from '@/ui/theme';
+import { colors, cyanAlpha, mono } from '@/ui/theme';
 
 function feedbackFor(result: Exclude<GuessResult, { status: 'invalid' }>) {
   switch (result.status) {
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   keyPressed: {
-    backgroundColor: 'rgba(52, 224, 255, 0.18)',
+    backgroundColor: cyanAlpha(0.18),
     borderColor: colors.cyan,
   },
   keyDisabled: {

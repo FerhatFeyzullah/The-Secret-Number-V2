@@ -4,7 +4,7 @@ import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-nat
 
 import { useSfx } from '../sfx';
 import { getToggle, type GameMode } from '../storage';
-import { colors, mono } from './theme';
+import { colors, cyanAlpha, mono } from './theme';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 
@@ -15,9 +15,9 @@ const DEPTH = 7;
 const PALETTES: Record<GameMode, { accent: string; face: string; base: string; glowBg: string }> = {
   solo: {
     accent: colors.cyan,
-    face: '#0f3347', // koyu camgöbeği yüzey
-    base: '#082230', // daha koyu taban
-    glowBg: 'rgba(52, 224, 255, 0.14)',
+    face: '#0c2c47', // koyu elektrik mavisi yüzey
+    base: '#071e33', // daha koyu taban
+    glowBg: cyanAlpha(0.14),
   },
   online: {
     accent: colors.amber,
