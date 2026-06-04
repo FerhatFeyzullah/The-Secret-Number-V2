@@ -7,7 +7,19 @@ const KEYS = {
   gamesPlayed: 'stats.gamesPlayed',
   legacyGamesWon: 'stats.gamesWon', // eski sürümden taşıma
   bestScore: 'stats.bestScore',
+  lastMode: 'menu.lastMode', // ana ekranda son seçilen mod (profil verisi değil)
 } as const;
+
+export type GameMode = 'solo' | 'online';
+
+export async function getLastMode(): Promise<GameMode> {
+  const mode = await AsyncStorage.getItem(KEYS.lastMode);
+  return mode === 'online' ? 'online' : 'solo'; // varsayılan: tek kişilik
+}
+
+export async function setLastMode(mode: GameMode) {
+  await AsyncStorage.setItem(KEYS.lastMode, mode);
+}
 
 export const DEFAULT_NAME = 'Oyuncu';
 
