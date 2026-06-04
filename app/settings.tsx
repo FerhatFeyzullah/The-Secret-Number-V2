@@ -3,34 +3,43 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import { useAuth } from '@/auth';
-import { getProfileName, getToggle, setToggle } from '@/storage';
+import { useAuth, useProfile } from '@/auth';
+import { getToggle, setToggle } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors } from '@/ui/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { session, signOut, updateName } = useAuth();
+  const { session, signOut } = useAuth();
+  // Ad TEK kaynaktan: oturum açıkken profiles.username, kapalıyken yerel ad.
+  const { name: profileName, updateName, isRemote } = useProfile();
   const [name, setName] = useState('');
   const [sound, setSound] = useState(true);
   const [haptics, setHaptics] = useState(true);
-  const [loaded, setLoaded] = useState(false);
+
+  // Kaynaktaki ad değişince (giriş/çıkış, sunucu teyidi) inputu eşitle.
+  useEffect(() => {
+    setName(profileName);
+  }, [profileName]);
 
   useEffect(() => {
-    Promise.all([getProfileName(), getToggle('sound'), getToggle('haptics')]).then(
-      ([savedName, savedSound, savedHaptics]) => {
-        setName(savedName);
-        setSound(savedSound);
-        setHaptics(savedHaptics);
-        setLoaded(true);
-      },
-    );
+    Promise.all([getToggle('sound'), getToggle('haptics')]).then(([savedSound, savedHaptics]) => {
+      setSound(savedSound);
+      setHaptics(savedHaptics);
+    });
   }, []);
 
   const changeName = (value: string) => {
     setName(value);
-    updateName(value); // yerel ad + (oturum açıksa) remote profil
+    // Offline ad eskisi gibi her tuşta yerel depoya yazılır;
+    // oturum açıkken DB'ye yazım bitince tek seferde gidilir (commitName).
+    if (!isRemote) updateName(value);
+  };
+
+  const commitName = () => {
+    const trimmed = name.trim();
+    if (isRemote && trimmed && trimmed !== profileName) updateName(trimmed);
   };
 
   // Hesabı değiştir: önce mevcut oturumu kapat, sonra giriş ekranına git.
@@ -59,11 +68,17 @@ export default function SettingsScreen() {
             style={styles.input}
             value={name}
             onChangeText={changeName}
-            editable={loaded}
+            onEndEditing={commitName}
+            onSubmitEditing={commitName}
             maxLength={20}
             placeholder="Oyuncu"
             placeholderTextColor={colors.dim}
           />
+          <Text style={styles.rowHint}>
+            {isRemote
+              ? 'Hesabında saklanır — tüm cihazlarında bu ad görünür.'
+              : 'Bu cihazda saklanır.'}
+          </Text>
         </GlassCard>
 
         <GlassCard>
