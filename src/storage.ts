@@ -5,8 +5,10 @@ const KEYS = {
   sound: 'settings.sound',
   haptics: 'settings.haptics',
   gamesPlayed: 'stats.gamesPlayed',
-  legacyGamesWon: 'stats.gamesWon', // eski sürümden taşıma
+  legacyGamesWon: 'stats.gamesWon', // eski sürümden taşıma (eski "oynanan" sayacı)
   bestScore: 'stats.bestScore',
+  wins: 'stats.wins', // kazanılan oyun sayısı
+  streak: 'stats.streak', // güncel üst üste galibiyet
   lastMode: 'menu.lastMode', // ana ekranda son seçilen mod (profil verisi değil)
 } as const;
 
@@ -48,30 +50,46 @@ export async function setToggle(key: 'sound' | 'haptics', enabled: boolean) {
   await AsyncStorage.setItem(KEYS[key], enabled ? 'on' : 'off');
 }
 
+/** Oyun istatistikleri. Eksik/eski anahtarlar 0'dan (en iyi skor null) başlar.
+ *  winRate = kazanılan ÷ oynanan, tam sayı yüzde; oynanan 0 ise %0. */
 export async function getStats() {
-  const [played, legacy, best] = await AsyncStorage.multiGet([
+  const [played, legacy, best, wins, streak] = await AsyncStorage.multiGet([
     KEYS.gamesPlayed,
     KEYS.legacyGamesWon,
     KEYS.bestScore,
+    KEYS.wins,
+    KEYS.streak,
   ]);
+  const gamesPlayed = Number(played[1]) || Number(legacy[1]) || 0;
+  const winCount = Number(wins[1]) || 0;
   return {
-    gamesPlayed: Number(played[1]) || Number(legacy[1]) || 0,
+    gamesPlayed,
     bestScore: best[1] ? Number(best[1]) : null,
+    wins: winCount,
+    streak: Number(streak[1]) || 0,
+    winRate: gamesPlayed === 0 ? 0 : Math.round((winCount / gamesPlayed) * 100),
   };
 }
 
-/** Kazanılan oyunu kaydeder: sayaç artar, daha az tahminse en iyi skor güncellenir. */
+/** Galibiyet: oynanan + kazanılan + seri artar; daha az tahminse en iyi skor güncellenir. */
 export async function recordWin(guessCount: number) {
   const stats = await getStats();
-  const pairs: [string, string][] = [[KEYS.gamesPlayed, String(stats.gamesPlayed + 1)]];
+  const pairs: [string, string][] = [
+    [KEYS.gamesPlayed, String(stats.gamesPlayed + 1)],
+    [KEYS.wins, String(stats.wins + 1)],
+    [KEYS.streak, String(stats.streak + 1)],
+  ];
   if (stats.bestScore === null || guessCount < stats.bestScore) {
     pairs.push([KEYS.bestScore, String(guessCount)]);
   }
   await AsyncStorage.multiSet(pairs);
 }
 
-/** Kaybedilen oyun da oynanan oyun sayısına eklenir. */
+/** Yenilgi: oynanan artar, güncel seri sıfırlanır (kazanılan ve en iyi skor korunur). */
 export async function recordLoss() {
   const stats = await getStats();
-  await AsyncStorage.setItem(KEYS.gamesPlayed, String(stats.gamesPlayed + 1));
+  await AsyncStorage.multiSet([
+    [KEYS.gamesPlayed, String(stats.gamesPlayed + 1)],
+    [KEYS.streak, '0'],
+  ]);
 }
