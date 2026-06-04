@@ -9,8 +9,19 @@ import { getLastMode, getStats, setLastMode, type GameMode } from '@/storage';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
+import { StatCard } from '@/ui/stat-card';
 import { formatStat, StatChip } from '@/ui/stat-chip';
 import { colors, mono } from '@/ui/theme';
+
+type Stats = Awaited<ReturnType<typeof getStats>>;
+
+const EMPTY_STATS: Stats = {
+  gamesPlayed: 0,
+  bestScore: null,
+  wins: 0,
+  streak: 0,
+  winRate: 0,
+};
 
 export default function MenuScreen() {
   const router = useRouter();
@@ -18,7 +29,7 @@ export default function MenuScreen() {
   // Görünen ad TEK kaynaktan (ayarlarla aynı hook):
   // oturum açıkken profiles.username, kapalıyken yerel ad.
   const { name, refresh: refreshName } = useProfile();
-  const [stats, setStats] = useState({ gamesPlayed: 0, bestScore: null as number | null });
+  const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [mode, setMode] = useState<GameMode>('solo');
 
   // Son seçilen modu hatırla (yereldir, profil verisi değil).
@@ -57,37 +68,43 @@ export default function MenuScreen() {
     }
   };
 
+  const best = stats.bestScore === null ? '—' : formatStat(stats.bestScore);
+
   return (
     <Screen>
+      {/* Üst bar: avatar + ad + chip'ler, sağda ayarlar */}
       <View style={styles.topRow}>
-        <View style={styles.profile}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
-          </View>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View style={styles.identity}>
           <Text style={styles.profileName} numberOfLines={1}>
             {name}
           </Text>
+          <View style={styles.chips}>
+            <StatChip icon="eye-outline" value={formatStat(stats.gamesPlayed)} />
+            <StatChip icon="locate-outline" value={best} />
+          </View>
         </View>
-        <View style={styles.chips}>
-          <StatChip icon="game-controller-outline" value={formatStat(stats.gamesPlayed)} />
-          <StatChip
-            icon="trophy-outline"
-            value={stats.bestScore === null ? '—' : formatStat(stats.bestScore)}
-          />
-        </View>
-        <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
-          <Ionicons name="settings-outline" size={26} color={colors.cyan} />
+        <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.gear}>
+          <Ionicons name="settings-outline" size={22} color={colors.cyan} />
         </Pressable>
       </View>
 
+      {/* Logo: GİZEMLİ / SAYILAR + üç haneli "?" motifi */}
       <View style={styles.hero}>
-        <Text style={styles.heroGhost}>?</Text>
-        <Text style={styles.logoLine}>● ● ●</Text>
         <Text style={styles.logoTop}>GİZEMLİ</Text>
         <Text style={styles.logoBottom}>SAYILAR</Text>
-        <Text style={styles.tagline}>şifreyi kır, sayıyı bul</Text>
+        <View style={styles.secretBoxes}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.secretBox}>
+              <Text style={styles.secretBoxText}>?</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
+      {/* Menü: mod seçici + OYNA + Nasıl Oynanır */}
       <View style={styles.menu}>
         <ModeSegment value={mode} onChange={selectMode} />
         <PlayButton mode={mode} onPress={play} />
@@ -100,7 +117,15 @@ export default function MenuScreen() {
         </Pressable>
       </View>
 
-      <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+      {/* Alt: detay istatistik kartları + sürüm */}
+      <View style={styles.footer}>
+        <View style={styles.statsRow}>
+          <StatCard value={best} label="EN İYİ" />
+          <StatCard value={String(stats.streak)} label="SERİ" />
+          <StatCard value={`%${stats.winRate}`} label="BAŞARI" />
+        </View>
+        <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+      </View>
     </Screen>
   );
 }
@@ -109,86 +134,102 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     paddingVertical: 12,
   },
-  profile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 1,
-  },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: colors.glass,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.cyan,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   avatarText: {
     color: colors.cyan,
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
+    fontFamily: mono,
+  },
+  identity: {
+    flexShrink: 1,
+    alignItems: 'flex-start',
+    gap: 5,
   },
   profileName: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '700',
   },
   chips: {
     flexDirection: 'row',
     gap: 6,
+  },
+  gear: {
     marginLeft: 'auto',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   hero: {
     alignItems: 'center',
-    marginTop: 34,
-    marginBottom: 30,
-    gap: 6,
-  },
-  heroGhost: {
-    position: 'absolute',
-    top: -36,
-    color: 'rgba(130, 150, 255, 0.07)',
-    fontSize: 190,
-    fontWeight: 'bold',
-    fontFamily: mono,
-  },
-  logoLine: {
-    color: colors.amber,
-    fontSize: 13,
-    letterSpacing: 6,
+    marginTop: 28,
+    marginBottom: 26,
   },
   logoTop: {
     color: colors.dim,
-    fontSize: 25,
+    fontSize: 22,
     fontWeight: '300',
     fontFamily: mono,
-    letterSpacing: 14,
-    marginTop: 2,
+    letterSpacing: 12,
+    marginLeft: 12, // letterSpacing'in sağdaki boşluğunu dengele
   },
   logoBottom: {
     color: colors.cyan,
     fontSize: 46,
-    fontWeight: 'bold',
+    fontWeight: '900',
     fontFamily: mono,
-    letterSpacing: 7,
+    letterSpacing: 6,
+    marginLeft: 6,
+    marginTop: 2,
     textShadowColor: colors.cyanDim,
     textShadowRadius: 18,
   },
-  tagline: {
-    color: colors.dim,
-    fontSize: 13,
-    letterSpacing: 2,
-    marginTop: 4,
+  secretBoxes: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  secretBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: 'rgba(52, 224, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 224, 255, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secretBoxText: {
+    color: colors.cyan,
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: mono,
   },
   menu: {
-    gap: 18,
-    marginTop: 8,
+    gap: 16,
   },
   howToPlay: {
     flexDirection: 'row',
@@ -203,11 +244,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
+  footer: {
+    marginTop: 'auto',
+    gap: 14,
+    paddingBottom: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   version: {
     textAlign: 'center',
     color: colors.dim,
     fontSize: 12,
-    marginTop: 'auto',
-    paddingVertical: 12,
+    paddingVertical: 6,
   },
 });
