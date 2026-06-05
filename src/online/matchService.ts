@@ -186,9 +186,25 @@ export async function cancelSetupTimeout(
 
 /** Kuyruktan/odadan çıkış: bekleyen (waiting) maçı iptal eder.
  *  Doğrudan tablo update'i RLS gereği imkânsız; cancel_waiting RPC'si
- *  20260605000003 migration'ı ile eklendi. */
+ *  20260605000003 migration'ı ile eklendi.
+ *  @deprecated Yalnızca waiting'i kapatır; her fazı doğru kapatan
+ *  leaveMatch'i tercih et. Geriye dönük uyumluluk için duruyor. */
 export async function cancelWaiting(matchId: string): Promise<void> {
   await callRpc('cancel_waiting', { p_match_id: matchId });
+}
+
+/** Maçtan çıkış (her faz için doğru davranış, 20260605000004 migration'ı):
+ *  waiting/setup → iptal (kazanan yok), active → çıkan hükmen kaybeder,
+ *  bitmiş → no-op (left=false döner, hata fırlatmaz). */
+export async function leaveMatch(
+  matchId: string,
+): Promise<{ left: boolean; status: MatchStatus; result: MatchResult | null }> {
+  const p = await callRpc<{
+    left: boolean;
+    status: MatchStatus;
+    result?: MatchResult | null;
+  }>('leave_match', { p_match_id: matchId });
+  return { left: p.left, status: p.status, result: p.result ?? null };
 }
 
 /** Bağlı olduğunu bildirir (last_seen=now, disconnected_at=null). */
