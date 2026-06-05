@@ -22,6 +22,9 @@ export type MatchRow = {
   clock1_ms: number;
   clock2_ms: number;
   setup_deadline: string | null;
+  // Eski satırlarda/realtime payload'ında bulunmayabilir; mapping false'a düşürür.
+  player1_ready?: boolean;
+  player2_ready?: boolean;
   winner: string | null;
   result: MatchResult | null;
 };
@@ -71,6 +74,8 @@ export function matchRowToState(
     clock2Ms: row.clock2_ms,
     turnStartedAt: row.turn_started_at,
     setupDeadline: row.setup_deadline,
+    player1Ready: row.player1_ready ?? false,
+    player2Ready: row.player2_ready ?? false,
     winner: row.winner,
     result: row.result,
   };
