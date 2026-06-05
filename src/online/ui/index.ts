@@ -8,3 +8,4 @@ export { DuelScreen } from './duel-screen';
 export { JoinRoomScreen } from './join-room-screen';
 export { LeaderboardModal } from './leaderboard-modal';
 export { MatchFoundScreen } from './match-found-screen';
+export { ProfileStatsModal } from './profile-stats-modal';
