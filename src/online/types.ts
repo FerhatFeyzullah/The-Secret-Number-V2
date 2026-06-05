@@ -59,10 +59,18 @@ export type MatchState = {
   clock2Ms: number;
   /** Sıranın başladığı sunucu zamanı (ISO); görsel geri sayım bundan türetilir. */
   turnStartedAt: string | null;
-  /** Sayı belirleme fazının bitiş anı (ISO). */
+  /** Sayı belirleme fazının bitiş anı (ISO). İki taraf da "Hazır" (present)
+   *  olunca kurulur; o ana kadar null (sayaç başlamaz). */
   setupDeadline: string | null;
-  /** Belirleme fazında gizli sayısını kilitleyen oyuncu(lar). Yalnızca BOOLEAN
-   *  "hazır" sinyali; gizli sayının kendisi asla taşınmaz/sızmaz. */
+  /** present = "Hazır'a bastı / belirleme ekranına girdi" (mark_ready).
+   *  İki taraf da present olunca setup_deadline (30 sn) başlar. Yalnızca boolean. */
+  player1Present: boolean;
+  player2Present: boolean;
+  /** İlk present olandan sonra rakip için tanınan idle penceresinin bitişi (ISO);
+   *  geçerse maç iptal (kazanan yok). İki taraf present olunca null'a döner. */
+  presentDeadline: string | null;
+  /** ready = "gizli sayısını KİLİTLEDİ" (set_secret). present'ten farklıdır.
+   *  Yalnızca BOOLEAN sinyal; gizli sayının kendisi asla taşınmaz/sızmaz. */
   player1Ready: boolean;
   player2Ready: boolean;
   winner: string | null;

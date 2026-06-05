@@ -138,6 +138,13 @@ export async function joinPrivateRoom(code: string): Promise<MatchTicket> {
   return toTicket(await callRpc<TicketPayload>('join_private_room', { p_code: code }));
 }
 
+/** "Hazır'a bastı" işaretini gönderir (present = belirleme ekranına girdi).
+ *  İki taraf da present olunca sunucu 30 sn'lik belirleme sayacını başlatır.
+ *  Gizli sayı İÇERMEZ; yalnızca boolean hazır sinyalidir. Idempotent. */
+export async function markReady(matchId: string): Promise<void> {
+  await callRpc('mark_ready', { p_match_id: matchId });
+}
+
 /** Gizli sayını belirler; iki oyuncu da yazınca sunucu maçı başlatır. */
 export async function setSecret(
   matchId: string,

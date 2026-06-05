@@ -22,7 +22,11 @@ export type MatchRow = {
   clock1_ms: number;
   clock2_ms: number;
   setup_deadline: string | null;
-  // Eski satırlarda/realtime payload'ında bulunmayabilir; mapping false'a düşürür.
+  // Eski satırlarda/realtime payload'ında bulunmayabilir; mapping varsayılana düşürür.
+  // present = "Hazır'a bastı", ready = "sayıyı kilitledi" (ikisi de yalnız boolean).
+  player1_present?: boolean;
+  player2_present?: boolean;
+  present_deadline?: string | null;
   player1_ready?: boolean;
   player2_ready?: boolean;
   winner: string | null;
@@ -74,6 +78,9 @@ export function matchRowToState(
     clock2Ms: row.clock2_ms,
     turnStartedAt: row.turn_started_at,
     setupDeadline: row.setup_deadline,
+    player1Present: row.player1_present ?? false,
+    player2Present: row.player2_present ?? false,
+    presentDeadline: row.present_deadline ?? null,
     player1Ready: row.player1_ready ?? false,
     player2Ready: row.player2_ready ?? false,
     winner: row.winner,

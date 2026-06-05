@@ -28,6 +28,7 @@ export {
   joinPrivateRoom,
   leaveMatch,
   makeGuess,
+  markReady,
   OnlineError,
   setSecret,
 } from './matchService';
