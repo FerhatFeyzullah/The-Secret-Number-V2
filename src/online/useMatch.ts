@@ -81,6 +81,50 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  // id → username cache'i: realtime payload'ında ad gelmez; bilinen adlar
+  // buradan doldurulur, bilinmeyenler backfillUsernames ile bir kez çekilir.
+  const usernamesRef = useRef<Record<string, string>>({});
+  const pendingNamesRef = useRef<Set<string>>(new Set());
+
+  /** State'teki adı null kalan oyuncular için tek hafif profiles sorgusu. */
+  const backfillUsernames = useCallback((ids: (string | null | undefined)[]) => {
+    const client = supabase;
+    if (!client) return;
+    const missing = ids.filter(
+      (id): id is string =>
+        Boolean(id) && !usernamesRef.current[id!] && !pendingNamesRef.current.has(id!),
+    );
+    if (!missing.length) return;
+    missing.forEach((id) => pendingNamesRef.current.add(id));
+    void client
+      .from('profiles')
+      .select('id, username')
+      .in('id', missing)
+      .then(({ data }) => {
+        missing.forEach((id) => pendingNamesRef.current.delete(id));
+        if (!mountedRef.current || !data?.length) return;
+        for (const p of data) {
+          if (p.username) usernamesRef.current[p.id] = p.username;
+        }
+        setMatch((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            player1: {
+              ...prev.player1,
+              username: prev.player1.username ?? usernamesRef.current[prev.player1.id] ?? null,
+            },
+            player2: prev.player2
+              ? {
+                  ...prev.player2,
+                  username:
+                    prev.player2.username ?? usernamesRef.current[prev.player2.id] ?? null,
+                }
+              : null,
+          };
+        });
+      });
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!matchId) return;
@@ -91,6 +135,12 @@ export function useMatch(matchId: string | null): UseMatchResult {
         fetchPresence(matchId),
       ]);
       if (!mountedRef.current) return;
+      // Tam fetch'le gelen adları cache'e işle (realtime birleşmeleri kullanır).
+      if (state) {
+        for (const pl of [state.player1, state.player2]) {
+          if (pl?.username) usernamesRef.current[pl.id] = pl.username;
+        }
+      }
       setMatch(state);
       setGuesses(guessList);
       setPresence(Object.fromEntries(presenceList.map((p) => [p.player, p])));
@@ -146,18 +196,31 @@ export function useMatch(matchId: string | null): UseMatchResult {
           (payload) => {
             const myId = myIdRef.current;
             if (!myId) return;
+            const row = payload.new as MatchRow;
             setMatch((prev) => {
-              const next = matchRowToState(payload.new as MatchRow, myId);
+              const next = matchRowToState(row, myId);
               if (!next) return prev;
-              // Realtime satırında profil adları yok; eldekini koru.
+              // Realtime satırında profil adları yok; eldekinden/cache'ten doldur.
               return {
                 ...next,
-                player1: { ...next.player1, username: prev?.player1.username ?? null },
+                player1: {
+                  ...next.player1,
+                  username:
+                    prev?.player1.username ?? usernamesRef.current[next.player1.id] ?? null,
+                },
                 player2: next.player2
-                  ? { ...next.player2, username: prev?.player2?.username ?? null }
+                  ? {
+                      ...next.player2,
+                      username:
+                        prev?.player2?.username ??
+                        usernamesRef.current[next.player2.id] ??
+                        null,
+                    }
                   : null,
               };
             });
+            // Adı hâlâ bilinmeyen oyuncu varsa (ör. rakip yeni katıldı) bir kez çek.
+            backfillUsernames([row.player1, row.player2]);
           },
         )
         .on(
@@ -215,7 +278,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       }
       teardownChannel();
     };
-  }, [matchId, refresh]);
+  }, [matchId, refresh, backfillUsernames]);
 
   const phase = match?.status ?? null;
   const inPlay = phase === 'setup' || phase === 'active';

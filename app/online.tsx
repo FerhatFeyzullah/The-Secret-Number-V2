@@ -112,6 +112,10 @@ export default function OnlineScreen() {
   // Arama: gerçek geçen süre + 60 sn'de rakip yoksa "bulunamadı".
   const matchIdRef = useRef<string | null>(null);
   matchIdRef.current = matchId;
+  // İstek jetonu: iptal/yeni istek sayacı artırır; uçuştaki RPC çözüldüğünde
+  // jeton eskimişse sonuç state'e YAZILMAZ (kullanıcı lobiden geri çekilmez)
+  // ve dönen maç arka planda kapatılır (sunucuda sahipsiz kayıt kalmaz).
+  const searchSeqRef = useRef(0);
   useEffect(() => {
     if (phase !== 'searching') return;
     const start = Date.now();
@@ -121,6 +125,7 @@ export default function OnlineScreen() {
       setElapsedSec(sec);
       if (sec >= SEARCH_TIMEOUT_SEC) {
         clearInterval(iv);
+        searchSeqRef.current += 1; // uçuşta kalmış istek varsa eskit
         const id = matchIdRef.current;
         if (id) void leaveMatch(id).catch(() => {});
         setMatchId(null);
@@ -132,6 +137,7 @@ export default function OnlineScreen() {
 
   // ── Aksiyonlar ────────────────────────────────────────────────
   const startQuick = useCallback(async () => {
+    const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
@@ -139,11 +145,16 @@ export default function OnlineScreen() {
     setPhase('searching');
     try {
       const ticket = await findOrCreateQuickMatch();
+      if (seq !== searchSeqRef.current) {
+        // Bu arama iptal edildi/yenilendi: dönen maçı sessizce kapat.
+        void leaveMatch(ticket.matchId).catch(() => {});
+        return;
+      }
       setMatchId(ticket.matchId);
       // Bekleyen bir maça katıldıysak zaten eşleştik.
       if (ticket.status !== 'waiting') setPhase('match-found');
     } catch (e) {
-      setError(errMsg(e));
+      if (seq === searchSeqRef.current) setError(errMsg(e));
     }
   }, []);
 
@@ -157,14 +168,19 @@ export default function OnlineScreen() {
     }
   }, [quick, startQuick]);
 
-  const cancelSearch = useCallback(async () => {
-    const id = matchIdRef.current;
+  // Optimistik çıkış: UI ANINDA döner, leave_match arka planda koşar (ağ
+  // gecikmesi donma hissi vermez); leavingRef ikinci basışı no-op yapar.
+  const cancelSearch = useCallback(() => {
+    if (leavingRef.current) return; // tek atış
     leavingRef.current = true;
-    if (id) await leaveMatch(id).catch(() => {});
+    searchSeqRef.current += 1; // uçuştaki isteği eskit
+    const id = matchIdRef.current;
     resetToLobby();
+    if (id) void leaveMatch(id).catch(() => {});
   }, [resetToLobby]);
 
   const createRoom = useCallback(async () => {
+    const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
@@ -173,46 +189,66 @@ export default function OnlineScreen() {
     setPhase('create-room');
     try {
       const ticket = await createPrivateRoom();
+      if (seq !== searchSeqRef.current) {
+        void leaveMatch(ticket.matchId).catch(() => {});
+        return;
+      }
       setMatchId(ticket.matchId);
       setRoomCode(ticket.roomCode ?? null);
     } catch (e) {
-      setError(errMsg(e));
+      if (seq === searchSeqRef.current) setError(errMsg(e));
     }
   }, []);
 
-  const cancelRoom = useCallback(async () => {
-    const id = matchIdRef.current;
+  const cancelRoom = useCallback(() => {
+    if (leavingRef.current) return; // tek atış
     leavingRef.current = true;
-    if (id) await leaveMatch(id).catch(() => {});
+    searchSeqRef.current += 1;
+    const id = matchIdRef.current;
     setPhase('private-choice');
     setMatchId(null);
     setRoomCode(null);
     setError(null);
+    if (id) void leaveMatch(id).catch(() => {});
   }, []);
 
-  // Eşleşme ekranındaki İptal: ASIL sızıntı buradaydı — setup'a geçmiş maç
-  // artık sunucuda da kapatılıyor; rakip realtime ile "maç iptal" görür.
-  const cancelMatchFound = useCallback(async () => {
-    const id = matchIdRef.current;
+  // Eşleşme ekranındaki İptal: setup'a geçmiş maç sunucuda da kapatılır;
+  // rakip realtime ile "maç iptal" görür.
+  const cancelMatchFound = useCallback(() => {
+    if (leavingRef.current) return; // tek atış
     leavingRef.current = true;
-    if (id) await leaveMatch(id).catch(() => {});
+    searchSeqRef.current += 1;
+    const id = matchIdRef.current;
     resetToLobby();
+    if (id) void leaveMatch(id).catch(() => {});
   }, [resetToLobby]);
 
   const joinRoom = useCallback(async (code: string) => {
+    const seq = ++searchSeqRef.current;
     setJoinError(null);
     setNotice(null);
     leavingRef.current = false;
     setJoinBusy(true);
     try {
       const ticket = await joinPrivateRoom(code);
+      if (seq !== searchSeqRef.current) {
+        // Kullanıcı beklerken vazgeçti: katıldığımız maçı sessizce kapat.
+        void leaveMatch(ticket.matchId).catch(() => {});
+        return;
+      }
       setMatchId(ticket.matchId);
       setPhase('match-found');
     } catch (e) {
-      setJoinError(errMsg(e));
+      if (seq === searchSeqRef.current) setJoinError(errMsg(e));
     } finally {
       setJoinBusy(false);
     }
+  }, []);
+
+  const backFromJoin = useCallback(() => {
+    searchSeqRef.current += 1; // uçuştaki katılım isteğini eskit
+    setJoinError(null);
+    setPhase('private-choice');
   }, []);
 
   const copyCode = useCallback(async () => {
@@ -240,7 +276,8 @@ export default function OnlineScreen() {
 
   // ── Türetilmiş gösterim ───────────────────────────────────────
   const opp = match ? (match.myRole === 'player1' ? match.player2 : match.player1) : null;
-  const opponentName = opp?.username || 'Rakip';
+  // null = ad henüz yüklenmedi; MatchFoundScreen "…" gösterir (titreşim yok).
+  const opponentName = opp?.username ?? null;
   const mode: MatchMode = match?.mode ?? (roomCode ? 'private' : 'quick');
 
   let content;
@@ -286,10 +323,7 @@ export default function OnlineScreen() {
           error={joinError}
           busy={joinBusy}
           onJoin={joinRoom}
-          onBack={() => {
-            setJoinError(null);
-            setPhase('private-choice');
-          }}
+          onBack={backFromJoin}
         />
       );
       break;
