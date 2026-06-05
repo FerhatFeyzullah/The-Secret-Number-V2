@@ -238,16 +238,24 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   }));
 }
 
-/** Çağıranın kendi sırası/puanı (top 100 dışında da çalışır). */
+/** Çağıranın kendi sırası/istatistikleri (top 100 dışında da çalışır). */
 export async function getMyRank(): Promise<MyRank> {
-  const p = await callRpc<{ rank: number; username: string | null; rating: number; wins: number }>(
-    'get_my_rank',
-  );
+  const p = await callRpc<{
+    rank: number;
+    username: string | null;
+    rating: number;
+    wins: number;
+    played?: number;
+    streak?: number;
+  }>('get_my_rank');
   return {
     rank: Number(p.rank),
     username: p.username,
     rating: Number(p.rating),
     wins: Number(p.wins),
+    // Migration 20260606000000 öncesi sunucuya karşı güvenli varsayılanlar.
+    played: Number(p.played ?? 0),
+    streak: Number(p.streak ?? 0),
   };
 }
 

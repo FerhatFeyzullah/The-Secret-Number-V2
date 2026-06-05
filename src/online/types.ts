@@ -127,12 +127,17 @@ export type LeaderboardEntry = {
   wins: number;
 };
 
-/** Çağıranın kendi sırası (get_my_rank); top 100 dışında da geçerli. */
+/** Çağıranın kendi sırası + istatistikleri (get_my_rank); top 100 dışında da
+ *  geçerli. Başarı oranı saklanmaz, wins/played'den türetilir. */
 export type MyRank = {
   rank: number;
   username: string | null;
   rating: number;
   wins: number;
+  /** Oynanan quick+finished maç sayısı (cancelled/abandoned hariç). */
+  played: number;
+  /** Güncel galibiyet serisi (yalnızca Hızlı Maç; sunucuda tutulur). */
+  streak: number;
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */
