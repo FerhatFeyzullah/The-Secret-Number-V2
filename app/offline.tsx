@@ -6,10 +6,10 @@ import { Animated, FlatList, Platform, Pressable, StyleSheet, Text, View } from 
 
 import { evaluateGuess, generateSecret, type Digit, type GuessResult } from '@/game';
 import { useSfx, type SfxName } from '@/sfx';
-import { getToggle, recordLoss, recordWin } from '@/storage';
+import { getToggle } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen, ScreenHeader } from '@/ui/screen';
-import { colors, mono } from '@/ui/theme';
+import { colors, cyanAlpha, mono } from '@/ui/theme';
 
 function feedbackFor(result: Exclude<GuessResult, { status: 'invalid' }>) {
   switch (result.status) {
@@ -88,7 +88,6 @@ export default function OfflineScreen() {
       setPhase('lost');
       play('lose');
       buzz('lose');
-      recordLoss();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, mode, phase]);
@@ -97,14 +96,12 @@ export default function OfflineScreen() {
     setPhase('lost');
     play('lose');
     buzz('lose');
-    recordLoss();
   };
 
-  const win = (guessCount: number) => {
+  const win = () => {
     setPhase('won');
     play('win');
     buzz('win');
-    recordWin(guessCount);
     winScale.setValue(0.6);
     Animated.spring(winScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   };
@@ -137,7 +134,7 @@ export default function OfflineScreen() {
     setHistory((h) => [{ guess, feedback: feedbackFor(result) }, ...h]);
     const guessCount = history.length + 1;
     if (result.status === 'win') {
-      win(guessCount);
+      win();
     } else if (mode === 'guesses' && guessCount >= limit) {
       lose();
     } else {
@@ -363,7 +360,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   keyPressed: {
-    backgroundColor: 'rgba(52, 224, 255, 0.18)',
+    backgroundColor: cyanAlpha(0.18),
     borderColor: colors.cyan,
   },
   keyDisabled: {

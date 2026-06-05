@@ -1,37 +1,67 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-import { colors } from './theme';
+import { colors, withAlpha } from './theme';
 
 /** Camsı / yarı saydam kart. */
 export function GlassCard({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
-/** Neon vurgulu camsı buton; isteğe bağlı rozet (ör. "Çok Yakında"). */
+/**
+ * Neon vurgulu camsı buton; isteğe bağlı rozet (ör. "Çok Yakında").
+ *
+ * `variant`:
+ *  - 'outline' (varsayılan): camsı zemin + neon kenar (mevcut tüm çağrıların görünümü).
+ *  - 'fill': vurgu renginde hafif dolgu + glow (lobideki birincil aksiyonlar).
+ */
 export function GlassButton({
   label,
   onPress,
   accent = colors.cyan,
   badge,
   small,
+  variant = 'outline',
+  icon,
+  disabled = false,
+  fullWidth = true,
 }: {
   label: string;
   onPress: () => void;
   accent?: string;
   badge?: string;
   small?: boolean;
+  variant?: 'fill' | 'outline';
+  icon?: ReactNode;
+  disabled?: boolean;
+  fullWidth?: boolean;
 }) {
+  const fill = variant === 'fill';
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.button,
         small && styles.buttonSmall,
         { borderColor: accent },
-        pressed && styles.pressed,
+        fill && {
+          backgroundColor: withAlpha(accent, 0.16),
+          boxShadow: `0 0 18px ${withAlpha(accent, 0.32)}`,
+        },
+        !fullWidth && styles.inline,
+        disabled && styles.disabled,
+        pressed && !disabled && (fill ? styles.pressedFill : styles.pressed),
       ]}>
-      <Text style={[styles.label, small && styles.labelSmall, { color: accent }]}>{label}</Text>
+      {icon ? <View style={styles.icon}>{icon}</View> : null}
+      <Text
+        style={[
+          styles.label,
+          small && styles.labelSmall,
+          { color: disabled ? colors.dim : accent },
+        ]}>
+        {label}
+      </Text>
       {badge ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{badge}</Text>
@@ -55,13 +85,29 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 20,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   buttonSmall: {
     paddingVertical: 10,
   },
+  inline: {
+    alignSelf: 'center',
+    paddingHorizontal: 28,
+  },
+  disabled: {
+    opacity: 0.45,
+  },
+  icon: {
+    marginRight: 2,
+  },
   pressed: {
     backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  pressedFill: {
+    transform: [{ scale: 0.985 }],
   },
   label: {
     fontSize: 18,

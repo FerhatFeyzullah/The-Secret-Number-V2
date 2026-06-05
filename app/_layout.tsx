@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider } from '@/auth';
+import { colors } from '@/ui/theme';
 
 export default function RootLayout() {
   return (
@@ -9,7 +10,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#070b24' },
+          contentStyle: { backgroundColor: colors.bgTop },
         }}
       />
       <StatusBar style="light" />

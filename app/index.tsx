@@ -1,27 +1,17 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
-import { getLastMode, getStats, setLastMode, type GameMode } from '@/storage';
+import { getMyRank } from '@/online';
+import { LeaderboardModal, ProfileStatsModal } from '@/online/ui';
+import { getLastMode, setLastMode, type GameMode } from '@/storage';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
-import { StatCard } from '@/ui/stat-card';
-import { formatStat, StatChip } from '@/ui/stat-chip';
-import { colors, mono } from '@/ui/theme';
-
-type Stats = Awaited<ReturnType<typeof getStats>>;
-
-const EMPTY_STATS: Stats = {
-  gamesPlayed: 0,
-  bestScore: null,
-  wins: 0,
-  streak: 0,
-  winRate: 0,
-};
+import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 export default function MenuScreen() {
   const router = useRouter();
@@ -29,8 +19,11 @@ export default function MenuScreen() {
   // Görünen ad TEK kaynaktan (ayarlarla aynı hook):
   // oturum açıkken profiles.username, kapalıyken yerel ad.
   const { name, refresh: refreshName } = useProfile();
-  const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [mode, setMode] = useState<GameMode>('solo');
+  // Kupa puanı yalnızca online'a bağlı: oturum açıkken get_my_rank'tan gelir.
+  const [rating, setRating] = useState<number | null>(null);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // Son seçilen modu hatırla (yereldir, profil verisi değil).
   useEffect(() => {
@@ -42,12 +35,19 @@ export default function MenuScreen() {
     setLastMode(next);
   };
 
-  // Ayarlardan veya oyundan dönünce profil adı ve istatistikleri tazele.
+  // Ayarlardan veya oyundan dönünce profil adını ve kupa puanını tazele.
   useFocusEffect(
     useCallback(() => {
       refreshName();
-      getStats().then(setStats);
-    }, [refreshName]),
+      // Oturum açıksa kupa puanını tazele; kapalıysa kupa gizli (online'a bağlı).
+      if (session) {
+        getMyRank()
+          .then((r) => setRating(r.rating))
+          .catch(() => setRating(null));
+      } else {
+        setRating(null);
+      }
+    }, [refreshName, session]),
   );
 
   // Online yalnızca burada oturum ister; oturum yoksa giriş ekranına yönlendir.
@@ -68,64 +68,78 @@ export default function MenuScreen() {
     }
   };
 
-  const best = stats.bestScore === null ? '—' : formatStat(stats.bestScore);
-
   return (
     <Screen>
-      {/* Üst bar: avatar + ad + chip'ler, sağda ayarlar */}
+      {/* Üst bar: avatar + ad (tıkla → istatistik modalı), kupa (→ lider
+          tablosu), sağda ayarlar. Offline istatistik chip'leri kaldırıldı. */}
       <View style={styles.topRow}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
-        </View>
-        <View style={styles.identity}>
-          <Text style={styles.profileName} numberOfLines={1}>
-            {name}
-          </Text>
-          <View style={styles.chips}>
-            <StatChip icon="eye-outline" value={formatStat(stats.gamesPlayed)} />
-            <StatChip icon="locate-outline" value={best} />
+        <Pressable
+          onPress={() => setStatsOpen(true)}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Profil istatistikleri"
+          style={({ pressed }) => [styles.profilePress, pressed && styles.profilePressed]}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
           </View>
-        </View>
+          <View style={styles.identity}>
+            <Text style={styles.profileName} numberOfLines={1}>
+              {name}
+            </Text>
+            {session && rating != null ? (
+              <Pressable onPress={() => setBoardOpen(true)} hitSlop={6} style={styles.trophy}>
+                <Feather name="award" size={13} color={colors.amber} />
+                <Text style={styles.trophyText}>{rating}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Pressable>
         <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.gear}>
           <Ionicons name="settings-outline" size={22} color={colors.cyan} />
         </Pressable>
       </View>
 
-      {/* Logo: GİZEMLİ / SAYILAR + üç haneli "?" motifi */}
-      <View style={styles.hero}>
-        <Text style={styles.logoTop}>GİZEMLİ</Text>
-        <Text style={styles.logoBottom}>SAYILAR</Text>
-        <View style={styles.secretBoxes}>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={styles.secretBox}>
-              <Text style={styles.secretBoxText}>?</Text>
-            </View>
-          ))}
+      {/* Orta blok: istatistik kartları kalkınca logo + menü dikeyde ortalanır */}
+      <View style={styles.body}>
+        {/* Logo: GİZEMLİ / SAYILAR + üç haneli "?" motifi */}
+        <View style={styles.hero}>
+          <Text style={styles.logoTop}>GİZEMLİ</Text>
+          <Text style={styles.logoBottom}>SAYILAR</Text>
+          <View style={styles.secretBoxes}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={styles.secretBox}>
+                <Text style={styles.secretBoxText}>?</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Menü: mod seçici + OYNA + Nasıl Oynanır */}
+        <View style={styles.menu}>
+          <ModeSegment value={mode} onChange={selectMode} />
+          <PlayButton mode={mode} onPress={play} />
+          <Pressable
+            onPress={() => router.push('/how-to-play')}
+            hitSlop={8}
+            style={styles.howToPlay}>
+            <Ionicons name="help-circle-outline" size={16} color={colors.dim} />
+            <Text style={styles.howToPlayText}>Nasıl Oynanır</Text>
+          </Pressable>
         </View>
       </View>
 
-      {/* Menü: mod seçici + OYNA + Nasıl Oynanır */}
-      <View style={styles.menu}>
-        <ModeSegment value={mode} onChange={selectMode} />
-        <PlayButton mode={mode} onPress={play} />
-        <Pressable
-          onPress={() => router.push('/how-to-play')}
-          hitSlop={8}
-          style={styles.howToPlay}>
-          <Ionicons name="help-circle-outline" size={16} color={colors.dim} />
-          <Text style={styles.howToPlayText}>Nasıl Oynanır</Text>
-        </Pressable>
-      </View>
-
-      {/* Alt: detay istatistik kartları + sürüm */}
+      {/* Alt: yalnızca sürüm (istatistik kartları kaldırıldı — online'da modal) */}
       <View style={styles.footer}>
-        <View style={styles.statsRow}>
-          <StatCard value={best} label="EN İYİ" />
-          <StatCard value={String(stats.streak)} label="SERİ" />
-          <StatCard value={`%${stats.winRate}`} label="BAŞARI" />
-        </View>
         <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
       </View>
+
+      <LeaderboardModal visible={boardOpen} onClose={() => setBoardOpen(false)} />
+      <ProfileStatsModal
+        visible={statsOpen}
+        name={name}
+        signedIn={Boolean(session)}
+        onClose={() => setStatsOpen(false)}
+      />
     </Screen>
   );
 }
@@ -136,6 +150,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
+  },
+  profilePress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexShrink: 1,
+  },
+  profilePressed: {
+    opacity: 0.75,
   },
   avatar: {
     width: 46,
@@ -168,9 +191,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  chips: {
+  trophy: {
     flexDirection: 'row',
-    gap: 6,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 20,
+    backgroundColor: withAlpha(colors.amber, 0.12),
+    borderWidth: 1,
+    borderColor: withAlpha(colors.amber, 0.32),
+  },
+  trophyText: {
+    color: colors.amber,
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
   },
   gear: {
     marginLeft: 'auto',
@@ -183,10 +219,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  body: {
+    // Kartlar kalkınca oluşan boşluğu dengele: logo+menü bloğu dikeyde ortada.
+    flex: 1,
+    justifyContent: 'center',
+  },
   hero: {
     alignItems: 'center',
-    marginTop: 28,
-    marginBottom: 26,
+    marginBottom: 34,
   },
   logoTop: {
     color: colors.dim,
@@ -197,14 +237,14 @@ const styles = StyleSheet.create({
     marginLeft: 12, // letterSpacing'in sağdaki boşluğunu dengele
   },
   logoBottom: {
-    color: colors.cyan,
+    color: colors.ice, // beyazımsı metin + mavi glow = "ışıldayan beyaz neon"
     fontSize: 46,
     fontWeight: '900',
     fontFamily: mono,
     letterSpacing: 6,
     marginLeft: 6,
     marginTop: 2,
-    textShadowColor: colors.cyanDim,
+    textShadowColor: colors.cyan,
     textShadowRadius: 18,
   },
   secretBoxes: {
@@ -216,9 +256,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 9,
-    backgroundColor: 'rgba(52, 224, 255, 0.06)',
+    backgroundColor: cyanAlpha(0.06),
     borderWidth: 1,
-    borderColor: 'rgba(52, 224, 255, 0.28)',
+    borderColor: cyanAlpha(0.28),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -245,13 +285,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   footer: {
-    marginTop: 'auto',
-    gap: 14,
     paddingBottom: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
   },
   version: {
     textAlign: 'center',
