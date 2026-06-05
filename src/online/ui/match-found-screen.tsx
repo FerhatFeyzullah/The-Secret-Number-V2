@@ -2,10 +2,12 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { MatchMode } from '@/online/types';
+import type { FirstTurnMode, MatchMode } from '@/online/types';
 import { GlassButton } from '@/ui/glass';
 import { colors, cyanAlpha, mono } from '@/ui/theme';
 import { Avatar } from './parts';
+
+const clockLabel = (ms: number) => (ms === 120000 ? '2 dk' : ms === 90000 ? '1.5 dk' : '1 dk');
 
 /** Kısa kutlama anı: VS açılışı + gerçek oyuncu adları + maç bilgisi.
  *  "Hazır" ile belirleme ekranına geçilir (gizli/otomatik timer yok). */
@@ -13,6 +15,9 @@ export function MatchFoundScreen({
   myName,
   opponentName,
   mode,
+  clockMs,
+  firstTurnMode,
+  iAmCreator,
   onReady,
   onCancel,
 }: {
@@ -21,6 +26,12 @@ export function MatchFoundScreen({
    *  (ad geldiğinde tek geçiş — titreşim yok). */
   opponentName: string | null;
   mode: MatchMode;
+  /** Konfig: kişi başı süre (ms). */
+  clockMs: number;
+  /** Konfig: ilk sıra modu. */
+  firstTurnMode: FirstTurnMode;
+  /** Çağıran oda kuran (player1) mı — ilk sıra metnini kişiselleştirir. */
+  iAmCreator: boolean;
   onReady: () => void;
   onCancel: () => void;
 }) {
@@ -47,6 +58,8 @@ export function MatchFoundScreen({
   };
 
   const modeLabel = mode === 'quick' ? 'Hızlı Maç' : 'Özel Oyun';
+  const turnPhrase =
+    firstTurnMode === 'random' ? 'Rastgele' : iAmCreator ? 'Sen başlıyorsun' : 'Rakip başlıyor';
 
   return (
     <View style={styles.root}>
@@ -77,7 +90,7 @@ export function MatchFoundScreen({
       <Animated.View style={[styles.info, rise]}>
         {[
           { label: 'MOD', val: modeLabel },
-          { label: 'SÜRE', val: '1 dk' },
+          { label: 'SÜRE', val: clockLabel(clockMs) },
           { label: 'RAKİP', val: oppName },
         ].map((item) => (
           <View key={item.label} style={styles.infoItem}>
@@ -87,6 +100,13 @@ export function MatchFoundScreen({
             </Text>
           </View>
         ))}
+      </Animated.View>
+
+      <Animated.View style={[styles.firstTurn, rise]}>
+        <Feather name="play" size={12} color={colors.amber} />
+        <Text style={styles.firstTurnText}>
+          İlk sıra: <Text style={styles.firstTurnVal}>{turnPhrase}</Text>
+        </Text>
       </Animated.View>
 
       <Animated.View style={[styles.action, fade]}>
@@ -175,7 +195,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.glassBorder,
-    marginBottom: 44,
+    marginBottom: 12,
+  },
+  firstTurn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 40,
+  },
+  firstTurnText: {
+    fontSize: 11,
+    color: colors.dim,
+    fontFamily: mono,
+  },
+  firstTurnVal: {
+    color: colors.amber,
+    fontWeight: '800',
   },
   infoItem: {
     alignItems: 'center',

@@ -10,6 +10,9 @@ export type MatchStatus =
 /** Maç modu: hızlı eşleşme ya da kodlu özel oda. */
 export type MatchMode = 'quick' | 'private';
 
+/** Özel odada ilk tahmin sırası: rastgele ya da oda kuran (player1) başlar. */
+export type FirstTurnMode = 'random' | 'creator';
+
 /** Maç bitiş nedeni. */
 export type MatchResult = 'win' | 'timeout' | 'forfeit' | 'cancelled';
 
@@ -57,6 +60,10 @@ export type MatchState = {
   currentTurn: string | null;
   clock1Ms: number;
   clock2Ms: number;
+  /** Konfig: kişi başı başlangıç süresi (ms). Özel oda 60/90/120 sn; quick 60 sn. */
+  clockMs: number;
+  /** Konfig: ilk tahmin sırası ('random' | 'creator'). */
+  firstTurnMode: FirstTurnMode;
   /** Sıranın başladığı sunucu zamanı (ISO); görsel geri sayım bundan türetilir. */
   turnStartedAt: string | null;
   /** Sayı belirleme fazının bitiş anı (ISO). İki taraf da "Hazır" (present)

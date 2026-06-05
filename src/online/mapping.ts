@@ -1,5 +1,6 @@
 import type { GuessResult } from '../game';
 import type {
+  FirstTurnMode,
   GuessFeedback,
   MatchMode,
   MatchResult,
@@ -21,6 +22,9 @@ export type MatchRow = {
   turn_started_at: string | null;
   clock1_ms: number;
   clock2_ms: number;
+  // Konfig (özel oda ayarları); eski satırlarda olmayabilir → mapping default'lar.
+  clock_ms?: number;
+  first_turn_mode?: FirstTurnMode;
   setup_deadline: string | null;
   // Eski satırlarda/realtime payload'ında bulunmayabilir; mapping varsayılana düşürür.
   // present = "Hazır'a bastı", ready = "sayıyı kilitledi" (ikisi de yalnız boolean).
@@ -76,6 +80,8 @@ export function matchRowToState(
     currentTurn: row.current_turn,
     clock1Ms: row.clock1_ms,
     clock2Ms: row.clock2_ms,
+    clockMs: row.clock_ms ?? 60000,
+    firstTurnMode: row.first_turn_mode ?? 'random',
     turnStartedAt: row.turn_started_at,
     setupDeadline: row.setup_deadline,
     player1Present: row.player1_present ?? false,
