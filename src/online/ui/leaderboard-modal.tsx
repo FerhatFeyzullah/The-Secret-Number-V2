@@ -11,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getLeaderboard,
@@ -75,6 +76,7 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   const pop = useRef(new Animated.Value(0)).current;
 
@@ -115,7 +117,13 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.root}>
+      <View
+        style={[
+          styles.root,
+          // Modal native katmanda açıldığından SafeAreaView devre dışı; inset'leri
+          // kendimiz uygularız ki kart sistem çubuklarının altına girmesin.
+          { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 },
+        ]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <Animated.View style={[styles.card, cardStyle]}>
           {/* Başlık */}
@@ -204,13 +212,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: 'rgba(5,8,15,0.72)',
+    // Kart dikeyde ortalanır; içeriğe sarılır (az oyuncuda dev boşluk olmaz).
+    justifyContent: 'center',
+    paddingHorizontal: 14,
   },
   card: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    top: 60,
-    bottom: 36,
+    // İçeriğe sarılan, sınırı olan kutu: kısa listede "SEN" hemen listenin
+    // altında durur; uzun listede maxHeight'e dayanır ve liste kayar.
+    maxHeight: '82%',
+    minHeight: 320,
     borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: colors.bgMid,
@@ -259,7 +269,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   center: {
-    flex: 1,
+    // Kart içeriğe sarıldığı için flex:1 yerine sabit asgari yükseklik.
+    minHeight: 220,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
@@ -338,7 +349,10 @@ const styles = StyleSheet.create({
   },
   // Liste
   list: {
-    flex: 1,
+    // Büyümez, gerekirse küçülür: kısa içerikte "SEN" satırı listeye yapışık
+    // kalır; uzun içerikte kart maxHeight'e dayanınca liste kayar.
+    flexGrow: 0,
+    flexShrink: 1,
   },
   listContent: {
     paddingHorizontal: 12,

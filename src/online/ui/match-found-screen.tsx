@@ -17,11 +17,15 @@ export function MatchFoundScreen({
   onCancel,
 }: {
   myName: string;
-  opponentName: string;
+  /** null = ad henüz yükleniyor; "Rakip"e düşmek yerine "…" gösterilir
+   *  (ad geldiğinde tek geçiş — titreşim yok). */
+  opponentName: string | null;
   mode: MatchMode;
   onReady: () => void;
   onCancel: () => void;
 }) {
+  const oppName = opponentName ?? '…';
+  const oppInitial = opponentName ? opponentName.charAt(0) : '?';
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(v, {
@@ -63,9 +67,9 @@ export function MatchFoundScreen({
         </View>
 
         <View style={styles.player}>
-          <Avatar initial={opponentName.charAt(0)} accent={colors.amber} size={80} />
+          <Avatar initial={oppInitial} accent={colors.amber} size={80} />
           <Text style={styles.name} numberOfLines={1}>
-            {opponentName}
+            {oppName}
           </Text>
         </View>
       </Animated.View>
@@ -74,7 +78,7 @@ export function MatchFoundScreen({
         {[
           { label: 'MOD', val: modeLabel },
           { label: 'SÜRE', val: '1 dk' },
-          { label: 'RAKİP', val: opponentName },
+          { label: 'RAKİP', val: oppName },
         ].map((item) => (
           <View key={item.label} style={styles.infoItem}>
             <Text style={styles.infoLabel}>{item.label}</Text>
