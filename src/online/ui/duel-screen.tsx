@@ -7,7 +7,6 @@ import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View }
 import { useProfile } from '@/auth';
 import { parseGuess } from '@/game';
 import {
-  claimTimeout,
   getMatchReveal,
   leaveMatch,
   makeGuess,
@@ -91,16 +90,8 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     if (!isMine) setEntry([]);
   }, [isMine]);
 
-  // Rakibin görsel saati biterse zaman aşımı iddia et (karar sunucuda).
-  const claimingRef = useRef(false);
-  useEffect(() => {
-    claimingRef.current = false; // her yeni turda sıfırla
-  }, [match?.turnStartedAt]);
-  useEffect(() => {
-    if (status !== 'active' || isMine || oppClockMs > 0 || claimingRef.current) return;
-    claimingRef.current = true;
-    void claimTimeout(matchId).catch(() => {});
-  }, [status, isMine, oppClockMs, matchId]);
+  // Not: süre bitince otomatik zaman aşımı artık useMatch içinde merkezî olarak
+  // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
 
   // Maç bitince iki gizli sayıyı çek (yalnızca finished'te sunucu döndürür).
   useEffect(() => {

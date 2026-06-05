@@ -13,6 +13,7 @@ import {
   type PresenceRow,
 } from './mapping';
 import {
+  claimTimeout,
   fetchGuesses,
   fetchMatchState,
   fetchPresence,
@@ -244,6 +245,28 @@ export function useMatch(matchId: string | null): UseMatchResult {
       sub.remove();
     };
   }, [matchId, inPlay, refresh]);
+
+  // Otomatik zaman aşımı: sıradaki oyuncunun görsel saati 0'a inince HER iki
+  // istemci de claim eder. Karar sunucuda (now() ile doğrular); kaybeden =
+  // current_turn, kazanan = diğeri (çağıran kim olursa olsun). Idempotent.
+  const claimedTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!matchId || !match || match.status !== 'active') return;
+    if (!match.currentTurn || !match.turnStartedAt) return;
+    const live = displayClocks(match, now);
+    const runningMs =
+      match.currentTurn === match.player1.id ? live.clock1Ms : live.clock2Ms;
+    if (runningMs > 0) return;
+    // Bu tur için zaten denendi/devam ediyor — tekrar tetikleme.
+    if (claimedTurnRef.current === match.turnStartedAt) return;
+    claimedTurnRef.current = match.turnStartedAt;
+    void claimTimeout(matchId).catch((e) => {
+      // Drift: sunucu "henüz dolmadı" derse kilidi aç, sonraki tikte tekrar dene.
+      if (e instanceof OnlineError && e.code === 'clock_not_expired') {
+        claimedTurnRef.current = null;
+      }
+    });
+  }, [matchId, match, now]);
 
   // Türetilmiş gösterim değerleri.
   const clocks = match

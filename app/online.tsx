@@ -9,6 +9,7 @@ import {
   findOrCreateQuickMatch,
   joinPrivateRoom,
   leaveMatch,
+  markReady,
   OnlineError,
   useMatch,
   type MatchMode,
@@ -218,6 +219,9 @@ export default function OnlineScreen() {
   const goSetup = useCallback(() => {
     const id = matchId;
     if (!id) return;
+    // "Hazır": present işaretini gönder (iki taraf present olunca sunucu 30 sn'lik
+    // belirleme sayacını başlatır). Karar/zaman sunucuda; sonuç realtime ile gelir.
+    void markReady(id).catch(() => {});
     // Maçın sahipliği belirleme ekranına geçiyor; unmount temizliği yapma.
     liveMatchRef.current = null;
     resetToLobby();

@@ -20,15 +20,17 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { CountdownRing } from './setup/countdown-ring';
 import { VaultDials } from './setup/vault-dials';
 
-const SETUP_TOTAL_MS = 15_000;
+const SETUP_TOTAL_MS = 30_000;
 const LOW_MS = 5_000;
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
 
-/** Gizli kod belirleme ekranı: 15 sn halka + kasa kadranı → setSecret.
- *  Rakip "hazır" sinyali sızdırmayan ready bayraklarından (realtime). Gizli
- *  sayı yalnızca setSecret ile sunucuya gider; asla rakibe sızmaz. */
+/** Gizli kod belirleme ekranı: kasa kadranı → setSecret.
+ *  Sayaç ancak İKİ taraf da "Hazır" (present) olunca başlar (30 sn); o ana
+ *  kadar "rakip hazır bekleniyor" + giriş pasif. present = Hazır'a bastı,
+ *  ready = sayıyı kilitledi (ikisi de sızdırmayan boolean). Gizli sayı yalnızca
+ *  setSecret ile sunucuya gider; asla rakibe sızmaz. */
 export function SecretSetupScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
@@ -61,10 +63,16 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
 
   const status = match?.status ?? null;
   const distinct = new Set(dials).size === 3;
+  // present = iki taraf da "Hazır"; sayaç ancak o an başlar.
+  const bothPresent = !!match && match.player1Present && match.player2Present;
   const deadline = match?.setupDeadline ? Date.parse(match.setupDeadline) : null;
   const remainingMs = deadline ? Math.max(0, deadline - nowMs) : SETUP_TOTAL_MS;
   const pastDeadline = deadline ? nowMs > deadline : false;
   const low = remainingMs <= LOW_MS;
+  // Idle: bir taraf present olduktan sonra rakip için tanınan kısa pencere.
+  const presentDeadline = match?.presentDeadline ? Date.parse(match.presentDeadline) : null;
+  const pastPresentDeadline = presentDeadline ? nowMs > presentDeadline : false;
+  // oppReady = rakip gizli sayısını KİLİTLEDİ (present'ten farklı).
   const oppReady = match
     ? match.myRole === 'player1'
       ? match.player2Ready
@@ -78,13 +86,18 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     return () => clearInterval(iv);
   }, [status]);
 
-  // Süre dolup iki sayı girilmemişse: iptali sunucuya bildir (karar sunucuda).
+  // İptal tetikleyici (karar sunucuda): iki geçerli neden —
+  //  a) idle: bir taraf present, diğeri gelmedi (present_deadline geçti),
+  //  b) belirleme: iki taraf present ama 30 sn'de iki sayı girilmedi (setup_deadline).
   const timeoutFiredRef = useRef(false);
+  const shouldCancel =
+    status === 'setup' &&
+    ((bothPresent && pastDeadline) || (!bothPresent && pastPresentDeadline));
   useEffect(() => {
-    if (status !== 'setup' || !pastDeadline || timeoutFiredRef.current) return;
+    if (!shouldCancel || timeoutFiredRef.current) return;
     timeoutFiredRef.current = true;
     void cancelSetupTimeout(matchId).catch(() => {});
-  }, [status, pastDeadline, matchId]);
+  }, [shouldCancel, matchId]);
 
   // active → düello ekranına geç (kısa "Maç başlıyor…" anından sonra).
   const leavingRef = useRef(false);
@@ -107,13 +120,13 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     if (status === 'cancelled' || status === 'finished' || status === 'abandoned') {
       endedRef.current = true;
       leavingRef.current = true;
-      Alert.alert(
-        'Maç iptal',
-        pastDeadline ? 'Süre doldu, maç iptal edildi.' : 'Maç iptal edildi.',
-        [{ text: 'Tamam', onPress: () => router.back() }],
-      );
+      // Neden: iki taraf present değilse "rakip katılmadı"; aksi halde süre doldu.
+      const reason = !bothPresent
+        ? 'Rakip katılmadı, maç iptal edildi.'
+        : 'Süre doldu, maç iptal edildi.';
+      Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, pastDeadline, router]);
+  }, [status, match, bothPresent, router]);
 
   // Çıkış onayı: belirleme fazında çıkış = maç iptal.
   useEffect(() => {
@@ -196,17 +209,28 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   }
 
   const starting = status === 'active';
-  const canLock = distinct && !locked && status === 'setup';
+  // KİLİTLE ancak iki taraf da present (sayaç başladı) ve rakamlar farklıyken aktif.
+  const canLock = bothPresent && distinct && !locked && status === 'setup';
 
   return (
     <Screen>
       <View style={styles.content}>
         <View style={styles.topRow}>{exitButton}</View>
 
-        {/* Geri sayım */}
+        {/* Geri sayım — yalnızca iki taraf da present olunca (sayaç o an başlar).
+            Öncesinde sayaç GÖSTERİLMEZ; "rakip hazır bekleniyor". */}
         <View style={styles.countdown}>
-          <CountdownRing remainingMs={remainingMs} totalMs={SETUP_TOTAL_MS} low={low} />
-          <Text style={styles.cdLabel}>GİZLİ KODUNU BELİRLE</Text>
+          {bothPresent ? (
+            <>
+              <CountdownRing remainingMs={remainingMs} totalMs={SETUP_TOTAL_MS} low={low} />
+              <Text style={styles.cdLabel}>GİZLİ KODUNU BELİRLE</Text>
+            </>
+          ) : (
+            <View style={styles.waiting}>
+              <ActivityIndicator color={colors.amber} />
+              <Text style={styles.waitingText}>RAKİP HAZIR BEKLENİYOR</Text>
+            </View>
+          )}
         </View>
 
         {/* Gizlilik vurgusu */}
@@ -217,8 +241,8 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
           <Text style={styles.secrecyText}>Rakibin bu kodu asla görmeyecek</Text>
         </View>
 
-        {/* Kasa kadranı */}
-        <VaultDials values={dials} locked={locked} onChange={setDial} />
+        {/* Kasa kadranı — iki taraf present olana dek pasif. */}
+        <VaultDials values={dials} locked={locked || !bothPresent} onChange={setDial} />
         <Text style={[styles.hint, !showHint && styles.hintHidden]}>rakamlar farklı olmalı</Text>
         <View style={styles.assembled}>
           <Text style={styles.assembledLabel}>KODUN</Text>
@@ -252,13 +276,15 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
         {/* Maç başlıyor ipucu */}
         {starting ? <Text style={styles.startCue}>MAÇ BAŞLIYOR…</Text> : null}
 
-        {/* Rakip durumu */}
-        <View style={[styles.opp, oppReady && styles.oppReady]}>
-          <View style={[styles.oppDot, { backgroundColor: oppReady ? colors.success : colors.amber }]} />
-          <Text style={[styles.oppText, { color: oppReady ? colors.success : colors.amber }]}>
-            {oppReady ? '✓ Rakip hazır' : 'Rakip kodunu seçiyor…'}
-          </Text>
-        </View>
+        {/* Rakip durumu (kilitledi mi) — yalnızca iki taraf da present olunca. */}
+        {bothPresent ? (
+          <View style={[styles.opp, oppReady && styles.oppReady]}>
+            <View style={[styles.oppDot, { backgroundColor: oppReady ? colors.success : colors.amber }]} />
+            <Text style={[styles.oppText, { color: oppReady ? colors.success : colors.amber }]}>
+              {oppReady ? '✓ Rakip hazır' : 'Rakip kodunu seçiyor…'}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </Screen>
   );
@@ -286,13 +312,25 @@ const styles = StyleSheet.create({
   },
   countdown: {
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     marginBottom: 18,
+    minHeight: 128, // halka yokken (bekleme) düzen zıplamasın
   },
   cdLabel: {
     fontSize: 11,
     letterSpacing: 2,
     color: colors.dim,
+    fontFamily: mono,
+  },
+  waiting: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  waitingText: {
+    fontSize: 12,
+    letterSpacing: 2,
+    color: colors.amber,
     fontFamily: mono,
   },
   secrecy: {
