@@ -36,7 +36,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
   const { name } = useProfile();
-  const { match, guesses, clocks, loading, error } = useMatch(matchId);
+  const { match, guesses, clocks, loading, error, sendEmoji, incomingEmoji } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
@@ -124,6 +124,14 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const goMenu = useCallback(() => {
     leavingRef.current = true;
     router.dismissTo('/');
+  }, [router]);
+
+  // Tekrar Oyna: doğrudan Hızlı Maç arama akışına (lobiye değil). Bu maçın
+  // aboneliği/kanalı unmount'ta temizlenir; online ekranı quick paramıyla
+  // aramayı otomatik başlatır.
+  const goRematch = useCallback(() => {
+    leavingRef.current = true;
+    router.replace({ pathname: '/online', params: { quick: '1' } });
   }, [router]);
 
   useEffect(() => {
@@ -281,6 +289,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           win={win}
           mySecret={reveal?.mine ?? null}
           theirSecret={reveal?.opponent ?? null}
+          opponentName={opponentName}
+          opponentInitial={opponentName.charAt(0)}
+          incomingEmoji={incomingEmoji}
+          onSendEmoji={sendEmoji}
+          onRematch={goRematch}
           onMenu={goMenu}
         />
       ) : null}

@@ -48,6 +48,11 @@ export type UseMatchResult = {
   error: string | null;
   /** Tüm durumu sunucudan yeniden çeker (ör. ekrana dönünce). */
   refresh: () => Promise<void>;
+  /** Maç kanalına efemeral emoji yayınlar (realtime broadcast; DB'ye YAZMAZ). */
+  sendEmoji: (emoji: string) => void;
+  /** Rakipten gelen son emoji (kendi yayınların filtrelenir). nonce her gelişte
+   *  artar; tüketici aynı emoji tekrarında bile pop animasyonunu yenileyebilir. */
+  incomingEmoji: { emoji: string; nonce: number } | null;
 };
 
 /**
@@ -67,6 +72,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const [loading, setLoading] = useState(matchId != null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Rakipten gelen efemeral emoji (broadcast); nonce ile her geliş ayrışır.
+  const [incomingEmoji, setIncomingEmoji] = useState<{ emoji: string; nonce: number } | null>(null);
+  const emojiNonceRef = useRef(0);
 
   const myIdRef = useRef<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -131,7 +139,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       if (disposed) return;
       teardownChannel(); // çift abonelik olmasın
       const channel = client
-        .channel(`match-${matchId}`)
+        .channel(`match-${matchId}`, { config: { broadcast: { self: false } } })
         .on(
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
@@ -172,6 +180,13 @@ export function useMatch(matchId: string | null): UseMatchResult {
             setPresence((prev) => ({ ...prev, [info.player]: info }));
           },
         )
+        .on('broadcast', { event: 'emoji' }, ({ payload }) => {
+          // Efemeral emoji: yalnızca rakibinkini göster (kendi yayınını filtrele).
+          const p = payload as { emoji?: string; from?: string } | undefined;
+          if (!p?.emoji || p.from === myIdRef.current) return;
+          emojiNonceRef.current += 1;
+          setIncomingEmoji({ emoji: p.emoji, nonce: emojiNonceRef.current });
+        })
         .subscribe((status) => {
           if (disposed) return;
           if (status === 'SUBSCRIBED') {
@@ -290,6 +305,13 @@ export function useMatch(matchId: string | null): UseMatchResult {
     }
   }
 
+  // Efemeral emoji yayını: kanal üzerinden broadcast (DB'ye yazmaz).
+  const sendEmoji = useCallback((emoji: string) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    void ch.send({ type: 'broadcast', event: 'emoji', payload: { emoji, from: myIdRef.current } });
+  }, []);
+
   return {
     match,
     guesses,
@@ -299,5 +321,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
     loading,
     error,
     refresh,
+    sendEmoji,
+    incomingEmoji,
   };
 }

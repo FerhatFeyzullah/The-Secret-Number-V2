@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -146,6 +146,16 @@ export default function OnlineScreen() {
       setError(errMsg(e));
     }
   }, []);
+
+  // "Tekrar Oyna" ile gelindiğinde (quick=1) aramayı bir kez otomatik başlat.
+  const { quick } = useLocalSearchParams<{ quick?: string }>();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (quick === '1' && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      void startQuick();
+    }
+  }, [quick, startQuick]);
 
   const cancelSearch = useCallback(async () => {
     const id = matchIdRef.current;
