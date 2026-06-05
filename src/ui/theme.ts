@@ -39,6 +39,10 @@ export const colors = {
   glassBorder: 'rgba(255, 255, 255, 0.16)',
   danger: '#ff7b7b',
   success: '#4ade80', // doğru tahmin / kazanç yeşili (düello geri bildirim çipi)
+  // Lider tablosu podyum madalyaları (tema ile uyumlu tonlar).
+  gold: '#f5c451',
+  silver: '#c8d2e0',
+  bronze: '#d08a52',
 };
 
 /** Sayılar için monospace his. */

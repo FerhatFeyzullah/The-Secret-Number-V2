@@ -11,8 +11,10 @@ import {
 import type {
   GuessFeedback,
   GuessOutcome,
+  LeaderboardEntry,
   MatchResult,
   MatchReveal,
+  MyRank,
   MatchState,
   MatchStatus,
   MatchTicket,
@@ -57,6 +59,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   cannot_claim_own_timeout: 'Kendi süren için zaman aşımı iddia edemezsin.',
   not_waiting: 'Maç artık beklemede değil.',
   match_not_finished: 'Maç henüz bitmedi.',
+  profile_not_found: 'Profil bulunamadı.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -219,6 +222,33 @@ export async function leaveMatch(
 /** Bağlı olduğunu bildirir (last_seen=now, disconnected_at=null). */
 export async function heartbeat(matchId: string): Promise<void> {
   await callRpc('heartbeat', { p_match_id: matchId });
+}
+
+/** Lider tablosu: puana göre azalan ilk 100 (yalnızca okuma; rank eşit puanda eşit). */
+export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+  const rows = await callRpc<
+    { rank: number; user_id: string; username: string | null; rating: number; wins: number }[]
+  >('get_leaderboard');
+  return (rows ?? []).map((r) => ({
+    rank: Number(r.rank),
+    userId: r.user_id,
+    username: r.username,
+    rating: Number(r.rating),
+    wins: Number(r.wins),
+  }));
+}
+
+/** Çağıranın kendi sırası/puanı (top 100 dışında da çalışır). */
+export async function getMyRank(): Promise<MyRank> {
+  const p = await callRpc<{ rank: number; username: string | null; rating: number; wins: number }>(
+    'get_my_rank',
+  );
+  return {
+    rank: Number(p.rank),
+    username: p.username,
+    rating: Number(p.rating),
+    wins: Number(p.wins),
+  };
 }
 
 /** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).

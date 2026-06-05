@@ -1,17 +1,19 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
+import { getMyRank } from '@/online';
+import { LeaderboardModal } from '@/online/ui';
 import { getLastMode, getStats, setLastMode, type GameMode } from '@/storage';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
 import { StatCard } from '@/ui/stat-card';
 import { formatStat, StatChip } from '@/ui/stat-chip';
-import { colors, cyanAlpha, mono } from '@/ui/theme';
+import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 type Stats = Awaited<ReturnType<typeof getStats>>;
 
@@ -31,6 +33,9 @@ export default function MenuScreen() {
   const { name, refresh: refreshName } = useProfile();
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [mode, setMode] = useState<GameMode>('solo');
+  // Kupa puanı yalnızca online'a bağlı: oturum açıkken get_my_rank'tan gelir.
+  const [rating, setRating] = useState<number | null>(null);
+  const [boardOpen, setBoardOpen] = useState(false);
 
   // Son seçilen modu hatırla (yereldir, profil verisi değil).
   useEffect(() => {
@@ -47,7 +52,15 @@ export default function MenuScreen() {
     useCallback(() => {
       refreshName();
       getStats().then(setStats);
-    }, [refreshName]),
+      // Oturum açıksa kupa puanını tazele; kapalıysa kupa gizli (online'a bağlı).
+      if (session) {
+        getMyRank()
+          .then((r) => setRating(r.rating))
+          .catch(() => setRating(null));
+      } else {
+        setRating(null);
+      }
+    }, [refreshName, session]),
   );
 
   // Online yalnızca burada oturum ister; oturum yoksa giriş ekranına yönlendir.
@@ -84,6 +97,12 @@ export default function MenuScreen() {
           <View style={styles.chips}>
             <StatChip icon="eye-outline" value={formatStat(stats.gamesPlayed)} />
             <StatChip icon="locate-outline" value={best} />
+            {session && rating != null ? (
+              <Pressable onPress={() => setBoardOpen(true)} hitSlop={6} style={styles.trophy}>
+                <Feather name="award" size={13} color={colors.amber} />
+                <Text style={styles.trophyText}>{rating}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
         <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.gear}>
@@ -126,6 +145,8 @@ export default function MenuScreen() {
         </View>
         <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
       </View>
+
+      <LeaderboardModal visible={boardOpen} onClose={() => setBoardOpen(false)} />
     </Screen>
   );
 }
@@ -170,7 +191,25 @@ const styles = StyleSheet.create({
   },
   chips: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
+  },
+  trophy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 20,
+    backgroundColor: withAlpha(colors.amber, 0.12),
+    borderWidth: 1,
+    borderColor: withAlpha(colors.amber, 0.32),
+  },
+  trophyText: {
+    color: colors.amber,
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
   },
   gear: {
     marginLeft: 'auto',
