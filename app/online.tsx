@@ -12,6 +12,7 @@ import {
   markReady,
   OnlineError,
   useMatch,
+  type FirstTurnMode,
   type MatchMode,
 } from '@/online';
 import {
@@ -21,6 +22,7 @@ import {
   MatchFoundScreen,
   NoOpponentScreen,
   PrivateChoiceScreen,
+  PrivateRoomSetupScreen,
   SearchingScreen,
 } from '@/online/ui';
 import { Screen } from '@/ui/screen';
@@ -31,6 +33,7 @@ type Phase =
   | 'searching'
   | 'no-opponent'
   | 'private-choice'
+  | 'private-setup'
   | 'create-room'
   | 'join-room'
   | 'match-found';
@@ -179,7 +182,7 @@ export default function OnlineScreen() {
     if (id) void leaveMatch(id).catch(() => {});
   }, [resetToLobby]);
 
-  const createRoom = useCallback(async () => {
+  const createRoom = useCallback(async (clockMs: number, firstTurnMode: FirstTurnMode) => {
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
@@ -188,7 +191,7 @@ export default function OnlineScreen() {
     setMatchId(null);
     setPhase('create-room');
     try {
-      const ticket = await createPrivateRoom();
+      const ticket = await createPrivateRoom(clockMs, firstTurnMode);
       if (seq !== searchSeqRef.current) {
         void leaveMatch(ticket.matchId).catch(() => {});
         return;
@@ -296,14 +299,26 @@ export default function OnlineScreen() {
       content = (
         <NoOpponentScreen
           onRetry={startQuick}
-          onCreateRoom={createRoom}
+          onCreateRoom={() => setPhase('private-setup')}
           onBack={resetToLobby}
         />
       );
       break;
     case 'private-choice':
       content = (
-        <PrivateChoiceScreen onCreate={createRoom} onJoin={() => setPhase('join-room')} onBack={resetToLobby} />
+        <PrivateChoiceScreen
+          onCreate={() => setPhase('private-setup')}
+          onJoin={() => setPhase('join-room')}
+          onBack={resetToLobby}
+        />
+      );
+      break;
+    case 'private-setup':
+      content = (
+        <PrivateRoomSetupScreen
+          onConfirm={createRoom}
+          onBack={() => setPhase('private-choice')}
+        />
       );
       break;
     case 'create-room':
@@ -333,6 +348,9 @@ export default function OnlineScreen() {
           myName={name}
           opponentName={opponentName}
           mode={mode}
+          clockMs={match?.clockMs ?? 60000}
+          firstTurnMode={match?.firstTurnMode ?? 'random'}
+          iAmCreator={match?.myRole === 'player1'}
           onReady={goSetup}
           onCancel={cancelMatchFound}
         />

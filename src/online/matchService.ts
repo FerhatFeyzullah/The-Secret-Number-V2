@@ -9,6 +9,7 @@ import {
   type PresenceRow,
 } from './mapping';
 import type {
+  FirstTurnMode,
   GuessFeedback,
   GuessOutcome,
   LeaderboardEntry,
@@ -60,6 +61,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_waiting: 'Maç artık beklemede değil.',
   match_not_finished: 'Maç henüz bitmedi.',
   profile_not_found: 'Profil bulunamadı.',
+  invalid_clock: 'Geçersiz süre seçimi.',
+  invalid_first_turn: 'Geçersiz ilk sıra seçimi.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -131,9 +134,18 @@ export async function findOrCreateQuickMatch(): Promise<MatchTicket> {
   return toTicket(await callRpc<TicketPayload>('find_or_create_quick_match'));
 }
 
-/** Yeni özel oda açar; dönen roomCode rakiple paylaşılır. */
-export async function createPrivateRoom(): Promise<MatchTicket> {
-  return toTicket(await callRpc<TicketPayload>('create_private_room'));
+/** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra ayarlarıyla.
+ *  Dönen roomCode rakiple paylaşılır. Varsayılanlar Hızlı Maç davranışıyla aynı. */
+export async function createPrivateRoom(
+  clockMs: number = 60000,
+  firstTurnMode: FirstTurnMode = 'random',
+): Promise<MatchTicket> {
+  return toTicket(
+    await callRpc<TicketPayload>('create_private_room', {
+      p_clock_ms: clockMs,
+      p_first_turn_mode: firstTurnMode,
+    }),
+  );
 }
 
 /** Koda göre özel odaya katılır (kod sunucuda normalize edilir). */
