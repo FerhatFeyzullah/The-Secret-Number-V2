@@ -38,6 +38,7 @@ export const colors = {
   glass: 'rgba(255, 255, 255, 0.07)',
   glassBorder: 'rgba(255, 255, 255, 0.16)',
   danger: '#ff7b7b',
+  success: '#4ade80', // doğru tahmin / kazanç yeşili (düello geri bildirim çipi)
 };
 
 /** Sayılar için monospace his. */

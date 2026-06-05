@@ -61,6 +61,10 @@ export type MatchState = {
   turnStartedAt: string | null;
   /** Sayı belirleme fazının bitiş anı (ISO). */
   setupDeadline: string | null;
+  /** Belirleme fazında gizli sayısını kilitleyen oyuncu(lar). Yalnızca BOOLEAN
+   *  "hazır" sinyali; gizli sayının kendisi asla taşınmaz/sızmaz. */
+  player1Ready: boolean;
+  player2Ready: boolean;
   winner: string | null;
   result: MatchResult | null;
 };
@@ -95,6 +99,15 @@ export type GuessOutcome = {
   currentTurn: string | null;
   clock1Ms: number;
   clock2Ms: number;
+};
+
+/** Maç sonu gizli sayı ifşası (get_match_reveal).
+ *  Çağıranın bakış açısından; yalnızca maç finished olunca dolar. */
+export type MatchReveal = {
+  /** Çağıranın gizli sayısı (3 hane). */
+  mine: string | null;
+  /** Rakibin gizli sayısı — SADECE maç bitince gelir. */
+  opponent: string | null;
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */

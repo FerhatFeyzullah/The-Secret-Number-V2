@@ -12,6 +12,7 @@ import type {
   GuessFeedback,
   GuessOutcome,
   MatchResult,
+  MatchReveal,
   MatchState,
   MatchStatus,
   MatchTicket,
@@ -55,6 +56,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   clock_not_expired: 'Rakibin süresi henüz dolmadı.',
   cannot_claim_own_timeout: 'Kendi süren için zaman aşımı iddia edemezsin.',
   not_waiting: 'Maç artık beklemede değil.',
+  match_not_finished: 'Maç henüz bitmedi.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -210,6 +212,16 @@ export async function leaveMatch(
 /** Bağlı olduğunu bildirir (last_seen=now, disconnected_at=null). */
 export async function heartbeat(matchId: string): Promise<void> {
   await callRpc('heartbeat', { p_match_id: matchId });
+}
+
+/** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).
+ *  Çağıranın bakış açısından kendi ve rakip sayısı; satır yoksa null.
+ *  Maç bitmeden çağrılırsa sunucu 'match_not_finished' fırlatır. */
+export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
+  const p = await callRpc<{ mine: string | null; opponent: string | null }>('get_match_reveal', {
+    p_match_id: matchId,
+  });
+  return { mine: p.mine ?? null, opponent: p.opponent ?? null };
 }
 
 async function currentUserId(): Promise<string | null> {

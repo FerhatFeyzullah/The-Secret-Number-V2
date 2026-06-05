@@ -1,15 +1,15 @@
 import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
 
-import { SecretSetupScreen } from '@/online/ui';
+import { DuelScreen } from '@/online/ui';
 import { Screen } from '@/ui/screen';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors, mono } from '@/ui/theme';
 
-/** Gizli kod belirleme route'u: eşleşme bulununca matchId ile buraya gelinir.
- *  Tüm belirleme/realtime mantığı SecretSetupScreen'de. */
-export default function MatchSetupRoute() {
-  const { matchId } = useLocalSearchParams<{ matchId?: string }>();
-  if (!matchId) {
+/** Online düello route'u: /match/[id]. matchId'yi DuelScreen'e geçirir
+ *  (tüm realtime/oyun mantığı orada). Geçersiz id'de kısa bir uyarı. */
+export default function MatchRoute() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  if (!id) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -18,7 +18,7 @@ export default function MatchSetupRoute() {
       </Screen>
     );
   }
-  return <SecretSetupScreen matchId={matchId} />;
+  return <DuelScreen matchId={id} />;
 }
 
 const styles = StyleSheet.create({
