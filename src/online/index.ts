@@ -24,6 +24,7 @@ export {
   forfeitDisconnect,
   heartbeat,
   joinPrivateRoom,
+  leaveMatch,
   makeGuess,
   OnlineError,
   setSecret,

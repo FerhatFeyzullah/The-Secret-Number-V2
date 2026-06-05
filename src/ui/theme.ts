@@ -6,6 +6,16 @@ const PRIMARY_RGB = '47, 168, 224';
 /** Primary'nin istenen opaklıkta yarı saydam hali. */
 export const cyanAlpha = (alpha: number) => `rgba(${PRIMARY_RGB}, ${alpha})`;
 
+/** Herhangi bir #rrggbb vurgu rengini istenen opaklıkta rgba'ya çevirir
+ *  (lobide cyan/amber gibi dinamik aksanlarda dolgu/glow üretmek için). */
+export const withAlpha = (hex: string, alpha: number) => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 /** Köşe vinyetinin (koyu #060c1a) RGB bileşenleri — saydam ucu aynı tondan olsun. */
 const VIGNETTE_RGB = '6, 12, 26';
 

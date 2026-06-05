@@ -5,6 +5,7 @@ import {
   claimTimeout,
   findOrCreateQuickMatch,
   joinPrivateRoom,
+  leaveMatch,
   makeGuess,
   OnlineError,
   setSecret,
@@ -137,5 +138,34 @@ describe('claimTimeout / cancelWaiting', () => {
     rpcResolves({ match_id: 'm1', status: 'cancelled', result: 'cancelled' });
     await expect(cancelWaiting('m1')).resolves.toBeUndefined();
     expect(rpcMock).toHaveBeenCalledWith('cancel_waiting', { p_match_id: 'm1' });
+  });
+});
+
+describe('leaveMatch', () => {
+  it('setup maçtan çıkışı left=true/cancelled olarak eşler', async () => {
+    rpcResolves({ match_id: 'm1', left: true, status: 'cancelled', result: 'cancelled', winner: null });
+    await expect(leaveMatch('m1')).resolves.toEqual({
+      left: true,
+      status: 'cancelled',
+      result: 'cancelled',
+    });
+    expect(rpcMock).toHaveBeenCalledWith('leave_match', { p_match_id: 'm1' });
+  });
+
+  it('bitmiş maçta no-op (left=false) hata fırlatmaz', async () => {
+    rpcResolves({ match_id: 'm1', left: false, status: 'finished', result: 'win', winner: 'opp' });
+    await expect(leaveMatch('m1')).resolves.toEqual({
+      left: false,
+      status: 'finished',
+      result: 'win',
+    });
+  });
+
+  it('active maçtan çıkış forfeit olarak döner', async () => {
+    rpcResolves({ match_id: 'm1', left: true, status: 'finished', result: 'forfeit', winner: 'opp' });
+    await expect(leaveMatch('m1')).resolves.toMatchObject({
+      left: true,
+      result: 'forfeit',
+    });
   });
 });
