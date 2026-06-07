@@ -108,7 +108,7 @@ export type OnlineGuess = {
 };
 
 /** Çağıranın protokol maçı eli + seçimi (get_my_hand).
- *  Rakibin eli/seçimi ASLA gelmez (sunucu RLS). */
+ *  Rakibin eli/seçimi/elenenleri ASLA gelmez (sunucu RLS). */
 export type ProtocolHand = {
   /** Sunucuda dağıtılan el (sahip olunanlardan rastgele yuva+3, sahip ile sınırlı). */
   hand: string[];
@@ -116,6 +116,36 @@ export type ProtocolHand = {
   selected: string[];
   /** Seviyeye göre yuva sayısı (Sv1-3 → 2, Sv4+ → 3). */
   slots: number;
+  /** KENDİ protokol kullanımların (şerit "kullanıldı" durumu; Faz 3 / Adım 4). */
+  uses: { protocolId: string; round: number }[];
+  /** Eleme'nin verdiği "sayıda yok" rakamları, tur → rakamlar (yalnız kendi). */
+  eliminations: Record<string, number[]>;
+};
+
+/** Maç içi tek protokol kullanım kaydı (match_protocol_uses; sır içermez —
+ *  iki oyuncu da görür, "rakip X kullandı" bildirimi buradan). */
+export type ProtocolUse = {
+  id: number;
+  matchId: string;
+  player: string;
+  protocolId: string;
+  round: number;
+  createdAt: string;
+};
+
+/** use_protocol dönüşü: yalnız çağırana ait güvenli sonuç.
+ *  Etkiye göre alanlar dolar (time_add → saatler; info_eliminate → rakam). */
+export type ProtocolUseOutcome = {
+  matchId: string;
+  protocolId: string;
+  round: number;
+  /** time_add: güncel saatler (realtime de ayrıca senkronlar). */
+  clock1Ms?: number;
+  clock2Ms?: number;
+  /** info_eliminate: rakibin BU TURDAKİ sayısında OLMAYAN rakam. */
+  eliminatedDigit?: number;
+  /** info_eliminate: bu turda verilen tüm "yok" rakamları. */
+  eliminated?: number[];
 };
 
 /** Eşleşme RPC'lerinin (quick/private) ortak dönüşü. */

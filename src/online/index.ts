@@ -15,9 +15,12 @@ export type {
   PlayerRole,
   PresenceInfo,
   ProtocolHand,
+  ProtocolUse,
+  ProtocolUseOutcome,
 } from './types';
 export { displayClocks, feedbackToGuessResult } from './mapping';
 export {
+  activateProtocol,
   cancelSetupTimeout,
   cancelWaiting,
   claimTimeout,
@@ -25,6 +28,7 @@ export {
   fetchGuesses,
   fetchMatchState,
   fetchPresence,
+  fetchProtocolUses,
   findOrCreateProtocolMatch,
   findOrCreateQuickMatch,
   forfeitDisconnect,

@@ -4,9 +4,11 @@ import {
   guessRowToGuess,
   matchRowToState,
   presenceRowToInfo,
+  protocolUseRowToUse,
   type GuessRow,
   type MatchRow,
   type PresenceRow,
+  type ProtocolUseRow,
 } from './mapping';
 import type {
   FirstTurnMode,
@@ -23,6 +25,8 @@ import type {
   PlayerRole,
   PresenceInfo,
   ProtocolHand,
+  ProtocolUse,
+  ProtocolUseOutcome,
 } from './types';
 
 /** RPC'lerin fırlattığı, sunucu hata koduna göre Türkçe mesaj taşıyan hata. */
@@ -80,6 +84,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   too_many_selected: 'Yuva limitini aştın.',
   not_both_present: 'İki oyuncu da hazır değil.',
   select_not_expired: 'Seçim süresi henüz dolmadı.',
+  // Protokol kullanımı (Faz 3 / Adım 4)
+  not_protocol_match: 'Bu maçta protokol kullanılamaz.',
+  protocol_not_selected: 'Bu protokol bu maç için seçili değil.',
+  protocol_already_used: 'Bu protokolü bu maçta zaten kullandın.',
+  protocol_not_implemented: 'Bu protokol henüz aktif değil.',
+  time_expired: 'Süren doldu, protokol kullanılamaz.',
+  no_digits_left: 'Elenecek rakam kalmadı.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -164,16 +175,54 @@ export async function findOrCreateProtocolMatch(): Promise<MatchTicket> {
   return toTicket(await callRpc<TicketPayload>('find_or_create_protocol_match'));
 }
 
-/** Destiny's Hand: çağıranın dağıtılan eli + seçimi + yuva sayısı.
- *  Rakibin eli ASLA gelmez (sunucu RLS). */
+/** Destiny's Hand: çağıranın dağıtılan eli + seçimi + yuva sayısı + kendi
+ *  kullanımları/elenenleri. Rakibin eli/elenenleri ASLA gelmez (sunucu RLS). */
 export async function getMyHand(matchId: string): Promise<ProtocolHand> {
-  const p = await callRpc<{ hand?: string[]; selected?: string[]; slots?: number }>('get_my_hand', {
-    p_match_id: matchId,
-  });
+  const p = await callRpc<{
+    hand?: string[];
+    selected?: string[];
+    slots?: number;
+    uses?: { protocol_id: string; round: number }[];
+    eliminations?: Record<string, number[]>;
+  }>('get_my_hand', { p_match_id: matchId });
   return {
     hand: p.hand ?? [],
     selected: p.selected ?? [],
     slots: Number(p.slots ?? 2),
+    uses: (p.uses ?? []).map((u) => ({ protocolId: u.protocol_id, round: u.round })),
+    eliminations: p.eliminations ?? {},
+  };
+}
+
+/** Maç içi protokol kullanımı (use_protocol RPC). TÜM doğrulama + ETKİ sunucuda;
+ *  istemci yalnız sonucu okur. (Adı bilerek "use" ile başlamıyor — React hook
+ *  değildir.) payload 4a'da kullanılmaz; parametreli protokoller için ayrılmıştır. */
+export async function activateProtocol(
+  matchId: string,
+  protocolId: string,
+  payload?: Record<string, unknown>,
+): Promise<ProtocolUseOutcome> {
+  const p = await callRpc<{
+    match_id: string;
+    protocol_id: string;
+    round: number;
+    clock1_ms?: number;
+    clock2_ms?: number;
+    eliminated_digit?: number;
+    eliminated?: number[];
+  }>('use_protocol', {
+    p_match_id: matchId,
+    p_protocol_id: protocolId,
+    p_payload: payload ?? null,
+  });
+  return {
+    matchId: p.match_id,
+    protocolId: p.protocol_id,
+    round: p.round,
+    ...(p.clock1_ms != null ? { clock1Ms: p.clock1_ms } : {}),
+    ...(p.clock2_ms != null ? { clock2Ms: p.clock2_ms } : {}),
+    ...(p.eliminated_digit != null ? { eliminatedDigit: p.eliminated_digit } : {}),
+    ...(p.eliminated ? { eliminated: p.eliminated } : {}),
   };
 }
 
@@ -427,4 +476,17 @@ export async function fetchPresence(matchId: string): Promise<PresenceInfo[]> {
     .eq('match_id', matchId);
   if (error) throw toOnlineError(error.message);
   return ((data ?? []) as PresenceRow[]).map(presenceRowToInfo);
+}
+
+/** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez).
+ *  Şerit "kullanıldı" durumu + yeniden bağlanınca senkron için. */
+export async function fetchProtocolUses(matchId: string): Promise<ProtocolUse[]> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from('match_protocol_uses')
+    .select('*')
+    .eq('match_id', matchId)
+    .order('id', { ascending: true });
+  if (error) throw toOnlineError(error.message);
+  return ((data ?? []) as ProtocolUseRow[]).map(protocolUseRowToUse);
 }
