@@ -63,6 +63,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   profile_not_found: 'Profil bulunamadı.',
   invalid_clock: 'Geçersiz süre seçimi.',
   invalid_first_turn: 'Geçersiz ilk sıra seçimi.',
+  // Protokol ekonomisi (Faz 2a)
+  protocol_not_found: 'Protokol bulunamadı.',
+  already_owned: 'Bu protokole zaten sahipsin.',
+  level_too_low: 'Seviyen bu protokol için yetersiz.',
+  insufficient_veri: 'Yetersiz Veri.',
+  not_owned: 'Sahip olmadığın bir protokol seçtin.',
+  loadout_too_large: 'Yuva limitini aştın.',
+  invalid_loadout: 'Geçersiz dizilim.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -264,6 +272,9 @@ export async function getMyRank(): Promise<MyRank> {
     veri?: number;
     level_floor?: number | null;
     level_next?: number | null;
+    owned_protocols?: string[] | null;
+    loadout?: string[] | null;
+    loadout_slots?: number | null;
   }>('get_my_rank');
   return {
     rank: Number(p.rank),
@@ -279,7 +290,26 @@ export async function getMyRank(): Promise<MyRank> {
     veri: Number(p.veri ?? 0),
     levelFloor: Number(p.level_floor ?? 0),
     levelNext: p.level_next == null ? null : Number(p.level_next),
+    // Migration 20260607000002 (protokoller) öncesi güvenli varsayılanlar.
+    owned: p.owned_protocols ?? [],
+    loadout: p.loadout ?? [],
+    loadoutSlots: Number(p.loadout_slots ?? 2),
   };
+}
+
+/** Protokolü Veri ile açar (seviye/Veri/sahiplik sunucuda doğrulanır, atomik).
+ *  Dönen değer: güncel Veri + sahip olunan protokol id'leri. */
+export async function unlockProtocol(
+  id: string,
+): Promise<{ veri: number; owned: string[] }> {
+  const p = await callRpc<{ veri: number; owned: string[] }>('unlock_protocol', { p_id: id });
+  return { veri: Number(p.veri), owned: p.owned ?? [] };
+}
+
+/** Maça götürülecek protokolleri kaydeder (sahiplik + yuva limiti sunucuda). */
+export async function setLoadout(ids: string[]): Promise<{ loadout: string[]; slots: number }> {
+  const p = await callRpc<{ loadout: string[]; slots: number }>('set_loadout', { p_ids: ids });
+  return { loadout: p.loadout ?? [], slots: Number(p.slots) };
 }
 
 /** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).
