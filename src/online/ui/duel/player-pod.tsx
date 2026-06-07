@@ -8,22 +8,8 @@ const fmt = (ms: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
-/** Arena oyuncu kapsülü: avatar + ad + satranç saati.
- *  Aktif (sırası gelen) parlak akar; diğeri sönük. ≤10 sn'de kırmızı + nabız. */
-export function PlayerPod({
-  initial,
-  name,
-  ms,
-  active,
-  side,
-}: {
-  initial: string;
-  name: string;
-  ms: number;
-  active: boolean;
-  side: 'left' | 'right';
-}) {
-  const accent = side === 'left' ? colors.cyan : colors.amber;
+/** Kompakt satranç saati: aktifken vurgu renginde parlar, ≤10 sn'de kırmızı + nabız. */
+function ChipClock({ ms, active, accent }: { ms: number; active: boolean; accent: string }) {
   const isLow = ms <= 10_000;
   const urgent = active && isLow;
   const clockColor = urgent ? colors.danger : active ? accent : colors.dim;
@@ -47,79 +33,125 @@ export function PlayerPod({
   const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] });
 
   return (
-    <View style={[styles.root, { alignItems: side === 'left' ? 'flex-start' : 'flex-end', opacity: active ? 1 : 0.42 }]}>
-      <View style={[styles.idRow, { flexDirection: side === 'left' ? 'row' : 'row-reverse' }]}>
-        <View
+    <View
+      style={[
+        styles.clock,
+        {
+          borderColor: active ? withAlpha(clockColor, 0.5) : withAlpha('#ffffff', 0.08),
+          backgroundColor: active ? withAlpha(clockColor, 0.12) : 'rgba(255,255,255,0.03)',
+        },
+      ]}>
+      {urgent ? (
+        <Animated.View
           style={[
-            styles.avatar,
-            {
-              borderColor: active ? accent : withAlpha('#ffffff', 0.12),
-              backgroundColor: withAlpha(accent, active ? 0.2 : 0.06),
-              boxShadow: active ? `0 0 12px ${withAlpha(accent, 0.4)}` : undefined,
-            },
-          ]}>
-          <Text style={[styles.avatarText, { color: active ? accent : colors.dim }]}>
-            {(initial || '?').toUpperCase()}
-          </Text>
-        </View>
-        <Text
-          style={[styles.name, { color: active ? colors.text : colors.dim }]}
-          numberOfLines={1}>
-          {name}
-        </Text>
-      </View>
+            StyleSheet.absoluteFill,
+            styles.urgentGlow,
+            { opacity: glowOpacity, boxShadow: `0 0 22px ${withAlpha(colors.danger, 0.6)}` },
+          ]}
+        />
+      ) : null}
+      <Text
+        style={[
+          styles.clockText,
+          { color: clockColor, textShadowColor: active ? clockColor : 'transparent' },
+        ]}>
+        {fmt(ms)}
+      </Text>
+    </View>
+  );
+}
 
+/** Kompakt oyuncu çipi: avatar + ad + satranç saati.
+ *  stack=false → tek satır (üst barda rakip); stack=true → dikey cam kapsül
+ *  (tuş takımının yanında kendi saatin). Sırası olmayan taraf sönük. */
+export function PlayerChip({
+  initial,
+  name,
+  ms,
+  active,
+  accent,
+  stack = false,
+}: {
+  initial: string;
+  name: string;
+  ms: number;
+  active: boolean;
+  accent: string;
+  stack?: boolean;
+}) {
+  const idRow = (
+    <View style={styles.idRow}>
       <View
         style={[
-          styles.clock,
+          styles.avatar,
           {
-            borderColor: active ? withAlpha(clockColor, 0.5) : withAlpha('#ffffff', 0.08),
-            backgroundColor: active ? withAlpha(clockColor, 0.12) : 'rgba(255,255,255,0.03)',
+            borderColor: active ? accent : withAlpha('#ffffff', 0.12),
+            backgroundColor: withAlpha(accent, active ? 0.2 : 0.06),
+            boxShadow: active ? `0 0 10px ${withAlpha(accent, 0.4)}` : undefined,
           },
         ]}>
-        {urgent ? (
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFill,
-              styles.urgentGlow,
-              { opacity: glowOpacity, boxShadow: `0 0 22px ${withAlpha(colors.danger, 0.6)}` },
-            ]}
-          />
-        ) : null}
-        <Text
-          style={[
-            styles.clockText,
-            {
-              color: clockColor,
-              textShadowColor: active ? clockColor : 'transparent',
-            },
-          ]}>
-          {fmt(ms)}
+        <Text style={[styles.avatarText, { color: active ? accent : colors.dim }]}>
+          {(initial || '?').toUpperCase()}
         </Text>
       </View>
+      <Text style={[styles.name, { color: active ? colors.text : colors.dim }]} numberOfLines={1}>
+        {name}
+      </Text>
+    </View>
+  );
+
+  if (stack) {
+    return (
+      <View style={[styles.stackRoot, { opacity: active ? 1 : 0.42 }]}>
+        {idRow}
+        <ChipClock ms={ms} active={active} accent={accent} />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.rowRoot, { opacity: active ? 1 : 0.42 }]}>
+      {idRow}
+      <ChipClock ms={ms} active={active} accent={accent} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  rowRoot: {
     flex: 1,
-    gap: 6,
-  },
-  idRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    minWidth: 0,
+  },
+  stackRoot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  idRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
     fontFamily: mono,
   },
@@ -128,23 +160,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: mono,
     letterSpacing: 0.5,
+    flexShrink: 1,
     maxWidth: 96,
   },
   clock: {
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1.5,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
     overflow: 'hidden',
   },
   urgentGlow: {
-    borderRadius: 12,
+    borderRadius: 10,
   },
   clockText: {
-    fontSize: 26,
+    fontSize: 17,
     fontWeight: '800',
     fontFamily: mono,
     letterSpacing: 1,
-    textShadowRadius: 12,
+    textShadowRadius: 10,
   },
 });

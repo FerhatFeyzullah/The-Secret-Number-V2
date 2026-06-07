@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingLeft: 4,
-    marginBottom: 7,
+    marginBottom: 5,
   },
   headerText: {
     fontSize: 9,
@@ -99,17 +99,17 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   listContent: {
-    gap: 5,
-    paddingBottom: 8,
+    gap: 4,
+    paddingBottom: 6,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderRadius: 11,
+    borderRadius: 10,
   },
   rowTop: {
     backgroundColor: cyanAlpha(0.06),
@@ -127,12 +127,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   digits: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: colors.text,
     fontFamily: mono,
     letterSpacing: 3,
-    minWidth: 68,
+    minWidth: 60,
   },
   chip: {
     flexShrink: 1,
@@ -141,8 +141,8 @@ const styles = StyleSheet.create({
     gap: 5,
     borderWidth: 1,
     borderRadius: 20,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
   },
   chipDot: {
     width: 5,
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     textAlign: 'center',
-    paddingVertical: 18,
+    paddingVertical: 12,
     fontSize: 10,
     color: withAlpha(colors.dim, 0.4),
     fontFamily: mono,

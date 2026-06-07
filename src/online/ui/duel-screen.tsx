@@ -1,13 +1,14 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useProfile } from '@/auth';
 import { parseGuess } from '@/game';
 import {
   getMatchReveal,
+  getMyHand,
   leaveMatch,
   makeGuess,
   OnlineError,
@@ -21,7 +22,8 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 import { DigitPad } from './duel/digit-pad';
 import { GuessHistory } from './duel/guess-history';
-import { PlayerPod } from './duel/player-pod';
+import { PlayerChip } from './duel/player-pod';
+import { ProtocolStrip, type ProtocolTileState } from './duel/protocol-strip';
 import { ResultOverlay } from './duel/result-overlay';
 import { RoundSetup } from './duel/round-setup';
 import { TurnBanner } from './duel/turn-banner';
@@ -133,6 +135,62 @@ export function DuelScreen({ matchId }: { matchId: string }) {
 
   // Not: süre bitince otomatik zaman aşımı artık useMatch içinde merkezî olarak
   // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
+
+  // ── Protokol şeridi (yalnız Protokol Maçı) ────────────────────
+  // Kendi seçili protokollerin (get_my_hand → selected). Seçim maç başında
+  // kilitlenir → bir kez çekilir. Rakibin eli/seçimi sunucudan zaten gelmez.
+  const [myProtocols, setMyProtocols] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!isProtocol || myProtocols !== null) return;
+    let alive = true;
+    (async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const h = await getMyHand(matchId);
+          if (!alive) return;
+          setMyProtocols(h.selected);
+          return;
+        } catch {
+          if (!alive) return;
+          await new Promise((r) => setTimeout(r, 700));
+        }
+      }
+      if (alive) setMyProtocols([]); // çekilemedi → şerit gizli (etkiler zaten Adım 4'te)
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [isProtocol, matchId, myProtocols]);
+
+  // Tile durumları Adım 4'te veriyle dolacak (cooldown / sıra kilidi / tek
+  // kullanım); bu adımda hepsi "kullanılabilir" görünür.
+  const protocolTiles = useMemo<ProtocolTileState[]>(
+    () => (isProtocol ? (myProtocols ?? []).map((id) => ({ id, status: 'ready' as const })) : []),
+    [isProtocol, myProtocols],
+  );
+
+  // Kısa bilgi toast'u (şerit tıklaması — kullanıcı bozuk sanmasın).
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  // Adım 4 bağlama noktası: gerçek protokol kullanımı (use_protocol RPC) buraya
+  // bağlanacak. Şimdilik yalnızca bilgilendirme — etki YOK.
+  const onUseProtocol = useCallback(
+    (_id: string) => {
+      play('blip');
+      buzz('tap');
+      setToast('Protokol etkileri yakında');
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 1600);
+    },
+    [play, buzz],
+  );
 
   // Maç bitince iki gizli sayıyı çek (yalnızca finished'te sunucu döndürür).
   useEffect(() => {
@@ -302,9 +360,19 @@ export function DuelScreen({ matchId }: { matchId: string }) {
         ]}
       />
 
+      {/* Kompakt yerleşim (yukarıdan aşağı): rakip + rakip saati + tur skoru →
+          sıra banner'ı → tahmin geçmişi (kayar) → mevcut giriş → tuş takımı +
+          kendi saatin → en altta protokol şeridi (yalnız Protokol Maçı). */}
       <View style={styles.content}>
         <View style={styles.topRow}>
           {exitButton}
+          <PlayerChip
+            initial={opponentName.charAt(0)}
+            name={opponentName}
+            ms={oppClockMs}
+            active={!isMine && status === 'active'}
+            accent={colors.amber}
+          />
           {isProtocol ? (
             <View style={styles.roundChip}>
               <Text style={styles.roundChipText}>
@@ -316,24 +384,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           ) : null}
         </View>
 
-        {/* Arena: çift saat */}
-        <View style={styles.arena}>
-          <PlayerPod initial={myName.charAt(0)} name={myName} ms={myClockMs} active={isMine} side="left" />
-          <View style={styles.vs}>
-            <View style={styles.vsLine} />
-            <Text style={styles.vsText}>VS</Text>
-            <View style={styles.vsLine} />
-          </View>
-          <PlayerPod
-            initial={opponentName.charAt(0)}
-            name={opponentName}
-            ms={oppClockMs}
-            active={!isMine && status === 'active'}
-            side="right"
-          />
-        </View>
-
         <TurnBanner mine={isMine} />
+
+        <GuessHistory guesses={myGuesses} />
+
+        {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
 
         <DigitPad
           guess={entry}
@@ -341,11 +396,29 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           onDigit={addDigit}
           onDelete={deleteDigit}
           onSubmit={submit}
+          accessory={
+            <PlayerChip
+              stack
+              initial={myName.charAt(0)}
+              name={myName}
+              ms={myClockMs}
+              active={isMine}
+              accent={colors.cyan}
+            />
+          }
         />
 
-        {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
+        {/* Protokol şeridi: yalnız Protokol Maçı'nda ve seçim varsa yer kaplar
+            (quick/offline'da render edilmez → alt boşluk oluşmaz). */}
+        {protocolTiles.length > 0 ? (
+          <ProtocolStrip tiles={protocolTiles} onUse={onUseProtocol} />
+        ) : null}
 
-        <GuessHistory guesses={myGuesses} />
+        {toast ? (
+          <View style={styles.toastWrap} pointerEvents="none">
+            <Text style={styles.toast}>{toast}</Text>
+          </View>
+        ) : null}
       </View>
 
       {finished ? (
@@ -381,11 +454,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    gap: 10,
+    gap: 8,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
   roundChip: {
     marginLeft: 'auto',
@@ -413,37 +487,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  arena: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    borderRadius: 18,
-    padding: 14,
-  },
-  vs: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  vsLine: {
-    width: 1,
-    height: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  vsText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.dim,
-    fontFamily: mono,
-    letterSpacing: 1,
-  },
   actionError: {
     color: colors.danger,
     fontSize: 11,
     textAlign: 'center',
-    marginTop: 8,
+  },
+  toastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 96, // şeridin hemen üstü
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  toast: {
+    color: colors.text,
+    fontSize: 11,
+    fontFamily: mono,
+    letterSpacing: 0.5,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(6,12,26,0.92)',
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    overflow: 'hidden',
   },
   centered: {
     flex: 1,
@@ -474,5 +542,6 @@ const styles = StyleSheet.create({
   },
 });
 
-// Düello ekranı dikey boşlukları: arena/banner/pad arasında nefes payı.
-// (GuessHistory flex:1 ile kalan alanı doldurur ve kendi içinde kayar.)
+// Düello ekranı dikey boşlukları: üst bar/banner/giriş/pad arasında nefes payı.
+// (GuessHistory flex:1 ile ortadaki kalan alanı doldurur ve kendi içinde kayar;
+//  protokol şeridi yalnız Protokol Maçı'nda en altta yer kaplar.)
