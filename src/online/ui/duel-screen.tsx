@@ -29,10 +29,12 @@ import { HintsBar } from './duel/hints-bar';
 import { PlayerChip } from './duel/player-pod';
 import { PostestPrompt } from './duel/postest-prompt';
 import { ProtocolStrip, type ProtocolTileState } from './duel/protocol-strip';
+import { ProtocolNotice, type DuelNotice } from './duel/protocol-notice';
 import { ResultOverlay } from './duel/result-overlay';
 import { RoundSetup } from './duel/round-setup';
 import { TurnBanner } from './duel/turn-banner';
-import { OPPONENT_VISIBLE_PROTOCOLS } from './protocol-visuals';
+import type { FeatherName } from './parts';
+import { OPPONENT_VISIBLE_PROTOCOLS, PILLAR_COLOR, protocolIcon } from './protocol-visuals';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 const errMsg = (e: unknown) =>
@@ -202,20 +204,22 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     }));
   }, []);
 
-  // Kısa bilgi toast'u (kullanım onayı / hata / rakip bildirimi).
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
-  }, []);
-  useEffect(
-    () => () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
+  // Modern bildirim: üst-orta, kısa süreli, animasyonlu kart (kuyruklu).
+  // showToast(metin, { accent, icon }) — accent/ikon yoksa nötr (cyan/zap).
+  const [notices, setNotices] = useState<DuelNotice[]>([]);
+  const noticeIdRef = useRef(0);
+  const showToast = useCallback(
+    (text: string, opts?: { accent?: string; icon?: FeatherName }) => {
+      noticeIdRef.current += 1;
+      const n: DuelNotice = { id: noticeIdRef.current, text, accent: opts?.accent, icon: opts?.icon };
+      // Kısa kuyruk: üst üste binmesin, en fazla 4 beklesin (eskiler düşer).
+      setNotices((q) => [...q, n].slice(-4));
     },
     [],
   );
+  const dismissNotice = useCallback((nid: number) => {
+    setNotices((q) => q.filter((x) => x.id !== nid));
+  }, []);
 
   // Kendi kullanımların: sunucu kayıtları (realtime) + RPC dönüşü anlık işareti.
   // Hak maç başına 1 → kullanılan tile tekrar basılamaz (turlar arası sıfırlanmaz).
@@ -261,9 +265,14 @@ export function DuelScreen({ matchId }: { matchId: string }) {
         if (res.consumed !== false) setLocalUsedIds((prev) => new Set(prev).add(id));
         play('good');
         buzz('feedback');
+        // Kendi kullanımının vurgusu: protokolün kategori rengi + glifi.
+        const protoSelf = getProtocol(id);
+        const meta = protoSelf
+          ? { accent: PILLAR_COLOR[protoSelf.pillar], icon: protocolIcon(id) }
+          : undefined;
         switch (id) {
           case 'time_add':
-            showToast('Süre Enjeksiyonu: +12 sn');
+            showToast('Süre Enjeksiyonu · +12 sn', meta);
             break;
           case 'info_eliminate': {
             const key = String(res.round);
@@ -271,19 +280,19 @@ export function DuelScreen({ matchId }: { matchId: string }) {
               ...prev,
               [key]: res.eliminated ?? [...(prev[key] ?? []), res.eliminatedDigit!],
             }));
-            showToast(`Eleme: sayıda ${res.eliminatedDigit} yok`);
+            showToast(`Eleme · sayıda ${res.eliminatedDigit} yok`, meta);
             break;
           }
           case 'info_readlast':
             if (res.consumed === false) {
-              showToast('Rakip bu turda henüz tahmin yapmadı — hak harcanmadı');
+              showToast('Rakip bu turda tahmin yapmadı — hak harcanmadı', meta);
             } else {
               appendHint(res.round, {
                 t: 'readlast',
                 digits: res.digits!,
                 feedback: res.feedback!,
               });
-              showToast(`Rakip Okuması: ${res.digits} dedi`);
+              showToast(`Rakip Okuması · ${res.digits}`, meta);
             }
             break;
           case 'info_postest':
@@ -294,33 +303,35 @@ export function DuelScreen({ matchId }: { matchId: string }) {
               match: !!res.match,
             });
             showToast(
-              `Konum Testi: ${res.digit}, ${res.position}. pozisyonda — ${res.match ? 'EVET' : 'HAYIR'}`,
+              `Konum Testi · ${res.digit} @ ${res.position}. → ${res.match ? 'EVET' : 'HAYIR'}`,
+              meta,
             );
             break;
           case 'info_reveal':
             appendHint(res.round, { t: 'reveal', digit: res.revealedDigit! });
-            showToast(`Sayı İşareti: sayıda ${res.revealedDigit} var`);
+            showToast(`Sayı İşareti · sayıda ${res.revealedDigit} var`, meta);
             break;
           case 'time_steal':
             showToast(
               res.stolenMs
-                ? `Saat Çalma: rakipten +${Math.round(res.stolenMs / 1000)} sn`
-                : 'Saat Çalma: rakipte çalınacak süre yok (5 sn tabanı)',
+                ? `Saat Çalma · rakipten +${Math.round(res.stolenMs / 1000)} sn`
+                : 'Saat Çalma · rakipte çalınacak süre yok',
+              meta,
             );
             break;
           case 'time_freeze':
-            showToast('Dondur: bu turda saatin işlemiyor');
+            showToast('Dondur · saatin bu tur işlemiyor', meta);
             break;
           case 'time_slow':
-            showToast('Yavaşlat: rakibin sıradaki turu 1.5× hızlı akacak');
+            showToast('Yavaşlat · rakip saati 1.5× akacak', meta);
             break;
           case 'def_shield':
             setShieldArmed(true);
-            showToast('Kalkan kuruldu — gelen ilk engeli bloklar');
+            showToast('Kalkan kuruldu · gelen ilk engeli bloklar', meta);
             break;
           case 'def_reflect':
             setReflectArmed(true);
-            showToast('Yansıtma kuruldu — gelen ilk engel sahibine döner');
+            showToast('Yansıtma kuruldu · ilk engeli sahibine döner', meta);
             break;
           case 'disrupt_fog':
           case 'disrupt_silence':
@@ -329,32 +340,35 @@ export function DuelScreen({ matchId }: { matchId: string }) {
             // Engel sınıfı: counter zinciri sonucu (sunucu kararı).
             const name = getProtocol(id)?.name ?? 'Engel';
             if (res.blocked) {
-              showToast(`${name} bloklandı — rakibin Kalkanı tüketti`);
+              showToast(`${name} bloklandı`, { accent: colors.dim, icon: 'shield' });
             } else if (res.reflected) {
               buzz('lose');
-              showToast(`${name} yansıtıldı — etkisi sana döndü!`);
+              showToast(`${name} yansıdı · etkisi sana döndü`, {
+                accent: colors.danger,
+                icon: 'corner-up-left',
+              });
             } else if (id === 'disrupt_fog') {
-              showToast('Sis Perdesi: rakibin sonraki geri bildirimi gecikecek');
+              showToast('Sis Perdesi · rakibin geri bildirimi gecikecek', meta);
             } else if (id === 'disrupt_silence') {
-              showToast('Susturma: rakip sıradaki turunda protokol kullanamaz');
+              showToast('Susturma · rakip sıradaki turunda protokol kullanamaz', meta);
             } else if (id === 'disrupt_deceive') {
-              showToast('Yanıltma: rakibin sonraki geri bildirimi şişirilecek');
+              showToast('Yanıltma · rakibin sonraki geri bildirimi şişecek', meta);
             } else if (res.noTargetProtocol) {
-              showToast('Rakibin harcanacak protokolü yok — hak harcanmadı');
+              showToast('Rakibin harcanacak protokolü yok — hak harcanmadı', meta);
             } else {
               const wastedName = res.wastedProtocol
                 ? getProtocol(res.wastedProtocol)?.name ?? res.wastedProtocol
                 : 'protokol';
-              showToast(`Zorla Harca: rakibin ${wastedName} protokolü tüketildi`);
+              showToast(`Zorla Harca · rakibin ${wastedName} tüketildi`, meta);
             }
             break;
           }
           default:
-            showToast('Protokol kullanıldı');
+            showToast('Protokol kullanıldı', meta);
         }
       } catch (e) {
         // Sunucu reddi (sıra geçti / hak dolu vb.) — durumu kullanıcıya söyle.
-        showToast(errMsg(e));
+        showToast(errMsg(e), { accent: colors.danger, icon: 'alert-triangle' });
         if (e instanceof OnlineError && e.code === 'protocol_already_used') {
           setLocalUsedIds((prev) => new Set(prev).add(id));
         }
@@ -384,28 +398,34 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!incomingProtocolUse) return;
     const { player, protocolId, outcome } = incomingProtocolUse;
-    const name = getProtocol(protocolId)?.name ?? 'protokol';
+    const proto = getProtocol(protocolId);
+    const name = proto?.name ?? 'protokol';
+    const meta = proto ? { accent: PILLAR_COLOR[proto.pillar], icon: protocolIcon(protocolId) } : undefined;
     if (player === myId) {
       // wasted satırı kurbana yazılır → rakip senin protokolünü harcattı
       // (Zorla Harca gözlemlenebilir; bu KENDİ bilgin).
-      if (outcome === 'wasted') showToast(`Rakip ${name} protokolünü harcattı!`);
+      if (outcome === 'wasted') {
+        showToast(`Rakip ${name} protokolünü harcattı`, { accent: colors.danger, icon: 'alert-triangle' });
+      }
     } else if (outcome === 'blocked') {
       // Counter: rakibin (gözlemlenebilir) engelini Kalkanın blokladı — kendi onayın.
       setShieldArmed(false);
-      showToast(`Kalkanın rakibin ${name} engelini blokladı`);
+      showToast(`Engel bloklandı · ${name} durduruldu`, { accent: colors.success, icon: 'shield' });
     } else if (outcome === 'reflected') {
       setReflectArmed(false);
-      showToast(`${name} engelini rakibe geri yansıttın!`);
+      showToast(`Engel yansıdı · ${name} rakibe döndü`, { accent: colors.success, icon: 'corner-up-left' });
     } else if (OPPONENT_VISIBLE_PROTOCOLS.has(protocolId)) {
       // Yalnız GÖZLEMLENEBİLİR protokoller bildirilir (gizliler sunucu RLS'i ile
       // zaten gelmez; bu istemci-içi savunma katmanı). Yanıltma/Kalkan/Eleme vb.
       // hiçbir şekilde duyurulmaz.
       if (protocolId === 'disrupt_silence') {
-        showToast('Rakip seni susturdu — bu sıra protokol kullanamazsın');
+        showToast('Rakip seni susturdu · bu sıra protokol kullanamazsın', meta);
       } else if (protocolId === 'disrupt_fog') {
-        showToast('Rakip Sis Perdesi kullandı — sonraki geri bildirimin gecikecek');
+        showToast('Rakip Sis Perdesi kullandı · geri bildirimin gecikecek', meta);
+      } else if (protocolId === 'time_steal') {
+        showToast('Rakip saatinden süre çaldı', meta);
       } else {
-        showToast(`Rakip ${name} kullandı`);
+        showToast(`Rakip ${name} kullandı`, meta);
       }
     } else {
       // Gizli protokol (beklenmedik şekilde geldiyse) → SESSİZ; ifşa etme.
@@ -644,11 +664,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           <ProtocolStrip tiles={protocolTiles} onUse={onUseProtocol} silenced={silencedMe} />
         ) : null}
 
-        {toast ? (
-          <View style={styles.toastWrap} pointerEvents="none">
-            <Text style={styles.toast}>{toast}</Text>
-          </View>
-        ) : null}
+        <ProtocolNotice notice={notices[0] ?? null} onDone={dismissNotice} />
       </View>
 
       {/* Konum Testi girişi (info_postest): rakam + pozisyon → use_protocol. */}
@@ -732,27 +748,6 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 11,
     textAlign: 'center',
-  },
-  toastWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 96, // şeridin hemen üstü
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  toast: {
-    color: colors.text,
-    fontSize: 11,
-    fontFamily: mono,
-    letterSpacing: 0.5,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: 'rgba(6,12,26,0.92)',
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    overflow: 'hidden',
   },
   centered: {
     flex: 1,
