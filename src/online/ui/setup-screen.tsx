@@ -8,6 +8,7 @@ import { parseGuess } from '@/game';
 import {
   cancelSetupTimeout,
   leaveMatch,
+  markReady,
   OnlineError,
   setSecret,
   useMatch,
@@ -82,6 +83,14 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
       : match.player1Ready
     : false;
 
+  // EL SIKIŞMASI GARANTİSİ: belirleme ekranına gelen oyuncu "present" işaretini
+  // KESİN gönderir (idempotent). Eşleşme ekranındaki otomatik mark_ready kaçsa/
+  // gecikse bile, belirlemede present kurulur → iki taraf hazır olunca 30 sn'lik
+  // sayaç başlar ve "Kilitle" etkinleşir. (Faz dışıysa sunucu no-op döner.)
+  useEffect(() => {
+    void markReady(matchId).catch(() => {});
+  }, [matchId]);
+
   // Görsel geri sayım tiki (yalnız setup fazında).
   useEffect(() => {
     if (status !== 'setup') return;
@@ -135,10 +144,15 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     }
   }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
 
-  // Çıkış onayı: belirleme fazında çıkış = maç iptal.
+  // Çıkış onayı: belirleme fazında çıkış = maç iptal. ÖNEMLİ: maç hâlâ canlıyken
+  // (yalnız 'setup' DEĞİL — yüklenmemiş/null ya da kısa farklı statüde de) çıkış
+  // yakalanır; aksi halde maç sunucuda ASILI kalırdı (hayalet). Kasıtlı geçiş
+  // (navedRef) / zaten çıkış (leavingRef/endedRef) / ölü maç → serbest.
   useEffect(() => {
     const sub = navigation.addListener('beforeRemove', (e) => {
-      if (leavingRef.current || match?.status !== 'setup') return;
+      const s = match?.status;
+      const dead = s === 'finished' || s === 'cancelled' || s === 'abandoned';
+      if (leavingRef.current || navedRef.current || endedRef.current || dead) return;
       e.preventDefault();
       Alert.alert('Maçtan çık', 'Çıkarsan maç iptal olur. Çıkmak istiyor musun?', [
         { text: 'Vazgeç', style: 'cancel' },
@@ -155,6 +169,17 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     });
     return sub;
   }, [navigation, match?.status, matchId]);
+
+  // EMNİYET AĞI: ekran beklenmedik kapanırsa (beforeRemove dışı) ve kasıtlı
+  // geçiş/çıkış değilse, canlı maçı sunucuda kapat (hayalet bırakma). leave_match
+  // idempotent: ölü/bitmiş maçta no-op; setup(tur 1) → cancelled.
+  useEffect(
+    () => () => {
+      if (leavingRef.current || navedRef.current) return;
+      void leaveMatch(matchId).catch(() => {});
+    },
+    [matchId],
+  );
 
   const setDial = useCallback(
     (i: number, v: number) => {
