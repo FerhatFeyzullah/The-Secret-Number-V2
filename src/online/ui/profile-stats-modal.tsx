@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getMyRank, OnlineError, type MyRank } from '@/online';
+import { getMyRank, isEliteLevel, levelTitle, OnlineError, type MyRank } from '@/online';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 /** Yüklenirken kutu içinde yanıp sönen yer tutucu çubuk (iskelet). */
@@ -71,6 +71,18 @@ export function ProfileStatsModal({
   const winRate =
     data == null ? 0 : data.played === 0 ? 0 : Math.round((data.wins / data.played) * 100);
 
+  // Seviye ilerlemesi: sunucu eşikleri (level_floor..level_next) arasındaki oran.
+  // levelNext null = maks seviye → çubuk dolu.
+  const levelPct =
+    data == null
+      ? 0
+      : data.levelNext == null
+        ? 1
+        : Math.min(1, Math.max(0, (data.xp - data.levelFloor) / (data.levelNext - data.levelFloor)));
+
+  // Elit aralık (8-10): altın tonu + güçlü parıltı (son-seviye cilası).
+  const elite = data != null && isEliteLevel(data.level);
+
   const boxes: { icon: keyof typeof Feather.glyphMap; label: string; value: string }[] = [
     { icon: 'play-circle', label: 'OYNANAN', value: String(data?.played ?? 0) },
     { icon: 'check-circle', label: 'KAZANILAN', value: String(data?.wins ?? 0) },
@@ -126,6 +138,51 @@ export function ProfileStatsModal({
               </View>
             ) : null}
           </View>
+
+          {/* Seviye (XP ilerlemesi) + unvan + Veri — yalnızca sunucudan gelir.
+              Seviye 8-10 (elit) altın tonu + güçlü parıltıyla ayrışır. */}
+          {signedIn && !error ? (
+            <View style={styles.progress}>
+              <View style={styles.progressHead}>
+                {loading ? (
+                  <Skel width={120} />
+                ) : (
+                  <View style={styles.levelWrap}>
+                    <Text style={styles.levelNum}>SEVİYE {data?.level ?? 1}</Text>
+                    <Text
+                      style={[styles.levelTitle, elite && styles.levelTitleElite]}
+                      numberOfLines={1}>
+                      {levelTitle(data?.level ?? 1)}
+                    </Text>
+                  </View>
+                )}
+                {loading ? (
+                  <Skel width={56} />
+                ) : (
+                  <View style={styles.veriChip}>
+                    <Feather name="database" size={11} color={colors.cyan} />
+                    <Text style={styles.veriText}>{data?.veri ?? 0} VERİ</Text>
+                  </View>
+                )}
+              </View>
+              <View style={[styles.barTrack, elite && styles.barTrackElite]}>
+                <View
+                  style={[
+                    styles.barFill,
+                    elite && styles.barFillElite,
+                    { width: `${Math.round(levelPct * 100)}%` },
+                  ]}
+                />
+              </View>
+              {!loading && data ? (
+                <Text style={styles.barLabel}>
+                  {data.levelNext == null
+                    ? 'MAKS SEVİYE'
+                    : `${data.xp - data.levelFloor} / ${data.levelNext - data.levelFloor} XP`}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
 
           {!signedIn ? (
             // Oturum yok: istatistikler online'a bağlı.
@@ -254,6 +311,87 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     fontFamily: mono,
+  },
+  progress: {
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  progressHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  levelWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    flexShrink: 1,
+  },
+  levelNum: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: colors.dim,
+    fontFamily: mono,
+  },
+  levelTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    color: colors.ice,
+    fontFamily: mono,
+    flexShrink: 1,
+  },
+  levelTitleElite: {
+    color: colors.gold,
+    textShadowColor: withAlpha(colors.gold, 0.7),
+    textShadowRadius: 12,
+  },
+  veriChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: cyanAlpha(0.1),
+    borderWidth: 1,
+    borderColor: cyanAlpha(0.3),
+  },
+  veriText: {
+    color: colors.cyan,
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: mono,
+  },
+  barTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: colors.cyan,
+    boxShadow: `0 0 10px ${cyanAlpha(0.5)}`,
+  },
+  barTrackElite: {
+    borderColor: withAlpha(colors.gold, 0.35),
+  },
+  barFillElite: {
+    backgroundColor: colors.gold,
+    boxShadow: `0 0 16px ${withAlpha(colors.gold, 0.7)}`,
+  },
+  barLabel: {
+    fontSize: 9,
+    letterSpacing: 1.2,
+    color: colors.dim,
+    fontFamily: mono,
+    textAlign: 'right',
   },
   grid: {
     flexDirection: 'row',

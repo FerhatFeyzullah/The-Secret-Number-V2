@@ -8,5 +8,6 @@ export { CreateRoomScreen } from './create-room-screen';
 export { DuelScreen } from './duel-screen';
 export { JoinRoomScreen } from './join-room-screen';
 export { LeaderboardModal } from './leaderboard-modal';
+export { LevelUpOverlay } from './level-up-overlay';
 export { MatchFoundScreen } from './match-found-screen';
 export { ProfileStatsModal } from './profile-stats-modal';

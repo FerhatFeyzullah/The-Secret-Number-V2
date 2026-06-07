@@ -4,6 +4,7 @@ import {
   cancelWaiting,
   claimTimeout,
   findOrCreateQuickMatch,
+  getMyRank,
   joinPrivateRoom,
   leaveMatch,
   makeGuess,
@@ -166,6 +167,72 @@ describe('leaveMatch', () => {
     await expect(leaveMatch('m1')).resolves.toMatchObject({
       left: true,
       result: 'forfeit',
+    });
+  });
+});
+
+describe('getMyRank', () => {
+  it('xp/level/veri + ilerleme eşiklerini MyRank olarak eşler', async () => {
+    rpcResolves({
+      rank: 3,
+      username: 'vavi',
+      rating: 1030,
+      wins: 4,
+      played: 7,
+      streak: 2,
+      xp: 435,
+      level: 4,
+      veri: 325,
+      level_floor: 420,
+      level_next: 640,
+    });
+    await expect(getMyRank()).resolves.toEqual({
+      rank: 3,
+      username: 'vavi',
+      rating: 1030,
+      wins: 4,
+      played: 7,
+      streak: 2,
+      xp: 435,
+      level: 4,
+      veri: 325,
+      levelFloor: 420,
+      levelNext: 640,
+    });
+    expect(rpcMock).toHaveBeenCalledWith('get_my_rank', undefined);
+  });
+
+  it('maks seviyede level_next=null korunur', async () => {
+    rpcResolves({
+      rank: 1,
+      username: 'vavi',
+      rating: 1500,
+      wins: 30,
+      played: 40,
+      streak: 5,
+      xp: 2500,
+      level: 10,
+      veri: 2400,
+      level_floor: 2340,
+      level_next: null,
+    });
+    await expect(getMyRank()).resolves.toMatchObject({ level: 10, levelNext: null });
+  });
+
+  it('eski sunucuya (alanlar yok) karşı güvenli varsayılanlara düşer', async () => {
+    rpcResolves({ rank: 5, username: 'vavi', rating: 990, wins: 1 });
+    await expect(getMyRank()).resolves.toEqual({
+      rank: 5,
+      username: 'vavi',
+      rating: 990,
+      wins: 1,
+      played: 0,
+      streak: 0,
+      xp: 0,
+      level: 1,
+      veri: 0,
+      levelFloor: 0,
+      levelNext: null,
     });
   });
 });

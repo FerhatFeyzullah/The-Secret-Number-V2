@@ -259,6 +259,11 @@ export async function getMyRank(): Promise<MyRank> {
     wins: number;
     played?: number;
     streak?: number;
+    xp?: number;
+    level?: number;
+    veri?: number;
+    level_floor?: number | null;
+    level_next?: number | null;
   }>('get_my_rank');
   return {
     rank: Number(p.rank),
@@ -268,6 +273,12 @@ export async function getMyRank(): Promise<MyRank> {
     // Migration 20260606000000 öncesi sunucuya karşı güvenli varsayılanlar.
     played: Number(p.played ?? 0),
     streak: Number(p.streak ?? 0),
+    // Migration 20260607000000 öncesi sunucuya karşı güvenli varsayılanlar.
+    xp: Number(p.xp ?? 0),
+    level: Number(p.level ?? 1),
+    veri: Number(p.veri ?? 0),
+    levelFloor: Number(p.level_floor ?? 0),
+    levelNext: p.level_next == null ? null : Number(p.level_next),
   };
 }
 

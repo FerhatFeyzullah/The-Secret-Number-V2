@@ -7,6 +7,7 @@ const KEYS = {
   sound: 'settings.sound',
   haptics: 'settings.haptics',
   lastMode: 'menu.lastMode', // ana ekranda son seçilen mod (profil verisi değil)
+  lastLevel: 'progress.lastLevel', // seviye atlama kutlamasını tek sefer göstermek için
 } as const;
 
 export type GameMode = 'solo' | 'online';
@@ -36,6 +37,19 @@ export async function getRawProfileName() {
 
 export async function setProfileName(name: string) {
   await AsyncStorage.setItem(KEYS.name, name.trim());
+}
+
+/** Son görülen seviye (seviye atlama kutlamasını tek sefer tetiklemek için).
+ *  Hiç kaydedilmemişse null → ilk açılışta kutlama gösterilmez, yalnız ilklenir. */
+export async function getLastSeenLevel(): Promise<number | null> {
+  const v = await AsyncStorage.getItem(KEYS.lastLevel);
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function setLastSeenLevel(level: number) {
+  await AsyncStorage.setItem(KEYS.lastLevel, String(level));
 }
 
 export async function getToggle(key: 'sound' | 'haptics') {

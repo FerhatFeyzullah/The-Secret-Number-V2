@@ -91,7 +91,7 @@ export function PrivateRoomSetupScreen({
           <Feather name="info" size={16} color={colors.cyan} />
           <Text style={styles.summaryText}>
             Her oyuncuya <Text style={styles.summaryB}>{TIME_TXT[clockMs]}</Text>, ilk sırayı{' '}
-            <Text style={styles.summaryB}>{turn === 'random' ? 'sistem' : 'sen'}</Text> belirleyecek.
+            <Text style={styles.summaryB}>{turn === 'random' ? 'sistem' : 'sen'}</Text> tarafından belirlenir.
             Kodları kilitleyince maç başlar.
           </Text>
         </View>

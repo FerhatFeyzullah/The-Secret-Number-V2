@@ -145,6 +145,16 @@ export type MyRank = {
   played: number;
   /** Güncel galibiyet serisi (yalnızca Hızlı Maç; sunucuda tutulur). */
   streak: number;
+  /** Toplam deneyim puanı; YALNIZCA sunucuda artar (kazanan +90, kaybeden +25). */
+  xp: number;
+  /** Seviye 1-10; XP eşik tablosundan sunucuda hesaplanır. */
+  level: number;
+  /** Veri parası; YALNIZCA sunucuda artar (kazanan +70, kaybeden +15). */
+  veri: number;
+  /** Mevcut seviyenin alt XP eşiği (ilerleme çubuğunun 0 noktası). */
+  levelFloor: number;
+  /** Sonraki seviyenin XP eşiği; maks seviyede (10) null. */
+  levelNext: number | null;
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */
