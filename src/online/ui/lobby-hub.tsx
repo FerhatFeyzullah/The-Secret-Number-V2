@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { ChoiceCard, LobbyHeader } from './parts';
@@ -45,7 +45,7 @@ export function LobbyHub({
           subtitle="Rastgele rakiple eşleş"
           onPress={onQuick}>
           <View style={styles.tags}>
-            <Text style={styles.tag}>⏱ Satranç saati</Text>
+            <Text style={styles.tag}>⏱ Zamana Karşı</Text>
             <Text style={styles.tag}>🔢 3 haneli kod</Text>
           </View>
         </ChoiceCard>
@@ -59,12 +59,12 @@ export function LobbyHub({
         />
       </View>
 
-      <View style={styles.footer}>
+      {/* <View style={styles.footer}>
         <Pressable onPress={onHowTo} hitSlop={8} style={styles.howTo}>
           <Feather name="help-circle" size={13} color={colors.dim} />
           <Text style={styles.howToText}>Nasıl çalışır?</Text>
         </Pressable>
-      </View>
+      </View> */}
     </View>
   );
 }

@@ -38,3 +38,4 @@ export {
   setSecret,
 } from './matchService';
 export { useMatch, type UseMatchResult } from './useMatch';
+export { levelTitle, isEliteLevel, MAX_LEVEL, ELITE_LEVEL } from './progression';

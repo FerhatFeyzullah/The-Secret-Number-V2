@@ -6,8 +6,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
 import { getMyRank } from '@/online';
-import { LeaderboardModal, ProfileStatsModal } from '@/online/ui';
-import { getLastMode, setLastMode, type GameMode } from '@/storage';
+import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
+import { getLastMode, getLastSeenLevel, setLastMode, setLastSeenLevel, type GameMode } from '@/storage';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
@@ -22,8 +22,11 @@ export default function MenuScreen() {
   const [mode, setMode] = useState<GameMode>('solo');
   // Kupa puanı yalnızca online'a bağlı: oturum açıkken get_my_rank'tan gelir.
   const [rating, setRating] = useState<number | null>(null);
+  const [veri, setVeri] = useState<number | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  // Seviye atladıysa kutlanacak seviye (null = kutlama yok).
+  const [levelUp, setLevelUp] = useState<number | null>(null);
 
   // Son seçilen modu hatırla (yereldir, profil verisi değil).
   useEffect(() => {
@@ -39,14 +42,32 @@ export default function MenuScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshName();
-      // Oturum açıksa kupa puanını tazele; kapalıysa kupa gizli (online'a bağlı).
-      if (session) {
-        getMyRank()
-          .then((r) => setRating(r.rating))
-          .catch(() => setRating(null));
-      } else {
+      // Oturum yoksa kupa + veri gizli (online'a bağlı).
+      if (!session) {
         setRating(null);
+        setVeri(null);
+        return;
       }
+      let alive = true;
+      void getMyRank()
+        .then(async (r) => {
+          if (!alive) return;
+          setRating(r.rating);
+          setVeri(r.veri);
+          // Seviye atlama: kayıtlı eski seviyeyle karşılaştır (maç sonrası, tek sefer).
+          const prev = await getLastSeenLevel();
+          if (alive && prev != null && r.level > prev) setLevelUp(r.level);
+          await setLastSeenLevel(r.level);
+        })
+        .catch(() => {
+          if (alive) {
+            setRating(null);
+            setVeri(null);
+          }
+        });
+      return () => {
+        alive = false;
+      };
     }, [refreshName, session]),
   );
 
@@ -86,11 +107,21 @@ export default function MenuScreen() {
             <Text style={styles.profileName} numberOfLines={1}>
               {name}
             </Text>
-            {session && rating != null ? (
-              <Pressable onPress={() => setBoardOpen(true)} hitSlop={6} style={styles.trophy}>
-                <Feather name="award" size={13} color={colors.amber} />
-                <Text style={styles.trophyText}>{rating}</Text>
-              </Pressable>
+            {session ? (
+              <View style={styles.badges}>
+                {rating != null ? (
+                  <Pressable onPress={() => setBoardOpen(true)} hitSlop={6} style={styles.trophy}>
+                    <Feather name="award" size={13} color={colors.amber} />
+                    <Text style={styles.trophyText}>{rating}</Text>
+                  </Pressable>
+                ) : null}
+                {veri != null ? (
+                  <View style={styles.veriBadge}>
+                    <Feather name="database" size={13} color={colors.cyan} />
+                    <Text style={styles.veriBadgeText}>{veri}</Text>
+                  </View>
+                ) : null}
+              </View>
             ) : null}
           </View>
         </Pressable>
@@ -139,6 +170,11 @@ export default function MenuScreen() {
         name={name}
         signedIn={Boolean(session)}
         onClose={() => setStatsOpen(false)}
+      />
+      <LevelUpOverlay
+        visible={levelUp != null}
+        level={levelUp ?? 1}
+        onClose={() => setLevelUp(null)}
       />
     </Screen>
   );
@@ -191,6 +227,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  badges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   trophy: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -204,6 +245,23 @@ const styles = StyleSheet.create({
   },
   trophyText: {
     color: colors.amber,
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
+  },
+  veriBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 20,
+    backgroundColor: withAlpha(colors.cyan, 0.12),
+    borderWidth: 1,
+    borderColor: withAlpha(colors.cyan, 0.32),
+  },
+  veriBadgeText: {
+    color: colors.cyan,
     fontSize: 12,
     fontWeight: '800',
     fontFamily: mono,
