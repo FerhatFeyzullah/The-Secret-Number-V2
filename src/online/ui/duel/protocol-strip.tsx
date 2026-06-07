@@ -1,7 +1,8 @@
 import { Feather } from '@expo/vector-icons';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getProtocol } from '@/protocols/catalog';
+import { getProtocol, PILLAR_LABELS } from '@/protocols/catalog';
 import { colors, mono, withAlpha } from '@/ui/theme';
 
 import { PILLAR_COLOR, protocolIcon } from '../protocol-visuals';
@@ -28,7 +29,17 @@ function statusLabel(t: ProtocolTileState): string {
   return 'KAPALI';
 }
 
-function Tile({ tile, onUse }: { tile: ProtocolTileState; onUse: (id: string) => void }) {
+function Tile({
+  tile,
+  onUse,
+  onInfoOpen,
+  onInfoClose,
+}: {
+  tile: ProtocolTileState;
+  onUse: (id: string) => void;
+  onInfoOpen: (id: string) => void;
+  onInfoClose: () => void;
+}) {
   const proto = getProtocol(tile.id);
   if (!proto) return null;
   const color = PILLAR_COLOR[proto.pillar];
@@ -38,8 +49,14 @@ function Tile({ tile, onUse }: { tile: ProtocolTileState; onUse: (id: string) =>
 
   return (
     <Pressable
-      onPress={ready ? () => onUse(tile.id) : undefined}
-      disabled={!ready}
+      // Normal dokunuş = kullan (yalnız ready). Basılı tutma = bilgi balonu
+      // (kullanım TETİKLENMEZ — RN, onLongPress sonrası onPress'i çağırmaz).
+      onPress={() => {
+        if (ready) onUse(tile.id);
+      }}
+      onLongPress={() => onInfoOpen(tile.id)}
+      onPressOut={onInfoClose}
+      delayLongPress={300}
       style={({ pressed }) => [styles.tile, !lit && styles.tileOff, pressed && ready && styles.tilePressed]}>
       <View
         style={[
@@ -82,9 +99,39 @@ function Tile({ tile, onUse }: { tile: ProtocolTileState; onUse: (id: string) =>
   );
 }
 
+/** Basılı-tut bilgi balonu (tile'ın üstünde). Konum, tile sayısına/index'ine
+ *  göre hizalanır → ekran kenarına taşmaz. Camsı, küçük, temaya uygun. */
+function InfoTooltip({ id, index, count }: { id: string; index: number; count: number }) {
+  const proto = getProtocol(id);
+  if (!proto) return null;
+  const color = PILLAR_COLOR[proto.pillar];
+  const align = index === 0 ? 'flex-start' : index === count - 1 ? 'flex-end' : 'center';
+  return (
+    <View style={[styles.tooltipLayer, { alignItems: align }]} pointerEvents="none">
+      <View style={[styles.tooltip, { borderColor: withAlpha(color, 0.5) }]}>
+        <View style={styles.tooltipHead}>
+          <Feather name={protocolIcon(id)} size={12} color={color} />
+          <Text style={styles.tooltipName} numberOfLines={1}>
+            {proto.name}
+          </Text>
+          <View
+            style={[
+              styles.tooltipTag,
+              { borderColor: withAlpha(color, 0.4), backgroundColor: withAlpha(color, 0.14) },
+            ]}>
+            <Text style={[styles.tooltipTagText, { color }]}>{PILLAR_LABELS[proto.pillar]}</Text>
+          </View>
+        </View>
+        <Text style={styles.tooltipEffect}>{proto.effect}</Text>
+      </View>
+    </View>
+  );
+}
+
 /** Sürekli görünür protokol şeridi (düello altı): maç için KENDİ seçtiğin
  *  protokoller (≤3) — rakibinki asla gösterilmez. Basınca use_protocol RPC
- *  tetiklenir (etki sunucuda). silenced=true → "susturuldun" göstergesi. */
+ *  tetiklenir (etki sunucuda). Basılı tutunca bilgi balonu açılır (kullanım
+ *  TETİKLENMEZ). silenced=true → "susturuldun" göstergesi. */
 export function ProtocolStrip({
   tiles,
   onUse,
@@ -94,7 +141,9 @@ export function ProtocolStrip({
   onUse: (id: string) => void;
   silenced?: boolean;
 }) {
+  const [infoId, setInfoId] = useState<string | null>(null);
   if (tiles.length === 0) return null;
+  const infoIndex = infoId ? tiles.findIndex((t) => t.id === infoId) : -1;
   return (
     <View style={[styles.root, silenced && styles.rootSilenced]}>
       {silenced ? (
@@ -103,9 +152,18 @@ export function ProtocolStrip({
           <Text style={styles.silencedText}>SUSTURULDUN</Text>
         </View>
       ) : null}
+      {infoId && infoIndex >= 0 ? (
+        <InfoTooltip id={infoId} index={infoIndex} count={tiles.length} />
+      ) : null}
       <View style={styles.row}>
         {tiles.map((t) => (
-          <Tile key={t.id} tile={t} onUse={onUse} />
+          <Tile
+            key={t.id}
+            tile={t}
+            onUse={onUse}
+            onInfoOpen={setInfoId}
+            onInfoClose={() => setInfoId(null)}
+          />
         ))}
       </View>
     </View>
@@ -206,5 +264,54 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: mono,
     letterSpacing: 0.8,
+  },
+  // Basılı-tut bilgi balonu — şeridin hemen üstünde, kenara taşmadan.
+  tooltipLayer: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 8,
+    right: 8,
+    marginBottom: 8,
+    zIndex: 40,
+  },
+  tooltip: {
+    maxWidth: 240,
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    backgroundColor: 'rgba(8,15,30,0.96)',
+    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+  },
+  tooltipHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  tooltipName: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.ice,
+    fontFamily: mono,
+    letterSpacing: 0.3,
+  },
+  tooltipTag: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  tooltipTagText: {
+    fontSize: 8,
+    fontWeight: '700',
+    fontFamily: mono,
+    letterSpacing: 0.5,
+  },
+  tooltipEffect: {
+    fontSize: 10,
+    color: colors.dim,
+    lineHeight: 14,
   },
 });
