@@ -66,7 +66,10 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   // present = iki taraf da "Hazır"; sayaç ancak o an başlar.
   const bothPresent = !!match && match.player1Present && match.player2Present;
   const deadline = match?.setupDeadline ? Date.parse(match.setupDeadline) : null;
-  const remainingMs = deadline ? Math.max(0, deadline - nowMs) : SETUP_TOTAL_MS;
+  // Sunucu penceresi 7 sn VS tamponu içerebilir (37 sn); halka 30 sn'ye kelepçelenir.
+  const remainingMs = deadline
+    ? Math.min(SETUP_TOTAL_MS, Math.max(0, deadline - nowMs))
+    : SETUP_TOTAL_MS;
   const pastDeadline = deadline ? nowMs > deadline : false;
   const low = remainingMs <= LOW_MS;
   // Idle: bir taraf present olduktan sonra rakip için tanınan kısa pencere.
@@ -120,13 +123,17 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     if (status === 'cancelled' || status === 'finished' || status === 'abandoned') {
       endedRef.current = true;
       leavingRef.current = true;
-      // Neden: iki taraf present değilse "rakip katılmadı"; aksi halde süre doldu.
-      const reason = !bothPresent
-        ? 'Rakip katılmadı, maç iptal edildi.'
-        : 'Süre doldu, maç iptal edildi.';
+      // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama);
+      // aksi halde idle ("katılmadı") ya da belirleme süresi dolmuştur.
+      const reason =
+        status === 'cancelled' && !pastDeadline && !pastPresentDeadline
+          ? 'Rakip ayrıldı, maç iptal edildi.'
+          : !bothPresent
+            ? 'Rakip katılmadı, maç iptal edildi.'
+            : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, router]);
+  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
 
   // Çıkış onayı: belirleme fazında çıkış = maç iptal.
   useEffect(() => {

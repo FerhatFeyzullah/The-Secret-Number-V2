@@ -50,7 +50,10 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   const slots = hand?.slots ?? 2;
   const bothPresent = !!match && match.player1Present && match.player2Present;
   const deadline = match?.selectDeadline ? Date.parse(match.selectDeadline) : null;
-  const remainingMs = deadline ? Math.max(0, deadline - nowMs) : SELECT_TOTAL_MS;
+  // Sunucu penceresi 7 sn VS tamponu içerir (27 sn); halka 20 sn'ye kelepçelenir.
+  const remainingMs = deadline
+    ? Math.min(SELECT_TOTAL_MS, Math.max(0, deadline - nowMs))
+    : SELECT_TOTAL_MS;
   const pastDeadline = deadline ? nowMs > deadline : false;
   const low = remainingMs <= LOW_MS;
   const presentDeadline = match?.presentDeadline ? Date.parse(match.presentDeadline) : null;
@@ -155,12 +158,16 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     if (status === 'cancelled' || status === 'finished' || status === 'abandoned') {
       endedRef.current = true;
       leavingRef.current = true;
-      const reason = !bothPresent
-        ? 'Rakip katılmadı, maç iptal edildi.'
-        : 'Süre doldu, maç iptal edildi.';
+      // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama).
+      const reason =
+        status === 'cancelled' && !pastDeadline && !pastPresentDeadline
+          ? 'Rakip ayrıldı, maç iptal edildi.'
+          : !bothPresent
+            ? 'Rakip katılmadı, maç iptal edildi.'
+            : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, router]);
+  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
 
   // Çıkış onayı: seçim fazında çıkış = maç iptal.
   useEffect(() => {
