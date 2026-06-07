@@ -323,7 +323,8 @@ export function DuelScreen({ matchId }: { matchId: string }) {
             break;
           case 'disrupt_fog':
           case 'disrupt_silence':
-          case 'disrupt_waste': {
+          case 'disrupt_waste':
+          case 'disrupt_deceive': {
             // Engel sınıfı: counter zinciri sonucu (sunucu kararı).
             const name = getProtocol(id)?.name ?? 'Engel';
             if (res.blocked) {
@@ -335,6 +336,8 @@ export function DuelScreen({ matchId }: { matchId: string }) {
               showToast('Sis Perdesi: rakibin sonraki geri bildirimi gecikecek');
             } else if (id === 'disrupt_silence') {
               showToast('Susturma: rakip sıradaki turunda protokol kullanamaz');
+            } else if (id === 'disrupt_deceive') {
+              showToast('Yanıltma: rakibin sonraki geri bildirimi şişirilecek');
             } else if (res.noTargetProtocol) {
               showToast('Rakibin harcanacak protokolü yok — hak harcanmadı');
             } else {
@@ -396,6 +399,10 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       showToast('Rakip seni susturdu — bu sıra protokol kullanamazsın');
     } else if (protocolId === 'disrupt_fog') {
       showToast('Rakip Sis Perdesi kullandı — sonraki geri bildirimin gecikecek');
+    } else if (protocolId === 'disrupt_deceive') {
+      // Kullanıldığı belli olur ama HANGİ geri bildirimin sahte olduğu değil
+      // (gerginlik burada — sunucu gerçek sonuçla ilerler, gösterim şişer).
+      showToast('Rakip Yanıltma kullandı — bir geri bildirimin sahte olabilir!');
     } else {
       showToast(`Rakip ${name} kullandı`);
     }
