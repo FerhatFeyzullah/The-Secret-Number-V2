@@ -15,6 +15,7 @@ export type {
   PlayerRole,
   PresenceInfo,
   ProtocolHand,
+  ProtocolHint,
   ProtocolUse,
   ProtocolUseOutcome,
 } from './types';
