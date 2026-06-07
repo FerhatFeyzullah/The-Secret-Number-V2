@@ -180,6 +180,22 @@ export function useMatch(matchId: string | null): UseMatchResult {
     }
   }, [matchId]);
 
+  // Realtime kaçaklarına karşı EMNİYET AĞI: ön-oyun fazlarında (waiting /
+  // protocol_select / setup) maç durumunu periyodik tazele. Bir matches UPDATE'i
+  // realtime'da düşse bile (ör. eşleşme → protocol_select, seçim → setup, belirleme
+  // → active) faz geçişi yine de yakalanır; oyuncu "rakip aranıyor"da ya da
+  // belirleme/seçim ekranında takılı kalmaz. Aktif/bitmiş fazda kapalı (gereksiz yük).
+  useEffect(() => {
+    if (!matchId) return;
+    const s = match?.status ?? null;
+    const pregame = s === null || s === 'waiting' || s === 'protocol_select' || s === 'setup';
+    if (!pregame) return;
+    const iv = setInterval(() => {
+      void refresh();
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [matchId, match?.status, refresh]);
+
   // Realtime abonelik + kopunca yeniden bağlanma.
   useEffect(() => {
     mountedRef.current = true;

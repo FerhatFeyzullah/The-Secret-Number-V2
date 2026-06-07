@@ -2,8 +2,29 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import type { MatchResult } from '@/online/types';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { Avatar } from '../parts';
+
+/** Maç sonu kazanımı (sunucudan; istemci yeniden hesaplamaz). */
+export type MatchReward = { rating: number; xp: number; veri: number };
+
+/** Bitiş sebebi etiketi — oyuncunun perspektifinden (madde 8). result yoksa
+ *  güvenli varsayılan. forfeit'te kaybeden ayrılan taraftır. */
+function reasonText(win: boolean, result: MatchResult | null): string {
+  switch (result) {
+    case 'win':
+      return win ? 'Rakibin sayısını buldun!' : 'Rakip senin sayını buldu';
+    case 'timeout':
+      return win ? 'Rakibin süresi doldu' : 'Süren doldu';
+    case 'forfeit':
+      return win ? 'Rakip maçtan ayrıldı' : 'Maçtan ayrıldın';
+    default:
+      return win ? 'Kazandın' : 'Kaybettin';
+  }
+}
+
+const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 // Maça yakışan, kışkırtıcı/saldırgan olmayan set.
 const EMOJIS = ['👍', '🔥', '😎', '😅', '😮', '👏'];
@@ -14,6 +35,11 @@ const spaced = (s: string | null) => (s ? s.split('').join(' ') : '—');
  *  emoji, rakip avatarının yanında pop'layıp birkaç saniye sonra solar. */
 export function ResultOverlay({
   win,
+  result,
+  bestOf = false,
+  myWins = 0,
+  oppWins = 0,
+  reward,
   mySecret,
   theirSecret,
   opponentName,
@@ -24,6 +50,14 @@ export function ResultOverlay({
   onMenu,
 }: {
   win: boolean;
+  /** Bitiş sebebi (win/timeout/forfeit) — perspektife göre etiket. */
+  result: MatchResult | null;
+  /** Best of 3 ise tur skoru gösterilir. */
+  bestOf?: boolean;
+  myWins?: number;
+  oppWins?: number;
+  /** Kazanım (Kupa/XP/Veri); null → ilerleme saymayan maç (özel oda). */
+  reward?: MatchReward | null;
   mySecret: string | null;
   theirSecret: string | null;
   opponentName: string;
@@ -100,7 +134,35 @@ export function ResultOverlay({
         style={[styles.verdict, { color: win ? colors.ice : '#fca5a5', textShadowColor: accent }, pop]}>
         {win ? 'KAZANDIN!' : 'KAYBETTİN'}
       </Animated.Text>
-      <Text style={styles.subtitle}>{win ? 'RAKİBİN KODUNU KIRDIN' : 'RAKİP KODUNU KIRDI'}</Text>
+      <Text style={styles.subtitle}>{reasonText(win, result)}</Text>
+      {bestOf ? (
+        <Text style={styles.score}>
+          Maç skoru <Text style={{ color: colors.cyan }}>{myWins}</Text>
+          <Text style={{ color: colors.dim }}> – </Text>
+          <Text style={{ color: colors.amber }}>{oppWins}</Text>
+        </Text>
+      ) : null}
+
+      {/* Kazanım: yalnız ilerleme sayan maçta (matchmade); değerler sunucudan.
+          reward undefined → henüz yükleniyor (gösterme); null → saymayan maç. */}
+      {reward ? (
+        <View style={styles.rewards}>
+          <View style={styles.rewardChip}>
+            <Feather name="award" size={13} color={colors.amber} />
+            <Text style={[styles.rewardVal, { color: colors.amber }]}>{fmt(reward.rating)}</Text>
+          </View>
+          <View style={styles.rewardChip}>
+            <Feather name="zap" size={13} color={colors.violet} />
+            <Text style={[styles.rewardVal, { color: colors.violet }]}>{fmt(reward.xp)} XP</Text>
+          </View>
+          <View style={styles.rewardChip}>
+            <Feather name="database" size={13} color={colors.teal} />
+            <Text style={[styles.rewardVal, { color: colors.teal }]}>{fmt(reward.veri)}</Text>
+          </View>
+        </View>
+      ) : reward === null ? (
+        <Text style={styles.noScore}>Bu maç ilerleme saymaz</Text>
+      ) : null}
 
       {/* Rakip kimliği + gelen emoji baloncuğu (rakibe bağlı, anlamlı konum). */}
       <View style={styles.oppRow}>
@@ -193,10 +255,48 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
+    fontSize: 12,
+    color: colors.text,
+    fontFamily: mono,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  score: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
+    color: colors.ice,
+    marginBottom: 14,
+  },
+  rewards: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  rewardChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    borderRadius: 20,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
+  rewardVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
+    letterSpacing: 0.3,
+  },
+  noScore: {
     fontSize: 10,
     color: colors.dim,
     fontFamily: mono,
-    letterSpacing: 2,
+    letterSpacing: 1,
     marginBottom: 20,
   },
   oppRow: {

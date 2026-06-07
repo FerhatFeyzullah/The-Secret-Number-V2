@@ -7,6 +7,7 @@ import {
   cancelSetupTimeout,
   getMyHand,
   leaveMatch,
+  markReady,
   OnlineError,
   resolveProtocolSelect,
   setProtocolSelection,
@@ -63,6 +64,14 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
       ? match.player2Ready
       : match.player1Ready
     : false;
+
+  // EL SIKIŞMASI GARANTİSİ: bu ekrana gelen oyuncu "present" işaretini KESİN
+  // gönderir (idempotent). Eşleşme ekranındaki otomatik mark_ready kaçsa/gecikse
+  // bile, seçim ekranındayken present kurulur → iki taraf hazır olunca seçim
+  // sayacı başlar ve "Kilitle" etkinleşir. (Faz dışıysa sunucu no-op döner.)
+  useEffect(() => {
+    void markReady(matchId).catch(() => {});
+  }, [matchId]);
 
   // Eli sunucudan çek. El, eşleşme anında dağıtılır; nadiren realtime durum
   // güncellemesi el satırından önce gelebilir (yarış) → boş elde birkaç kez
@@ -169,10 +178,15 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     }
   }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
 
-  // Çıkış onayı: seçim fazında çıkış = maç iptal.
+  // Çıkış onayı: seçim fazında çıkış = maç iptal. ÖNEMLİ: maç hâlâ canlıyken
+  // (yalnız 'protocol_select' DEĞİL — yüklenmemiş/null ya da kısa süreli farklı
+  // statüde de) çıkış yakalanır; aksi halde maç sunucuda ASILI kalırdı (hayalet).
+  // Kasıtlı geçiş (navedRef) / zaten çıkış (leavingRef/endedRef) / ölü maç → serbest.
   useEffect(() => {
     const sub = navigation.addListener('beforeRemove', (e) => {
-      if (leavingRef.current || match?.status !== 'protocol_select') return;
+      const s = match?.status;
+      const dead = s === 'finished' || s === 'cancelled' || s === 'abandoned';
+      if (leavingRef.current || navedRef.current || endedRef.current || dead) return;
       e.preventDefault();
       Alert.alert('Maçtan çık', 'Çıkarsan maç iptal olur. Çıkmak istiyor musun?', [
         { text: 'Vazgeç', style: 'cancel' },
@@ -189,6 +203,17 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     });
     return sub;
   }, [navigation, match?.status, matchId]);
+
+  // EMNİYET AĞI: ekran beklenmedik biçimde kapanırsa (beforeRemove dışı bir yol)
+  // ve kasıtlı geçiş/çıkış değilse, canlı maçı sunucuda kapat (hayalet bırakma).
+  // leave_match idempotent: ölü/bitmiş maçta no-op; pre-oyun fazını cancelled yapar.
+  useEffect(
+    () => () => {
+      if (leavingRef.current || navedRef.current) return;
+      void leaveMatch(matchId).catch(() => {});
+    },
+    [matchId],
+  );
 
   const full = selected.length >= slots;
   const toggle = useCallback(

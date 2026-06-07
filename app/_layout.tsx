@@ -11,8 +11,15 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.bgTop },
-        }}
-      />
+        }}>
+        {/* Maç-ortası ekranlarda kaydırarak-geri (iOS edge-swipe / Android geri
+            jesti) KAPALI: kazara çıkıp maçı düşürmek/hükmen kaybetmek engellenir.
+            Tek çıkış yolu ekrandaki geri butonu → beforeRemove onayı → leave_match.
+            Diğer route'lar dosya-tabanlı varsayılanla çalışmaya devam eder. */}
+        <Stack.Screen name="protocol-select" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="match-setup" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="match/[id]" options={{ gestureEnabled: false }} />
+      </Stack>
       <StatusBar style="light" />
     </AuthProvider>
   );

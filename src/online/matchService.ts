@@ -464,10 +464,23 @@ export async function unlockProtocol(
  *  Çağıranın bakış açısından kendi ve rakip sayısı; satır yoksa null.
  *  Maç bitmeden çağrılırsa sunucu 'match_not_finished' fırlatır. */
 export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
-  const p = await callRpc<{ mine: string | null; opponent: string | null }>('get_match_reveal', {
-    p_match_id: matchId,
-  });
-  return { mine: p.mine ?? null, opponent: p.opponent ?? null };
+  const p = await callRpc<{
+    mine: string | null;
+    opponent: string | null;
+    scored?: boolean;
+    rating_delta?: number | null;
+    xp_delta?: number | null;
+    veri_delta?: number | null;
+  }>('get_match_reveal', { p_match_id: matchId });
+  return {
+    mine: p.mine ?? null,
+    opponent: p.opponent ?? null,
+    // İlerleme sayan maç (matchmade) + delta uygulanmışsa kazanım gösterilir.
+    scored: !!p.scored && p.rating_delta != null,
+    ratingDelta: p.rating_delta ?? null,
+    xpDelta: p.xp_delta ?? null,
+    veriDelta: p.veri_delta ?? null,
+  };
 }
 
 async function currentUserId(): Promise<string | null> {
