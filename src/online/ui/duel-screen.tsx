@@ -445,7 +445,18 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     let alive = true;
     getMatchReveal(matchId)
       .then((r) => alive && setReveal(r))
-      .catch(() => alive && setReveal({ mine: null, opponent: null }));
+      .catch(
+        () =>
+          alive &&
+          setReveal({
+            mine: null,
+            opponent: null,
+            scored: false,
+            ratingDelta: null,
+            xpDelta: null,
+            veriDelta: null,
+          }),
+      );
     return () => {
       alive = false;
     };
@@ -504,6 +515,17 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     });
     return sub;
   }, [navigation, match?.status, matchId]);
+
+  // EMNİYET AĞI: ekran beklenmedik biçimde kapanırsa (onaylı çıkış/tekrar-oyna/
+  // menü DEĞİL) maçı sunucuda kapat. leave_match idempotent: aktif/turlar-arası →
+  // hükmen kayıp (forfeit), bitmiş/iptal → no-op. Rakip realtime/polling ile temizlenir.
+  useEffect(
+    () => () => {
+      if (leavingRef.current) return;
+      void leaveMatch(matchId).catch(() => {});
+    },
+    [matchId],
+  );
 
   // ── Giriş aksiyonları ─────────────────────────────────────────
   const addDigit = useCallback(
@@ -681,6 +703,17 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       {finished ? (
         <ResultOverlay
           win={win}
+          result={match?.result ?? null}
+          bestOf={isProtocol}
+          myWins={myWins}
+          oppWins={oppWins}
+          reward={
+            reveal == null
+              ? undefined // henüz yükleniyor → kazanım bloğu gösterme
+              : reveal.scored && reveal.ratingDelta != null
+                ? { rating: reveal.ratingDelta, xp: reveal.xpDelta ?? 0, veri: reveal.veriDelta ?? 0 }
+                : null // ilerleme saymayan maç (özel oda)
+          }
           mySecret={reveal?.mine ?? null}
           theirSecret={reveal?.opponent ?? null}
           opponentName={opponentName}
