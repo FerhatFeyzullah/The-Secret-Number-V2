@@ -24,6 +24,7 @@ export {
   fetchGuesses,
   fetchMatchState,
   fetchPresence,
+  findOrCreateProtocolMatch,
   findOrCreateQuickMatch,
   forfeitDisconnect,
   getLeaderboard,
@@ -35,7 +36,6 @@ export {
   makeGuess,
   markReady,
   OnlineError,
-  setLoadout,
   setSecret,
   unlockProtocol,
 } from './matchService';

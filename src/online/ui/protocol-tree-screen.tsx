@@ -52,8 +52,8 @@ const ICONS: Record<string, FeatherName> = {
   def_reflect: 'refresh-cw',
 };
 
-// Saf "satın al + sahip ol" modeli — loadout/donanım YOK (maça götürme Faz 3'te
-// rastgele dağıtımla / Destiny's Hand). Durumlar: kilitli / satın alınabilir / sahip.
+// Saf "satın al + sahip ol" modeli — maça götürme Faz 3'te rastgele dağıtımla
+// (Destiny's Hand). Durumlar: kilitli / satın alınabilir / sahip.
 type ProtoState = 'locked' | 'buyable' | 'owned';
 
 function deriveState(p: Protocol, level: number, owned: string[]): ProtoState {
@@ -361,7 +361,7 @@ export function ProtocolTreeScreen() {
   } else {
     body = (
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* Seviye + sahip olunan özeti (loadout/donanım YOK) */}
+        {/* Seviye + sahip olunan protokol özeti */}
         <View style={styles.summaryRow}>
           <View style={styles.levelChip}>
             <View style={styles.levelDot} />

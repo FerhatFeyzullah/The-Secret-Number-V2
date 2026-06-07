@@ -57,7 +57,8 @@ export function MatchFoundScreen({
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
   };
 
-  const modeLabel = mode === 'quick' ? 'Hızlı Maç' : 'Özel Oyun';
+  const modeLabel =
+    mode === 'quick' ? 'Hızlı Maç' : mode === 'protocol' ? 'Protokol Maçı' : 'Özel Oyun';
   const turnPhrase =
     firstTurnMode === 'random' ? 'Rastgele' : iAmCreator ? 'Sen başlıyorsun' : 'Rakip başlıyor';
 
@@ -95,7 +96,11 @@ export function MatchFoundScreen({
         ].map((item) => (
           <View key={item.label} style={styles.infoItem}>
             <Text style={styles.infoLabel}>{item.label}</Text>
-            <Text style={styles.infoVal} numberOfLines={1}>
+            <Text
+              style={styles.infoVal}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}>
               {item.val}
             </Text>
           </View>
@@ -108,6 +113,16 @@ export function MatchFoundScreen({
           İlk sıra: <Text style={styles.firstTurnVal}>{turnPhrase}</Text>
         </Text>
       </Animated.View>
+
+      {mode === 'protocol' ? (
+        <Animated.View style={[styles.firstTurn, rise]}>
+          <Feather name="layers" size={12} color={colors.violet} />
+          <Text style={styles.firstTurnText}>
+            <Text style={[styles.firstTurnVal, { color: colors.violet }]}>Best of 3</Text> · 2 tur
+            kazanan alır
+          </Text>
+        </Animated.View>
+      ) : null}
 
       <Animated.View style={[styles.action, fade]}>
         <GlassButton
@@ -188,9 +203,10 @@ const styles = StyleSheet.create({
   },
   info: {
     flexDirection: 'row',
-    gap: 28,
+    alignSelf: 'stretch',
+    gap: 12,
     paddingVertical: 16,
-    paddingHorizontal: 26,
+    paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: colors.glass,
     borderWidth: 1,
@@ -200,21 +216,25 @@ const styles = StyleSheet.create({
   firstTurn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    marginBottom: 40,
+    marginBottom: 8,
+    paddingHorizontal: 12,
   },
   firstTurnText: {
+    flexShrink: 1,
     fontSize: 11,
     color: colors.dim,
     fontFamily: mono,
+    textAlign: 'center',
   },
   firstTurnVal: {
     color: colors.amber,
     fontWeight: '800',
   },
   infoItem: {
+    flex: 1,
     alignItems: 'center',
-    maxWidth: 90,
   },
   infoLabel: {
     fontSize: 9,
@@ -234,6 +254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     gap: 14,
+    marginTop: 28,
   },
   cancel: {
     paddingVertical: 4,

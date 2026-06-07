@@ -9,7 +9,6 @@ import {
   leaveMatch,
   makeGuess,
   OnlineError,
-  setLoadout,
   setSecret,
   unlockProtocol,
 } from './matchService';
@@ -201,8 +200,6 @@ describe('getMyRank', () => {
       levelFloor: 420,
       levelNext: 640,
       owned: [],
-      loadout: [],
-      loadoutSlots: 2,
     });
     expect(rpcMock).toHaveBeenCalledWith('get_my_rank', undefined);
   });
@@ -239,30 +236,24 @@ describe('getMyRank', () => {
       levelFloor: 0,
       levelNext: null,
       owned: [],
-      loadout: [],
-      loadoutSlots: 2,
     });
   });
 
-  it('owned/loadout/loadout_slots alanlarını eşler', async () => {
+  it('owned_protocols alanını eşler', async () => {
     rpcResolves({
       rank: 2,
       username: 'vavi',
       rating: 1100,
       wins: 5,
       owned_protocols: ['time_add', 'info_eliminate', 'def_shield'],
-      loadout: ['time_add', 'def_shield'],
-      loadout_slots: 3,
     });
     await expect(getMyRank()).resolves.toMatchObject({
       owned: ['time_add', 'info_eliminate', 'def_shield'],
-      loadout: ['time_add', 'def_shield'],
-      loadoutSlots: 3,
     });
   });
 });
 
-describe('unlockProtocol / setLoadout', () => {
+describe('unlockProtocol', () => {
   it('unlock_protocol dönüşünü eşler', async () => {
     rpcResolves({ id: 'def_shield', veri: 50, owned: ['time_add', 'info_eliminate', 'def_shield'] });
     await expect(unlockProtocol('def_shield')).resolves.toEqual({
@@ -270,14 +261,5 @@ describe('unlockProtocol / setLoadout', () => {
       owned: ['time_add', 'info_eliminate', 'def_shield'],
     });
     expect(rpcMock).toHaveBeenCalledWith('unlock_protocol', { p_id: 'def_shield' });
-  });
-
-  it('set_loadout dönüşünü eşler', async () => {
-    rpcResolves({ loadout: ['time_add', 'def_shield'], slots: 3 });
-    await expect(setLoadout(['time_add', 'def_shield'])).resolves.toEqual({
-      loadout: ['time_add', 'def_shield'],
-      slots: 3,
-    });
-    expect(rpcMock).toHaveBeenCalledWith('set_loadout', { p_ids: ['time_add', 'def_shield'] });
   });
 });

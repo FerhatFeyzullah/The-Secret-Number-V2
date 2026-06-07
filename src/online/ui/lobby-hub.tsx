@@ -9,6 +9,7 @@ import { ChoiceCard, LobbyHeader } from './parts';
 export function LobbyHub({
   notice,
   onQuick,
+  onProtocol,
   onPrivate,
   onHowTo,
   onBack,
@@ -16,6 +17,7 @@ export function LobbyHub({
   /** Lobiye dönüş nedeni bilgisi (ör. "Rakip ayrıldı, maç iptal edildi."). */
   notice?: string | null;
   onQuick: () => void;
+  onProtocol: () => void;
   onPrivate: () => void;
   onHowTo: () => void;
   onBack: () => void;
@@ -47,6 +49,17 @@ export function LobbyHub({
           <View style={styles.tags}>
             <Text style={styles.tag}>⏱ Zamana Karşı</Text>
             <Text style={styles.tag}>🔢 3 haneli kod</Text>
+          </View>
+        </ChoiceCard>
+
+        <ChoiceCard
+          icon="layers"
+          accent={colors.violet}
+          title="Protokol Maçı"
+          subtitle="Best of 3 · protokollü düello"
+          onPress={onProtocol}>
+          <View style={styles.tags}>
+            <Text style={styles.tag}>🏆 2 tur kazanan alır</Text>
           </View>
         </ChoiceCard>
 

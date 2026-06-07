@@ -60,8 +60,3 @@ export const PILLAR_LABELS: Record<Pillar, string> = {
   disrupt: 'Sabotaj',
   defense: 'Savunma',
 };
-
-/** Loadout yuva limiti (sunucu _loadout_slots ile aynı): Sv1-2 → 2, Sv3+ → 3. */
-export function loadoutSlotsForLevel(level: number): number {
-  return level >= 3 ? 3 : 2;
-}

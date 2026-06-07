@@ -69,8 +69,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   level_too_low: 'Seviyen bu protokol için yetersiz.',
   insufficient_veri: 'Yetersiz Veri.',
   not_owned: 'Sahip olmadığın bir protokol seçtin.',
-  loadout_too_large: 'Yuva limitini aştın.',
-  invalid_loadout: 'Geçersiz dizilim.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -137,9 +135,14 @@ function toOutcome(p: OutcomePayload): GuessOutcome {
   };
 }
 
-/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç. */
+/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç (tek tur). */
 export async function findOrCreateQuickMatch(): Promise<MatchTicket> {
   return toTicket(await callRpc<TicketPayload>('find_or_create_quick_match'));
+}
+
+/** Protokol maçı: ayrı kuyruk, Best of 3 (win_target=2). Quick'ten ayrı eşleşir. */
+export async function findOrCreateProtocolMatch(): Promise<MatchTicket> {
+  return toTicket(await callRpc<TicketPayload>('find_or_create_protocol_match'));
 }
 
 /** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra ayarlarıyla.
@@ -273,8 +276,6 @@ export async function getMyRank(): Promise<MyRank> {
     level_floor?: number | null;
     level_next?: number | null;
     owned_protocols?: string[] | null;
-    loadout?: string[] | null;
-    loadout_slots?: number | null;
   }>('get_my_rank');
   return {
     rank: Number(p.rank),
@@ -290,10 +291,8 @@ export async function getMyRank(): Promise<MyRank> {
     veri: Number(p.veri ?? 0),
     levelFloor: Number(p.level_floor ?? 0),
     levelNext: p.level_next == null ? null : Number(p.level_next),
-    // Migration 20260607000002 (protokoller) öncesi güvenli varsayılanlar.
+    // Migration 20260607000002 (protokoller) öncesi güvenli varsayılan.
     owned: p.owned_protocols ?? [],
-    loadout: p.loadout ?? [],
-    loadoutSlots: Number(p.loadout_slots ?? 2),
   };
 }
 
@@ -306,11 +305,6 @@ export async function unlockProtocol(
   return { veri: Number(p.veri), owned: p.owned ?? [] };
 }
 
-/** Maça götürülecek protokolleri kaydeder (sahiplik + yuva limiti sunucuda). */
-export async function setLoadout(ids: string[]): Promise<{ loadout: string[]; slots: number }> {
-  const p = await callRpc<{ loadout: string[]; slots: number }>('set_loadout', { p_ids: ids });
-  return { loadout: p.loadout ?? [], slots: Number(p.slots) };
-}
 
 /** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).
  *  Çağıranın bakış açısından kendi ve rakip sayısı; satır yoksa null.
