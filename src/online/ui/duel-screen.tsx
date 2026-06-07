@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View }
 import { useProfile } from '@/auth';
 import { parseGuess } from '@/game';
 import {
+  activateProtocol,
   getMatchReveal,
   getMyHand,
   leaveMatch,
@@ -15,6 +16,7 @@ import {
   useMatch,
   type MatchReveal,
 } from '@/online';
+import { getProtocol } from '@/protocols/catalog';
 import { useSfx, type SfxName } from '@/sfx';
 import { getToggle } from '@/storage';
 import { Screen } from '@/ui/screen';
@@ -39,7 +41,17 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
   const { name } = useProfile();
-  const { match, guesses, clocks, loading, error, sendEmoji, incomingEmoji } = useMatch(matchId);
+  const {
+    match,
+    guesses,
+    clocks,
+    loading,
+    error,
+    sendEmoji,
+    incomingEmoji,
+    protocolUses,
+    incomingProtocolUse,
+  } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
@@ -137,9 +149,12 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
 
   // ── Protokol şeridi (yalnız Protokol Maçı) ────────────────────
-  // Kendi seçili protokollerin (get_my_hand → selected). Seçim maç başında
-  // kilitlenir → bir kez çekilir. Rakibin eli/seçimi sunucudan zaten gelmez.
+  // Kendi seçili protokollerin + elenen rakamların (get_my_hand). Seçim maç
+  // başında kilitlenir → bir kez çekilir. Rakibin eli/elenenleri zaten gelmez.
   const [myProtocols, setMyProtocols] = useState<string[] | null>(null);
+  // Eleme'nin verdiği "sayıda yok" rakamları, tur → rakamlar (kalıcı gösterge;
+  // yeniden bağlanınca get_my_hand'den, kullanım anında RPC dönüşünden dolar).
+  const [eliminations, setEliminations] = useState<Record<string, number[]>>({});
   useEffect(() => {
     if (!isProtocol || myProtocols !== null) return;
     let alive = true;
@@ -149,29 +164,28 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           const h = await getMyHand(matchId);
           if (!alive) return;
           setMyProtocols(h.selected);
+          setEliminations(h.eliminations);
           return;
         } catch {
           if (!alive) return;
           await new Promise((r) => setTimeout(r, 700));
         }
       }
-      if (alive) setMyProtocols([]); // çekilemedi → şerit gizli (etkiler zaten Adım 4'te)
+      if (alive) setMyProtocols([]); // çekilemedi → şerit gizli
     })();
     return () => {
       alive = false;
     };
   }, [isProtocol, matchId, myProtocols]);
 
-  // Tile durumları Adım 4'te veriyle dolacak (cooldown / sıra kilidi / tek
-  // kullanım); bu adımda hepsi "kullanılabilir" görünür.
-  const protocolTiles = useMemo<ProtocolTileState[]>(
-    () => (isProtocol ? (myProtocols ?? []).map((id) => ({ id, status: 'ready' as const })) : []),
-    [isProtocol, myProtocols],
-  );
-
-  // Kısa bilgi toast'u (şerit tıklaması — kullanıcı bozuk sanmasın).
+  // Kısa bilgi toast'u (kullanım onayı / hata / rakip bildirimi).
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  }, []);
   useEffect(
     () => () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -179,18 +193,79 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     [],
   );
 
-  // Adım 4 bağlama noktası: gerçek protokol kullanımı (use_protocol RPC) buraya
-  // bağlanacak. Şimdilik yalnızca bilgilendirme — etki YOK.
+  // Kendi kullanımların: sunucu kayıtları (realtime) + RPC dönüşü anlık işareti.
+  // Hak maç başına 1 → kullanılan tile tekrar basılamaz (turlar arası sıfırlanmaz).
+  const [localUsedIds, setLocalUsedIds] = useState<Set<string>>(() => new Set());
+  const myUsedIds = useMemo(() => {
+    const ids = new Set(localUsedIds);
+    for (const u of protocolUses) if (u.player === myId) ids.add(u.protocolId);
+    return ids;
+  }, [protocolUses, myId, localUsedIds]);
+
+  // Tile durumları: kullanıldı → cooldown; zamanlama uymuyor (own_turn + sıra
+  // rakipte ya da maç aktif değil) → blocked; aksi halde ready.
+  const protocolTiles = useMemo<ProtocolTileState[]>(() => {
+    if (!isProtocol) return [];
+    return (myProtocols ?? []).map((id) => {
+      if (myUsedIds.has(id)) return { id, status: 'cooldown' as const, note: 'KULLANILDI' };
+      const timing = getProtocol(id)?.usageTiming ?? 'own_turn';
+      const available = status === 'active' && (timing !== 'own_turn' || isMine);
+      return available
+        ? { id, status: 'ready' as const }
+        : { id, status: 'blocked' as const, note: 'SIRAN DEĞİL' };
+    });
+  }, [isProtocol, myProtocols, myUsedIds, status, isMine]);
+
+  // Protokol kullan: TÜM doğrulama + etki sunucuda (use_protocol RPC); burada
+  // yalnız sonuç gösterimi. Çifte dokunuş busy kilidiyle engellenir (sunucu da
+  // idempotent — ikinci çağrı protocol_already_used döner).
+  const [protoBusy, setProtoBusy] = useState(false);
   const onUseProtocol = useCallback(
-    (_id: string) => {
-      play('blip');
+    async (id: string) => {
+      if (protoBusy) return;
+      setProtoBusy(true);
       buzz('tap');
-      setToast('Protokol etkileri yakında');
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToast(null), 1600);
+      try {
+        const res = await activateProtocol(matchId, id);
+        setLocalUsedIds((prev) => new Set(prev).add(id));
+        play('good');
+        buzz('feedback');
+        if (id === 'time_add') {
+          showToast('Süre Enjeksiyonu: +12 sn');
+        } else if (res.eliminatedDigit != null) {
+          const key = String(res.round);
+          setEliminations((prev) => ({
+            ...prev,
+            [key]: res.eliminated ?? [...(prev[key] ?? []), res.eliminatedDigit!],
+          }));
+          showToast(`Eleme: sayıda ${res.eliminatedDigit} yok`);
+        } else {
+          showToast('Protokol kullanıldı');
+        }
+      } catch (e) {
+        // Sunucu reddi (sıra geçti / hak dolu vb.) — durumu kullanıcıya söyle.
+        showToast(errMsg(e));
+        if (e instanceof OnlineError && e.code === 'protocol_already_used') {
+          setLocalUsedIds((prev) => new Set(prev).add(id));
+        }
+      } finally {
+        setProtoBusy(false);
+      }
     },
-    [play, buzz],
+    [protoBusy, matchId, play, buzz, showToast],
   );
+
+  // "Rakip X kullandı" bildirimi (yalnız canlı realtime kayıttan; sır içermez).
+  useEffect(() => {
+    if (!incomingProtocolUse) return;
+    const name = getProtocol(incomingProtocolUse.protocolId)?.name ?? 'protokol';
+    showToast(`Rakip ${name} kullandı`);
+    buzz('feedback');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingProtocolUse?.nonce]);
+
+  // Bu turda elenen ("sayıda yok") rakamlar — kalıcı gösterge.
+  const eliminatedNow = eliminations[String(round)] ?? [];
 
   // Maç bitince iki gizli sayıyı çek (yalnızca finished'te sunucu döndürür).
   useEffect(() => {
@@ -388,6 +463,21 @@ export function DuelScreen({ matchId }: { matchId: string }) {
 
         <GuessHistory guesses={myGuesses} />
 
+        {/* Eleme'nin verdiği kalıcı bilgi: bu turda sayıda OLMAYAN rakamlar. */}
+        {eliminatedNow.length > 0 ? (
+          <View style={styles.eliminated}>
+            <Feather name="slash" size={11} color={colors.cyan} />
+            <Text style={styles.eliminatedLabel}>SAYIDA YOK</Text>
+            <View style={styles.eliminatedDigits}>
+              {eliminatedNow.map((d) => (
+                <Text key={d} style={styles.eliminatedDigit}>
+                  {d}
+                </Text>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
 
         <DigitPad
@@ -491,6 +581,37 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 11,
     textAlign: 'center',
+  },
+  eliminated: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: cyanAlpha(0.35),
+    backgroundColor: cyanAlpha(0.08),
+  },
+  eliminatedLabel: {
+    fontSize: 9,
+    color: colors.dim,
+    letterSpacing: 1.5,
+    fontFamily: mono,
+  },
+  eliminatedDigits: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  eliminatedDigit: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.cyan,
+    fontFamily: mono,
+    textDecorationLine: 'line-through',
+    textShadowColor: cyanAlpha(0.5),
+    textShadowRadius: 8,
   },
   toastWrap: {
     position: 'absolute',

@@ -8,6 +8,7 @@ import type {
   MatchStatus,
   OnlineGuess,
   PresenceInfo,
+  ProtocolUse,
 } from './types';
 
 /** matches tablosundan/realtime'dan gelen ham satır (snake_case). */
@@ -61,6 +62,16 @@ export type PresenceRow = {
   player: string;
   last_seen: string;
   disconnected_at: string | null;
+};
+
+/** match_protocol_uses tablosundan/realtime'dan gelen ham satır (sır içermez). */
+export type ProtocolUseRow = {
+  id: number;
+  match_id: string;
+  player: string;
+  protocol_id: string;
+  round: number;
+  created_at: string;
 };
 
 /**
@@ -124,6 +135,17 @@ export function presenceRowToInfo(row: PresenceRow): PresenceInfo {
     player: row.player,
     lastSeen: row.last_seen,
     disconnectedAt: row.disconnected_at,
+  };
+}
+
+export function protocolUseRowToUse(row: ProtocolUseRow): ProtocolUse {
+  return {
+    id: row.id,
+    matchId: row.match_id,
+    player: row.player,
+    protocolId: row.protocol_id,
+    round: row.round,
+    createdAt: row.created_at,
   };
 }
 
