@@ -32,6 +32,7 @@ import { ProtocolStrip, type ProtocolTileState } from './duel/protocol-strip';
 import { ResultOverlay } from './duel/result-overlay';
 import { RoundSetup } from './duel/round-setup';
 import { TurnBanner } from './duel/turn-banner';
+import { OPPONENT_VISIBLE_PROTOCOLS } from './protocol-visuals';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 const errMsg = (e: unknown) =>
@@ -385,26 +386,30 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     const { player, protocolId, outcome } = incomingProtocolUse;
     const name = getProtocol(protocolId)?.name ?? 'protokol';
     if (player === myId) {
-      // wasted satırı kurbana yazılır → rakip senin protokolünü harcattı.
+      // wasted satırı kurbana yazılır → rakip senin protokolünü harcattı
+      // (Zorla Harca gözlemlenebilir; bu KENDİ bilgin).
       if (outcome === 'wasted') showToast(`Rakip ${name} protokolünü harcattı!`);
     } else if (outcome === 'blocked') {
-      setShieldArmed(false); // kalkanın tükendi
+      // Counter: rakibin (gözlemlenebilir) engelini Kalkanın blokladı — kendi onayın.
+      setShieldArmed(false);
       showToast(`Kalkanın rakibin ${name} engelini blokladı`);
     } else if (outcome === 'reflected') {
-      setReflectArmed(false); // yansıtman tükendi
+      setReflectArmed(false);
       showToast(`${name} engelini rakibe geri yansıttın!`);
-    } else if (outcome === 'wasted') {
-      // Rakibin protokolünün harcanma satırı — kendi RPC dönüşün zaten bildirdi.
-    } else if (protocolId === 'disrupt_silence') {
-      showToast('Rakip seni susturdu — bu sıra protokol kullanamazsın');
-    } else if (protocolId === 'disrupt_fog') {
-      showToast('Rakip Sis Perdesi kullandı — sonraki geri bildirimin gecikecek');
-    } else if (protocolId === 'disrupt_deceive') {
-      // Kullanıldığı belli olur ama HANGİ geri bildirimin sahte olduğu değil
-      // (gerginlik burada — sunucu gerçek sonuçla ilerler, gösterim şişer).
-      showToast('Rakip Yanıltma kullandı — bir geri bildirimin sahte olabilir!');
+    } else if (OPPONENT_VISIBLE_PROTOCOLS.has(protocolId)) {
+      // Yalnız GÖZLEMLENEBİLİR protokoller bildirilir (gizliler sunucu RLS'i ile
+      // zaten gelmez; bu istemci-içi savunma katmanı). Yanıltma/Kalkan/Eleme vb.
+      // hiçbir şekilde duyurulmaz.
+      if (protocolId === 'disrupt_silence') {
+        showToast('Rakip seni susturdu — bu sıra protokol kullanamazsın');
+      } else if (protocolId === 'disrupt_fog') {
+        showToast('Rakip Sis Perdesi kullandı — sonraki geri bildirimin gecikecek');
+      } else {
+        showToast(`Rakip ${name} kullandı`);
+      }
     } else {
-      showToast(`Rakip ${name} kullandı`);
+      // Gizli protokol (beklenmedik şekilde geldiyse) → SESSİZ; ifşa etme.
+      return;
     }
     buzz('feedback');
     // eslint-disable-next-line react-hooks/exhaustive-deps

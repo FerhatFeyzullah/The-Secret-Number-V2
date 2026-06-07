@@ -35,3 +35,14 @@ export const PROTOCOL_ICONS: Record<string, FeatherName> = {
 
 /** id → glif (bilinmeyen id'de nötr kutu). */
 export const protocolIcon = (id: string): FeatherName => PROTOCOL_ICONS[id] ?? 'box';
+
+/** "Gözlemlenebilir etki" kuralı: kullanımı rakipte o an somut etki yaratan
+ *  (rakibe bildirilen) protokoller. Diğerleri gizli kalır — rakibe ne toast ne
+ *  veri gider (sunucu RLS de bu seti uygular). İstemci-içi savunma katmanı. */
+export const OPPONENT_VISIBLE_PROTOCOLS = new Set<string>([
+  'time_steal', // saat görünür azalır
+  'time_slow', // saat hızlı erir
+  'disrupt_fog', // geri bildirim gecikir
+  'disrupt_silence', // protokoller pasifleşir
+  'disrupt_waste', // bir protokol gider
+]);
