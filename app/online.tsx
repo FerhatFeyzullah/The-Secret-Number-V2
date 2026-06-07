@@ -90,10 +90,15 @@ export default function OnlineScreen() {
     setError(null);
   }, []);
 
-  // Rakip katıldı (status setup/active) → kutlama anına geç.
+  // Rakip katıldı (status protocol_select/setup/active) → kutlama anına geç.
   useEffect(() => {
     if (phase !== 'searching' && phase !== 'create-room') return;
-    if (match && (match.status === 'setup' || match.status === 'active')) {
+    if (
+      match &&
+      (match.status === 'protocol_select' ||
+        match.status === 'setup' ||
+        match.status === 'active')
+    ) {
       setPhase('match-found');
     }
   }, [match, phase]);
@@ -278,14 +283,20 @@ export default function OnlineScreen() {
   const goSetup = useCallback(() => {
     const id = matchId;
     if (!id) return;
-    // "Hazır": present işaretini gönder (iki taraf present olunca sunucu 30 sn'lik
-    // belirleme sayacını başlatır). Karar/zaman sunucuda; sonuç realtime ile gelir.
+    // "Hazır": present işaretini gönder (iki taraf present olunca sunucu, protokol
+    // maçında 20 sn'lik seçim — diğerlerinde 30 sn'lik belirleme sayacını başlatır).
     void markReady(id).catch(() => {});
-    // Maçın sahipliği belirleme ekranına geçiyor; unmount temizliği yapma.
+    // Protokol maçında önce Destiny's Hand seçimi; diğerlerinde doğrudan belirleme.
+    const toSelect = match?.status === 'protocol_select';
+    // Maçın sahipliği bir sonraki ekrana geçiyor; unmount temizliği yapma.
     liveMatchRef.current = null;
     resetToLobby();
-    router.push({ pathname: '/match-setup', params: { matchId: id } });
-  }, [matchId, resetToLobby, router]);
+    router.push(
+      toSelect
+        ? { pathname: '/protocol-select', params: { matchId: id } }
+        : { pathname: '/match-setup', params: { matchId: id } },
+    );
+  }, [matchId, match?.status, resetToLobby, router]);
 
   // ── Türetilmiş gösterim ───────────────────────────────────────
   const opp = match ? (match.myRole === 'player1' ? match.player2 : match.player1) : null;

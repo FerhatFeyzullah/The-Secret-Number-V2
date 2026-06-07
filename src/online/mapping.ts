@@ -31,6 +31,8 @@ export type MatchRow = {
   clock_ms?: number;
   first_turn_mode?: FirstTurnMode;
   setup_deadline: string | null;
+  // Protokol seçim fazı (Destiny's Hand) bitiş anı; eski satırlarda olmayabilir.
+  select_deadline?: string | null;
   // Eski satırlarda/realtime payload'ında bulunmayabilir; mapping varsayılana düşürür.
   // present = "Hazır'a bastı", ready = "sayıyı kilitledi" (ikisi de yalnız boolean).
   player1_present?: boolean;
@@ -94,6 +96,7 @@ export function matchRowToState(
     firstTurnMode: row.first_turn_mode ?? 'random',
     turnStartedAt: row.turn_started_at,
     setupDeadline: row.setup_deadline,
+    selectDeadline: row.select_deadline ?? null,
     player1Present: row.player1_present ?? false,
     player2Present: row.player2_present ?? false,
     presentDeadline: row.present_deadline ?? null,
