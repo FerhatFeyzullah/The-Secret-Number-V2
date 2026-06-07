@@ -7,8 +7,8 @@ export type MatchStatus =
   | 'cancelled'
   | 'abandoned';
 
-/** Maç modu: hızlı eşleşme ya da kodlu özel oda. */
-export type MatchMode = 'quick' | 'private';
+/** Maç modu: hızlı eşleşme (tek tur), protokol maçı (Best of 3) ya da özel oda. */
+export type MatchMode = 'quick' | 'protocol' | 'private';
 
 /** Özel odada ilk tahmin sırası: rastgele ya da oda kuran (player1) başlar. */
 export type FirstTurnMode = 'random' | 'creator';
@@ -56,6 +56,13 @@ export type MatchState = {
   player2: MatchPlayer | null;
   /** Çağıranın rolü (maçın oyuncusu değilse state hiç üretilmez). */
   myRole: PlayerRole;
+  /** Maçı kazanmak için gereken tur sayısı (quick=1, protocol=2 → Best of 3). */
+  winTarget: number;
+  /** Şu anki tur (1..). Her turun kendi gizli sayısı/tahminleri vardır. */
+  currentRound: number;
+  /** player1/player2'nin kazandığı tur sayısı. */
+  p1RoundWins: number;
+  p2RoundWins: number;
   /** Sırası gelen oyuncunun id'si (active dışında null). */
   currentTurn: string | null;
   clock1Ms: number;
@@ -91,6 +98,8 @@ export type OnlineGuess = {
   guesser: string;
   digits: string;
   feedback: GuessFeedback;
+  /** Tahminin yapıldığı tur (Best of 3'te tura göre filtrelenir). */
+  round: number;
   createdAt: string;
 };
 
@@ -157,10 +166,6 @@ export type MyRank = {
   levelNext: number | null;
   /** Sahip olunan protokol id'leri (Faz 2a). */
   owned: string[];
-  /** Maça götürülecek seçili protokol id'leri. */
-  loadout: string[];
-  /** Loadout yuva limiti (Sv1-2 → 2, Sv3+ → 3). */
-  loadoutSlots: number;
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */

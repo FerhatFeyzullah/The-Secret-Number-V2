@@ -17,12 +17,13 @@ import {
 import { useSfx, type SfxName } from '@/sfx';
 import { getToggle } from '@/storage';
 import { Screen } from '@/ui/screen';
-import { colors, cyanAlpha, mono } from '@/ui/theme';
+import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 import { DigitPad } from './duel/digit-pad';
 import { GuessHistory } from './duel/guess-history';
 import { PlayerPod } from './duel/player-pod';
 import { ResultOverlay } from './duel/result-overlay';
+import { RoundSetup } from './duel/round-setup';
 import { TurnBanner } from './duel/turn-banner';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -42,6 +43,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Son biten turun sonucu (Best of 3 tur arası ekranı için): kim + neden.
+  // Gizli sayı SIZDIRMAZ — yalnızca "kazanan + neden (doğru tahmin / süre)".
+  const [lastRound, setLastRound] = useState<{ winnerIsMe: boolean; reason: 'win' | 'timeout' } | null>(
+    null,
+  );
 
   // Ses/haptik tercihleri (offline ekranıyla aynı kaynak).
   const [soundOn, setSoundOn] = useState(true);
@@ -82,13 +88,48 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const opponentName =
     (match ? (match.myRole === 'player1' ? match.player2?.username : match.player1.username) : null) ??
     'Rakip';
-  const myGuesses = guesses.filter((g) => g.guesser === myId);
+  // Best of 3 tur bilgisi (quick'te winTarget=1 → tek tur).
+  const isProtocol = !!match && match.winTarget > 1;
+  const round = match?.currentRound ?? 1;
+  const myWins = match ? (p1 ? match.p1RoundWins : match.p2RoundWins) : 0;
+  const oppWins = match ? (p1 ? match.p2RoundWins : match.p1RoundWins) : 0;
+  // Tahmin geçmişi yalnız o turun (kendi) tahminleri.
+  const myGuesses = guesses.filter((g) => g.guesser === myId && g.round === round);
   const win = finished && !!match?.winner && match.winner === myId;
 
   // Sıra rakibe geçince yarım kalan girişi temizle.
   useEffect(() => {
     if (!isMine) setEntry([]);
   }, [isMine]);
+
+  // Bir tur bitip yeni tur belirlemesine geçince, biten turun sonucunu sapta:
+  // kazanan = "win" feedback'li tahminin sahibi (yoksa süre → skor deltası);
+  // neden = doğru tahmin mi süre mi. Yalnızca kim/neden — sayı değil.
+  const prevScoreRef = useRef({ p1: 0, p2: 0 });
+  const processedRoundRef = useRef(1);
+  useEffect(() => {
+    if (!match) return;
+    if (match.status === 'active') {
+      prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
+      return;
+    }
+    if (
+      match.status === 'setup' &&
+      match.currentRound > 1 &&
+      processedRoundRef.current !== match.currentRound
+    ) {
+      processedRoundRef.current = match.currentRound;
+      const prevRound = match.currentRound - 1;
+      const winGuess = guesses.find((g) => g.round === prevRound && g.feedback === 'win');
+      if (winGuess) {
+        setLastRound({ winnerIsMe: winGuess.guesser === myId, reason: 'win' });
+      } else {
+        const winnerIsP1 = match.p1RoundWins - prevScoreRef.current.p1 > 0;
+        setLastRound({ winnerIsMe: winnerIsP1 === p1, reason: 'timeout' });
+      }
+      prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
+    }
+  }, [match, guesses, p1, myId]);
 
   // Not: süre bitince otomatik zaman aşımı artık useMatch içinde merkezî olarak
   // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
@@ -226,6 +267,18 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     );
   }
 
+  // Turlar arası belirleme (Best of 3, round ≥ 2): düello ekranı içinde.
+  if (status === 'setup') {
+    return (
+      <Screen>
+        <View style={styles.content}>
+          <View style={styles.topRow}>{exitButton}</View>
+          <RoundSetup matchId={matchId} match={match} lastRound={lastRound} />
+        </View>
+      </Screen>
+    );
+  }
+
   if (status !== 'active' && status !== 'finished') {
     return (
       <Screen>
@@ -250,7 +303,18 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       />
 
       <View style={styles.content}>
-        <View style={styles.topRow}>{exitButton}</View>
+        <View style={styles.topRow}>
+          {exitButton}
+          {isProtocol ? (
+            <View style={styles.roundChip}>
+              <Text style={styles.roundChipText}>
+                TUR {round} · <Text style={{ color: colors.cyan }}>{myWins}</Text>
+                <Text style={{ color: colors.dim }}>–</Text>
+                <Text style={{ color: colors.amber }}>{oppWins}</Text>
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
         {/* Arena: çift saat */}
         <View style={styles.arena}>
@@ -322,6 +386,22 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  roundChip: {
+    marginLeft: 'auto',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: withAlpha(colors.violet, 0.12),
+    borderWidth: 1,
+    borderColor: withAlpha(colors.violet, 0.35),
+  },
+  roundChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.ice,
+    fontFamily: mono,
+    letterSpacing: 0.5,
   },
   exit: {
     width: 38,

@@ -6,6 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useProfile } from '@/auth';
 import {
   createPrivateRoom,
+  findOrCreateProtocolMatch,
   findOrCreateQuickMatch,
   joinPrivateRoom,
   leaveMatch,
@@ -61,7 +62,7 @@ export default function OnlineScreen() {
   const { match } = useMatch(matchId);
 
   // Lobi akışında sahiplenilen CANLI (waiting/setup) maçı izle: ekran
-  // beklenmedik şekilde terk edilirse (donanım geri tuşu vb.) kapatılır.
+  // beklenmedik şekilde terk edilirse (cihaz geri tuşu vb.) kapatılır.
   // leave_match her fazı doğru kapattığı için setup'a geçmiş maç da sızmaz.
   const liveMatchRef = useRef<string | null>(null);
   // Kendi çıkışımız: realtime'dan gelen cancelled'ı "rakip ayrıldı" sanma.
@@ -139,7 +140,11 @@ export default function OnlineScreen() {
   }, [phase]);
 
   // ── Aksiyonlar ────────────────────────────────────────────────
-  const startQuick = useCallback(async () => {
+  // Hızlı Maç (quick, tek tur) ve Protokol Maçı (protocol, Best of 3) aynı arama
+  // akışını paylaşır; yalnızca eşleşme RPC'si değişir.
+  const lastModeRef = useRef<'quick' | 'protocol'>('quick');
+  const startSearch = useCallback(async (m: 'quick' | 'protocol') => {
+    lastModeRef.current = m;
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
@@ -147,7 +152,9 @@ export default function OnlineScreen() {
     setMatchId(null);
     setPhase('searching');
     try {
-      const ticket = await findOrCreateQuickMatch();
+      const ticket = await (m === 'protocol'
+        ? findOrCreateProtocolMatch()
+        : findOrCreateQuickMatch());
       if (seq !== searchSeqRef.current) {
         // Bu arama iptal edildi/yenilendi: dönen maçı sessizce kapat.
         void leaveMatch(ticket.matchId).catch(() => {});
@@ -160,6 +167,9 @@ export default function OnlineScreen() {
       if (seq === searchSeqRef.current) setError(errMsg(e));
     }
   }, []);
+  const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
+  const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
+  const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
 
   // "Tekrar Oyna" ile gelindiğinde (quick=1) aramayı bir kez otomatik başlat.
   const { quick } = useLocalSearchParams<{ quick?: string }>();
@@ -298,7 +308,7 @@ export default function OnlineScreen() {
     case 'no-opponent':
       content = (
         <NoOpponentScreen
-          onRetry={startQuick}
+          onRetry={retrySearch}
           onCreateRoom={() => setPhase('private-setup')}
           onBack={resetToLobby}
         />
@@ -362,6 +372,7 @@ export default function OnlineScreen() {
         <LobbyHub
           notice={notice}
           onQuick={startQuick}
+          onProtocol={startProtocol}
           onPrivate={() => setPhase('private-choice')}
           onHowTo={() => router.push('/how-to-play')}
           onBack={() => router.back()}

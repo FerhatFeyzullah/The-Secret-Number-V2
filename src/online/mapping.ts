@@ -22,6 +22,11 @@ export type MatchRow = {
   turn_started_at: string | null;
   clock1_ms: number;
   clock2_ms: number;
+  // Çok-turlu maç (Best of 3); eski satırlarda olmayabilir → mapping default'lar.
+  win_target?: number;
+  current_round?: number;
+  p1_round_wins?: number;
+  p2_round_wins?: number;
   // Konfig (özel oda ayarları); eski satırlarda olmayabilir → mapping default'lar.
   clock_ms?: number;
   first_turn_mode?: FirstTurnMode;
@@ -44,6 +49,7 @@ export type GuessRow = {
   guesser: string;
   digits: string;
   feedback: GuessFeedback;
+  round?: number;
   created_at: string;
 };
 
@@ -77,6 +83,10 @@ export function matchRowToState(
       ? { id: row.player2, username: usernames[row.player2] ?? null }
       : null,
     myRole,
+    winTarget: row.win_target ?? 1,
+    currentRound: row.current_round ?? 1,
+    p1RoundWins: row.p1_round_wins ?? 0,
+    p2RoundWins: row.p2_round_wins ?? 0,
     currentTurn: row.current_turn,
     clock1Ms: row.clock1_ms,
     clock2Ms: row.clock2_ms,
@@ -101,6 +111,7 @@ export function guessRowToGuess(row: GuessRow): OnlineGuess {
     guesser: row.guesser,
     digits: row.digits,
     feedback: row.feedback,
+    round: row.round ?? 1,
     createdAt: row.created_at,
   };
 }

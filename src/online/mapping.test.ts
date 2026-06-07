@@ -118,6 +118,7 @@ describe('guessRowToGuess', () => {
       guesser: P1,
       digits: '123',
       feedback: 'partial:2',
+      round: 1,
       createdAt: '2026-06-05T10:00:03.000Z',
     });
   });
