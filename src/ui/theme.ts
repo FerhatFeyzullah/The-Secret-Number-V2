@@ -43,6 +43,9 @@ export const colors = {
   gold: '#f5c451',
   silver: '#c8d2e0',
   bronze: '#d08a52',
+  // Protokoller: Veri parası (teal hexagon) + Zaman dalı vurgusu (violet).
+  teal: '#2dd4bf',
+  violet: '#a78bfa',
 };
 
 /** Sayılar için monospace his. */
