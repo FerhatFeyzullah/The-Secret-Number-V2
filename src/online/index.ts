@@ -14,6 +14,7 @@ export type {
   OnlineGuess,
   PlayerRole,
   PresenceInfo,
+  ProtocolHand,
 } from './types';
 export { displayClocks, feedbackToGuessResult } from './mapping';
 export {
@@ -29,6 +30,7 @@ export {
   forfeitDisconnect,
   getLeaderboard,
   getMatchReveal,
+  getMyHand,
   getMyRank,
   heartbeat,
   joinPrivateRoom,
@@ -36,6 +38,8 @@ export {
   makeGuess,
   markReady,
   OnlineError,
+  resolveProtocolSelect,
+  setProtocolSelection,
   setSecret,
   unlockProtocol,
 } from './matchService';

@@ -1,6 +1,7 @@
 /** Sunucudaki matches.status değerleri. */
 export type MatchStatus =
   | 'waiting'
+  | 'protocol_select'
   | 'setup'
   | 'active'
   | 'finished'
@@ -76,6 +77,9 @@ export type MatchState = {
   /** Sayı belirleme fazının bitiş anı (ISO). İki taraf da "Hazır" (present)
    *  olunca kurulur; o ana kadar null (sayaç başlamaz). */
   setupDeadline: string | null;
+  /** Protokol seçim fazının (Destiny's Hand) bitiş anı (ISO); yalnız
+   *  status='protocol_select' iken, iki taraf present olunca kurulur (20 sn). */
+  selectDeadline: string | null;
   /** present = "Hazır'a bastı / belirleme ekranına girdi" (mark_ready).
    *  İki taraf da present olunca setup_deadline (30 sn) başlar. Yalnızca boolean. */
   player1Present: boolean;
@@ -101,6 +105,17 @@ export type OnlineGuess = {
   /** Tahminin yapıldığı tur (Best of 3'te tura göre filtrelenir). */
   round: number;
   createdAt: string;
+};
+
+/** Çağıranın protokol maçı eli + seçimi (get_my_hand).
+ *  Rakibin eli/seçimi ASLA gelmez (sunucu RLS). */
+export type ProtocolHand = {
+  /** Sunucuda dağıtılan el (sahip olunanlardan rastgele yuva+3, sahip ile sınırlı). */
+  hand: string[];
+  /** Kilitlenmiş seçim (henüz seçmediyse boş). */
+  selected: string[];
+  /** Seviyeye göre yuva sayısı (Sv1-3 → 2, Sv4+ → 3). */
+  slots: number;
 };
 
 /** Eşleşme RPC'lerinin (quick/private) ortak dönüşü. */
