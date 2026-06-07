@@ -41,11 +41,8 @@ export const STARTER_PROTOCOLS = ['time_add', 'info_eliminate'] as const;
 
 /** 14 protokol — sunucu tablosuyla aynı sırada/değerlerde.
  *  Kullanım hakkı VARSAYILANI: maç başına 1 (usesPerMatch:1, perRoundReset:false;
- *  Best of 3 boyunca tek — turlar arası SIFIRLANMAZ). usageTiming yalnız
- *  uygulanmış protokollerde (4a: time_add, info_eliminate · 4b: info_readlast,
- *  info_postest, info_reveal, time_steal, time_freeze, time_slow · 4c:
- *  disrupt_fog, disrupt_silence, disrupt_waste, def_shield, def_reflect)
- *  bağlayıcıdır; kalan disrupt_deceive 4d'de etkiyle birlikte kesinleşir. */
+ *  Best of 3 boyunca tek — turlar arası SIFIRLANMAZ). 14 protokolün TAMAMI
+ *  uygulanmıştır (4a-4d); usageTiming değerleri sunucu seed'iyle bire birdir. */
 export const PROTOCOLS: readonly Protocol[] = [
   { id: 'time_add',        name: 'Süre Enjeksiyonu', pillar: 'time',    effect: '+12sn kendine',                                  levelGate: 1,  veriCost: 0,    oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'info_eliminate',  name: 'Eleme',            pillar: 'info',    effect: 'Sayıda olmayan bir rakamı öğren',                levelGate: 1,  veriCost: 0,    oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
@@ -59,7 +56,7 @@ export const PROTOCOLS: readonly Protocol[] = [
   { id: 'time_slow',       name: 'Yavaşlat',         pillar: 'time',    effect: 'Rakip saati 1.5× hızlı akar (1 sıra)',           levelGate: 6,  veriCost: 700,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'disrupt_waste',   name: 'Zorla Harca',      pillar: 'disrupt', effect: 'Rakibin bir protokolünü boşa tüketir',           levelGate: 7,  veriCost: 850,  oneShot: false, usageTiming: 'anytime',  usesPerMatch: 1, perRoundReset: false },
   { id: 'info_reveal',     name: 'Sayı İşareti',     pillar: 'info',    effect: 'Doğru bir rakamı açar',                          levelGate: 8,  veriCost: 1100, oneShot: true,  usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
-  { id: 'disrupt_deceive', name: 'Yanıltma',         pillar: 'disrupt', effect: 'Rakip geri bildirimi +1 şişirilir (partial)',    levelGate: 9,  veriCost: 1300, oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
+  { id: 'disrupt_deceive', name: 'Yanıltma',         pillar: 'disrupt', effect: 'Rakibin sonraki geri bildirimi +1 şişer',        levelGate: 9,  veriCost: 1300, oneShot: false, usageTiming: 'anytime',  usesPerMatch: 1, perRoundReset: false },
   { id: 'def_reflect',     name: 'Yansıtma',         pillar: 'defense', effect: 'Gelen ilk engeli sahibine yansıtır',             levelGate: 10, veriCost: 1500, oneShot: false, usageTiming: 'anytime',  usesPerMatch: 1, perRoundReset: false },
 ];
 
