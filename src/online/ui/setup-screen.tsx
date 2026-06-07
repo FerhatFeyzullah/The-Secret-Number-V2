@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useRouter } from 'expo-router';
+import { Redirect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -227,13 +227,22 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   );
 
   if (!match) {
+    // Yükleme bitti + maç YOK + hata da yok = gerçekten bulunamadı / oyuncu değil
+    // → güvenli yönlendirme (<Redirect> mount/timing'i yönetir). Geçici ağ hatasında
+    // (error) yönlendirme YOK; mesaj + "Ana Menü" butonu gösterilir.
+    if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen>
         <View style={styles.centered}>
           {loading ? (
             <ActivityIndicator color={colors.cyan} />
           ) : (
-            <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>
+            <>
+              <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>
+              <Pressable onPress={() => router.replace('/')} hitSlop={8} style={styles.noteExit}>
+                <Text style={styles.noteExitText}>Ana Menü</Text>
+              </Pressable>
+            </>
           )}
         </View>
       </Screen>
@@ -531,5 +540,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: mono,
     textAlign: 'center',
+  },
+  noteExit: {
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: cyanAlpha(0.4),
+    backgroundColor: cyanAlpha(0.12),
+  },
+  noteExitText: {
+    color: colors.cyan,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: mono,
+    letterSpacing: 1,
   },
 });

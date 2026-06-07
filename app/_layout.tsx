@@ -4,6 +4,11 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '@/auth';
 import { colors } from '@/ui/theme';
 
+// Kök yığının çapası HER ZAMAN ana menü (index). Cihaz son açık derin route'a
+// (ör. /match/[id], /match-setup) geri yüklense bile yığının ilk ekranı index
+// olur → geri tuşu/swipe ana menüye gider, ASLA uygulamadan çıkmaz.
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function RootLayout() {
   return (
     <AuthProvider>

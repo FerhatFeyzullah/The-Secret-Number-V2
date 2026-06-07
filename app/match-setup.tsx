@@ -1,35 +1,13 @@
-import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 
 import { SecretSetupScreen } from '@/online/ui';
-import { Screen } from '@/ui/screen';
-import { colors, mono } from '@/ui/theme';
 
 /** Gizli kod belirleme route'u: eşleşme bulununca matchId ile buraya gelinir.
- *  Tüm belirleme/realtime mantığı SecretSetupScreen'de. */
+ *  Tüm belirleme/realtime mantığı SecretSetupScreen'de. matchId yoksa (ör. cihaz
+ *  bu route'a ölü/parametresiz geri yüklendiyse) ana menüye yönlendirir —
+ *  <Redirect> mount/timing'i güvenli yönetir ("before mounting" hatası vermez). */
 export default function MatchSetupRoute() {
   const { matchId } = useLocalSearchParams<{ matchId?: string }>();
-  if (!matchId) {
-    return (
-      <Screen>
-        <View style={styles.center}>
-          <Text style={styles.note}>Maç bulunamadı.</Text>
-        </View>
-      </Screen>
-    );
-  }
+  if (!matchId) return <Redirect href="/" />;
   return <SecretSetupScreen matchId={matchId} />;
 }
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  note: {
-    color: colors.dim,
-    fontSize: 14,
-    fontFamily: mono,
-  },
-});
