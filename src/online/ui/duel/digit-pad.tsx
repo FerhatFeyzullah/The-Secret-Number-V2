@@ -57,7 +57,7 @@ function PadKey({
       style={({ pressed }) => [
         styles.key,
         submit ? styles.keySubmit : variant === 'action' ? styles.keyAction : styles.keyDigit,
-        { flex, height: submit ? 52 : 46 },
+        { flex, height: submit ? 48 : 44 }, // kompakt; dokunma hedefi ≥44px kalır
         !pressed && !disabled && (submit ? styles.key3dSubmit : styles.key3d),
         pressed && !disabled && styles.keyPressed,
         disabled && styles.keyDisabled,
@@ -67,33 +67,39 @@ function PadKey({
   );
 }
 
-/** Tahmin girişi + tuş takımı. Sırada değilken kilitli/sönük. */
+/** Tahmin girişi + tuş takımı. Sırada değilken kilitli/sönük.
+ *  accessory: giriş panelinin sağına iliştirilen kapsül (kendi saatin). */
 export function DigitPad({
   guess,
   locked,
   onDigit,
   onDelete,
   onSubmit,
+  accessory,
 }: {
   guess: string[];
   locked: boolean;
   onDigit: (d: string) => void;
   onDelete: () => void;
   onSubmit: () => void;
+  accessory?: React.ReactNode;
 }) {
   const used = new Set(guess);
   const full = guess.length >= 3;
 
   return (
     <>
-      {/* Giriş kutuları */}
-      <View style={[styles.panel, locked && styles.panelLocked]}>
-        <Text style={styles.caption}>RAKİBİN KODUNU KIR</Text>
-        <View style={styles.boxes}>
-          {[0, 1, 2].map((i) => (
-            <DigitBox key={i} value={guess[i] || ''} active={guess.length === i} locked={locked} />
-          ))}
+      {/* Giriş kutuları (+ yanında kendi saatin) */}
+      <View style={styles.entryRow}>
+        <View style={[styles.panel, styles.entry, locked && styles.panelLocked]}>
+          <Text style={styles.caption}>RAKİBİN KODUNU KIR</Text>
+          <View style={styles.boxes}>
+            {[0, 1, 2].map((i) => (
+              <DigitBox key={i} value={guess[i] || ''} active={guess.length === i} locked={locked} />
+            ))}
+          </View>
         </View>
+        {accessory}
       </View>
 
       {/* Tuş takımı */}
@@ -126,12 +132,20 @@ export function DigitPad({
 }
 
 const styles = StyleSheet.create({
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
   panel: {
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.glassBorder,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 16,
+    padding: 10,
+  },
+  entry: {
+    flex: 1,
   },
   panelLocked: {
     opacity: 0.4,
@@ -143,17 +157,17 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontFamily: mono,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 7,
   },
   boxes: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 7,
     justifyContent: 'center',
   },
   box: {
-    width: 72,
-    height: 80,
-    borderRadius: 16,
+    width: 52,
+    height: 56,
+    borderRadius: 13,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -178,13 +192,13 @@ const styles = StyleSheet.create({
   cursor: {
     position: 'absolute',
     width: 2,
-    height: 28,
+    height: 22,
     borderRadius: 2,
     backgroundColor: colors.cyan,
     boxShadow: `0 0 6px ${colors.cyan}`,
   },
   boxText: {
-    fontSize: 36,
+    fontSize: 26,
     fontWeight: '800',
     color: colors.cyan,
     fontFamily: mono,
@@ -193,21 +207,21 @@ const styles = StyleSheet.create({
   },
   pad: {
     paddingHorizontal: 10,
-    gap: 7,
+    gap: 6,
   },
   padLocked: {
     opacity: 0.28,
   },
   grid: {
-    gap: 7,
+    gap: 6,
   },
   gridRow: {
     flexDirection: 'row',
-    gap: 7,
+    gap: 6,
   },
   bottomRow: {
     flexDirection: 'row',
-    gap: 7,
+    gap: 6,
   },
   key: {
     borderRadius: 12,

@@ -13,45 +13,17 @@ import {
   useMatch,
   type ProtocolHand,
 } from '@/online';
-import { getProtocol, PILLAR_LABELS, type Pillar } from '@/protocols/catalog';
+import { getProtocol, PILLAR_LABELS } from '@/protocols/catalog';
 import { Screen } from '@/ui/screen';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
+import { PILLAR_COLOR, protocolIcon } from './protocol-visuals';
 import { CountdownRing } from './setup/countdown-ring';
 
 const SELECT_TOTAL_MS = 20_000;
 const LOW_MS = 5_000;
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
-
-type FeatherName = React.ComponentProps<typeof Feather>['name'];
-
-// Kategori (sütun) renkleri — tasarım referansı: Bilgi cyan, Zaman violet,
-// Sabotaj amber, Savunma yeşil.
-const PILLAR_COLOR: Record<Pillar, string> = {
-  info: colors.cyan,
-  time: colors.violet,
-  disrupt: colors.amber,
-  defense: colors.success,
-};
-
-// Protokol → Feather glifi (yalnız UI; katalog veri kaynağı bunu içermez).
-const ICONS: Record<string, FeatherName> = {
-  info_eliminate: 'eye',
-  info_readlast: 'search',
-  info_postest: 'map-pin',
-  info_reveal: 'hash',
-  time_add: 'clock',
-  time_steal: 'watch',
-  time_freeze: 'pause',
-  time_slow: 'wind',
-  disrupt_fog: 'cloud',
-  disrupt_silence: 'volume-x',
-  disrupt_waste: 'shuffle',
-  disrupt_deceive: 'alert-triangle',
-  def_shield: 'shield',
-  def_reflect: 'refresh-cw',
-};
 
 /** Destiny's Hand — maç başı protokol seçimi (Protokol Maçı, belirleme öncesi).
  *  El SUNUCUDA dağıtılır (get_my_hand); seçim set_protocol_selection'a yazılır.
@@ -359,7 +331,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
                   </View>
                 ) : null}
                 <View style={[styles.cardIcon, { borderColor: withAlpha(color, isSel ? 0.6 : 0.35), backgroundColor: withAlpha(color, isSel ? 0.18 : 0.1) }]}>
-                  <Feather name={ICONS[proto.id] ?? 'box'} size={20} color={color} />
+                  <Feather name={protocolIcon(proto.id)} size={20} color={color} />
                 </View>
                 <Text style={styles.cardName} numberOfLines={2}>
                   {proto.name}
@@ -439,7 +411,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
               return (
                 <View key={id} style={styles.overlayCard}>
                   <View style={[styles.overlayCardIcon, { borderColor: cyanAlpha(0.6), backgroundColor: withAlpha(color, 0.18) }]}>
-                    <Feather name={ICONS[id] ?? 'box'} size={20} color={color} />
+                    <Feather name={protocolIcon(id)} size={20} color={color} />
                   </View>
                   <Text style={styles.overlayCardName} numberOfLines={1}>
                     {proto.name}

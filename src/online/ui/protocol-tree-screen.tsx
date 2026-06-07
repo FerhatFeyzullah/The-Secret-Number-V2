@@ -18,38 +18,15 @@ import { PILLAR_LABELS, PROTOCOLS, type Pillar, type Protocol } from '@/protocol
 import { Screen } from '@/ui/screen';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { type FeatherName } from './parts';
+import { PILLAR_COLOR, protocolIcon } from './protocol-visuals';
 
 const PILLAR_ORDER: Pillar[] = ['info', 'time', 'disrupt', 'defense'];
 
-const PILLAR_COLOR: Record<Pillar, string> = {
-  info: colors.cyan,
-  time: colors.violet,
-  disrupt: colors.amber,
-  defense: colors.success,
-};
 const PILLAR_HEAD_ICON: Record<Pillar, FeatherName> = {
   info: 'search',
   time: 'clock',
   disrupt: 'zap',
   defense: 'shield',
-};
-
-// Protokol → Feather glifi (yalnızca UI; katalog veri kaynağı bunu içermez).
-const ICONS: Record<string, FeatherName> = {
-  info_eliminate: 'eye',
-  info_readlast: 'search',
-  info_postest: 'map-pin',
-  info_reveal: 'hash',
-  time_add: 'clock',
-  time_steal: 'watch',
-  time_freeze: 'pause',
-  time_slow: 'wind',
-  disrupt_fog: 'cloud',
-  disrupt_silence: 'volume-x',
-  disrupt_waste: 'shuffle',
-  disrupt_deceive: 'alert-triangle',
-  def_shield: 'shield',
-  def_reflect: 'refresh-cw',
 };
 
 // Saf "satın al + sahip ol" modeli — maça götürme Faz 3'te rastgele dağıtımla
@@ -82,7 +59,7 @@ function ProtocolNode({
   const locked = state === 'locked';
   const owned = state === 'owned';
   const accent = stateColor(state);
-  const icon = ICONS[proto.id] ?? 'box';
+  const icon = protocolIcon(proto.id);
 
   return (
     <Pressable
@@ -158,7 +135,7 @@ function DetailDialog({
   const owned = state === 'owned';
   const accent = stateColor(state);
   const canAfford = veri >= proto.veriCost;
-  const icon = ICONS[proto.id] ?? 'box';
+  const icon = protocolIcon(proto.id);
 
   const card = {
     opacity: v,
