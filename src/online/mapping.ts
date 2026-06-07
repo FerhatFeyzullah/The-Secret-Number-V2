@@ -8,6 +8,7 @@ import type {
   MatchStatus,
   OnlineGuess,
   PresenceInfo,
+  ProtocolUse,
 } from './types';
 
 /** matches tablosundan/realtime'dan gelen ham satır (snake_case). */
@@ -22,10 +23,26 @@ export type MatchRow = {
   turn_started_at: string | null;
   clock1_ms: number;
   clock2_ms: number;
+  // Çok-turlu maç (Best of 3); eski satırlarda olmayabilir → mapping default'lar.
+  win_target?: number;
+  current_round?: number;
+  p1_round_wins?: number;
+  p2_round_wins?: number;
   // Konfig (özel oda ayarları); eski satırlarda olmayabilir → mapping default'lar.
   clock_ms?: number;
   first_turn_mode?: FirstTurnMode;
+  // Saat/engel protokolü bayrakları (Faz 3 / Adım 4b-4c); eski satırlarda
+  // olmayabilir.
+  turn_frozen?: boolean;
+  turn_slow_p1?: boolean;
+  turn_slow_p2?: boolean;
+  fog_p1?: boolean;
+  fog_p2?: boolean;
+  silenced_p1?: boolean;
+  silenced_p2?: boolean;
   setup_deadline: string | null;
+  // Protokol seçim fazı (Destiny's Hand) bitiş anı; eski satırlarda olmayabilir.
+  select_deadline?: string | null;
   // Eski satırlarda/realtime payload'ında bulunmayabilir; mapping varsayılana düşürür.
   // present = "Hazır'a bastı", ready = "sayıyı kilitledi" (ikisi de yalnız boolean).
   player1_present?: boolean;
@@ -44,7 +61,10 @@ export type GuessRow = {
   guesser: string;
   digits: string;
   feedback: GuessFeedback;
+  round?: number;
   created_at: string;
+  /** Sis Perdesi işareti (4c); eski satırlarda olmayabilir. */
+  fogged?: boolean;
 };
 
 /** presence tablosundan/realtime'dan gelen ham satır. */
@@ -53,6 +73,18 @@ export type PresenceRow = {
   player: string;
   last_seen: string;
   disconnected_at: string | null;
+};
+
+/** match_protocol_uses tablosundan/realtime'dan gelen ham satır (sır içermez). */
+export type ProtocolUseRow = {
+  id: number;
+  match_id: string;
+  player: string;
+  protocol_id: string;
+  round: number;
+  created_at: string;
+  /** Counter zinciri sonucu (4c); eski satırlarda olmayabilir. */
+  outcome?: string;
 };
 
 /**
@@ -77,13 +109,25 @@ export function matchRowToState(
       ? { id: row.player2, username: usernames[row.player2] ?? null }
       : null,
     myRole,
+    winTarget: row.win_target ?? 1,
+    currentRound: row.current_round ?? 1,
+    p1RoundWins: row.p1_round_wins ?? 0,
+    p2RoundWins: row.p2_round_wins ?? 0,
     currentTurn: row.current_turn,
     clock1Ms: row.clock1_ms,
     clock2Ms: row.clock2_ms,
     clockMs: row.clock_ms ?? 60000,
     firstTurnMode: row.first_turn_mode ?? 'random',
     turnStartedAt: row.turn_started_at,
+    turnFrozen: row.turn_frozen ?? false,
+    turnSlowP1: row.turn_slow_p1 ?? false,
+    turnSlowP2: row.turn_slow_p2 ?? false,
+    fogP1: row.fog_p1 ?? false,
+    fogP2: row.fog_p2 ?? false,
+    silencedP1: row.silenced_p1 ?? false,
+    silencedP2: row.silenced_p2 ?? false,
     setupDeadline: row.setup_deadline,
+    selectDeadline: row.select_deadline ?? null,
     player1Present: row.player1_present ?? false,
     player2Present: row.player2_present ?? false,
     presentDeadline: row.present_deadline ?? null,
@@ -101,7 +145,10 @@ export function guessRowToGuess(row: GuessRow): OnlineGuess {
     guesser: row.guesser,
     digits: row.digits,
     feedback: row.feedback,
+    round: row.round ?? 1,
     createdAt: row.created_at,
+    // Yalnız işaretliyken eklenir (eski satır/teste şekil-uyumlu).
+    ...(row.fogged ? { fogged: true } : {}),
   };
 }
 
@@ -110,6 +157,18 @@ export function presenceRowToInfo(row: PresenceRow): PresenceInfo {
     player: row.player,
     lastSeen: row.last_seen,
     disconnectedAt: row.disconnected_at,
+  };
+}
+
+export function protocolUseRowToUse(row: ProtocolUseRow): ProtocolUse {
+  return {
+    id: row.id,
+    matchId: row.match_id,
+    player: row.player,
+    protocolId: row.protocol_id,
+    round: row.round,
+    createdAt: row.created_at,
+    outcome: (row.outcome as ProtocolUse['outcome']) ?? 'applied',
   };
 }
 
@@ -122,15 +181,27 @@ export function presenceRowToInfo(row: PresenceRow): PresenceInfo {
 export function displayClocks(
   state: Pick<
     MatchState,
-    'status' | 'currentTurn' | 'turnStartedAt' | 'clock1Ms' | 'clock2Ms' | 'player1'
+    | 'status'
+    | 'currentTurn'
+    | 'turnStartedAt'
+    | 'clock1Ms'
+    | 'clock2Ms'
+    | 'player1'
+    | 'turnFrozen'
+    | 'turnSlowP1'
+    | 'turnSlowP2'
   >,
   nowMs: number,
 ): { clock1Ms: number; clock2Ms: number } {
   if (state.status !== 'active' || !state.currentTurn || !state.turnStartedAt) {
     return { clock1Ms: state.clock1Ms, clock2Ms: state.clock2Ms };
   }
-  const elapsed = Math.max(0, nowMs - Date.parse(state.turnStartedAt));
   const running1 = state.currentTurn === state.player1.id;
+  // Sunucudaki _turn_elapsed_ms ile aynı model: donmuş tur → süre işlemez;
+  // yavaşlatılmış oyuncunun turu → geçen süre ×1.5 erir.
+  let elapsed = Math.max(0, nowMs - Date.parse(state.turnStartedAt));
+  if (state.turnFrozen) elapsed = 0;
+  else if (running1 ? state.turnSlowP1 : state.turnSlowP2) elapsed = Math.floor(elapsed * 1.5);
   return {
     clock1Ms: running1 ? Math.max(0, state.clock1Ms - elapsed) : state.clock1Ms,
     clock2Ms: running1 ? state.clock2Ms : Math.max(0, state.clock2Ms - elapsed),

@@ -8,19 +8,22 @@ import {
   displayClocks,
   matchRowToState,
   presenceRowToInfo,
+  protocolUseRowToUse,
   type GuessRow,
   type MatchRow,
   type PresenceRow,
+  type ProtocolUseRow,
 } from './mapping';
 import {
   claimTimeout,
   fetchGuesses,
   fetchMatchState,
   fetchPresence,
+  fetchProtocolUses,
   heartbeat,
   OnlineError,
 } from './matchService';
-import type { MatchState, OnlineGuess, PresenceInfo } from './types';
+import type { MatchState, OnlineGuess, PresenceInfo, ProtocolUse } from './types';
 
 /** Heartbeat aralığı (maç setup/active iken). */
 const HEARTBEAT_MS = 5_000;
@@ -53,6 +56,19 @@ export type UseMatchResult = {
   /** Rakipten gelen son emoji (kendi yayınların filtrelenir). nonce her gelişte
    *  artar; tüketici aynı emoji tekrarında bile pop animasyonunu yenileyebilir. */
   incomingEmoji: { emoji: string; nonce: number } | null;
+  /** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez),
+   *  realtime güncel. Şerit "kullanıldı" durumu buradan türetilir. */
+  protocolUses: ProtocolUse[];
+  /** Az önce düşen protokol olayı (yalnız realtime INSERT'ten; geçmiş kayıtlar
+   *  tetiklemez): rakibin kullanımı (her outcome) YA DA kendi protokolünün
+   *  Zorla Harca ile tüketilmesi (outcome='wasted', satır sana ait). nonce
+   *  her gelişte artar — kısa bildirim için. */
+  incomingProtocolUse: {
+    player: string;
+    protocolId: string;
+    outcome: ProtocolUse['outcome'];
+    nonce: number;
+  } | null;
 };
 
 /**
@@ -75,6 +91,15 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // Rakipten gelen efemeral emoji (broadcast); nonce ile her geliş ayrışır.
   const [incomingEmoji, setIncomingEmoji] = useState<{ emoji: string; nonce: number } | null>(null);
   const emojiNonceRef = useRef(0);
+  // Protokol kullanım kayıtları (realtime + refresh) ve canlı olay sinyali.
+  const [protocolUses, setProtocolUses] = useState<ProtocolUse[]>([]);
+  const [incomingProtocolUse, setIncomingProtocolUse] = useState<{
+    player: string;
+    protocolId: string;
+    outcome: ProtocolUse['outcome'];
+    nonce: number;
+  } | null>(null);
+  const protoNonceRef = useRef(0);
 
   const myIdRef = useRef<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -129,10 +154,11 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const refresh = useCallback(async () => {
     if (!matchId) return;
     try {
-      const [state, guessList, presenceList] = await Promise.all([
+      const [state, guessList, presenceList, useList] = await Promise.all([
         fetchMatchState(matchId),
         fetchGuesses(matchId),
         fetchPresence(matchId),
+        fetchProtocolUses(matchId),
       ]);
       if (!mountedRef.current) return;
       // Tam fetch'le gelen adları cache'e işle (realtime birleşmeleri kullanır).
@@ -144,6 +170,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       setMatch(state);
       setGuesses(guessList);
       setPresence(Object.fromEntries(presenceList.map((p) => [p.player, p])));
+      setProtocolUses(useList);
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
@@ -241,6 +268,33 @@ export function useMatch(matchId: string | null): UseMatchResult {
             if (!row?.player) return;
             const info = presenceRowToInfo(row);
             setPresence((prev) => ({ ...prev, [info.player]: info }));
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'match_protocol_uses',
+            filter: `match_id=eq.${matchId}`,
+          },
+          (payload) => {
+            const use = protocolUseRowToUse(payload.new as ProtocolUseRow);
+            setProtocolUses((prev) =>
+              prev.some((u) => u.id === use.id) ? prev : [...prev, use],
+            );
+            // Bildirim: rakibin canlı kullanımı (her outcome) YA DA kendi
+            // protokolünün harcanması (wasted satırı kurbana yazılır). Kendi
+            // normal kullanımın RPC dönüşüyle zaten onaylanır.
+            if (use.player !== myIdRef.current || use.outcome === 'wasted') {
+              protoNonceRef.current += 1;
+              setIncomingProtocolUse({
+                player: use.player,
+                protocolId: use.protocolId,
+                outcome: use.outcome,
+                nonce: protoNonceRef.current,
+              });
+            }
           },
         )
         .on('broadcast', { event: 'emoji' }, ({ payload }) => {
@@ -386,5 +440,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
     refresh,
     sendEmoji,
     incomingEmoji,
+    protocolUses,
+    incomingProtocolUse,
   };
 }

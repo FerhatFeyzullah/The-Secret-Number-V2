@@ -82,8 +82,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 11,
+    borderRadius: 12,
+    paddingVertical: 8,
     paddingHorizontal: 16,
   },
   dot: {
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     fontFamily: mono,
     letterSpacing: 2,

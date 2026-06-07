@@ -4,9 +4,11 @@ import {
   guessRowToGuess,
   matchRowToState,
   presenceRowToInfo,
+  protocolUseRowToUse,
   type GuessRow,
   type MatchRow,
   type PresenceRow,
+  type ProtocolUseRow,
 } from './mapping';
 import type {
   FirstTurnMode,
@@ -22,6 +24,11 @@ import type {
   OnlineGuess,
   PlayerRole,
   PresenceInfo,
+  ProtocolHand,
+  ProtocolHint,
+  ProtocolUse,
+  ProtocolUseOutcome,
+  ProtocolUseOutcomeKind,
 } from './types';
 
 /** RPC'lerin fırlattığı, sunucu hata koduna göre Türkçe mesaj taşıyan hata. */
@@ -30,6 +37,8 @@ export class OnlineError extends Error {
     /** Sunucudaki raise exception metni (ör. not_your_turn) ya da yerel kod. */
     readonly code: string,
     message: string,
+    /** Tanınmayan hatalarda sunucunun ham mesajı (teşhis için; UI detay gösterir). */
+    readonly serverMessage?: string,
   ) {
     super(message);
     this.name = 'OnlineError';
@@ -63,11 +72,36 @@ const ERROR_MESSAGES: Record<string, string> = {
   profile_not_found: 'Profil bulunamadı.',
   invalid_clock: 'Geçersiz süre seçimi.',
   invalid_first_turn: 'Geçersiz ilk sıra seçimi.',
+  // Protokol ekonomisi (Faz 2a)
+  protocol_not_found: 'Protokol bulunamadı.',
+  already_owned: 'Bu protokole zaten sahipsin.',
+  level_too_low: 'Seviyen bu protokol için yetersiz.',
+  insufficient_veri: 'Yetersiz Veri.',
+  not_owned: 'Sahip olmadığın bir protokol seçtin.',
+  // Protokol seçimi / Destiny's Hand (Faz 3 / Adım 3)
+  not_in_select: 'Seçim fazı bitti.',
+  no_hand: 'El bulunamadı.',
+  not_in_hand: 'Elinde olmayan bir protokol seçtin.',
+  invalid_selection: 'Geçersiz seçim.',
+  too_many_selected: 'Yuva limitini aştın.',
+  not_both_present: 'İki oyuncu da hazır değil.',
+  select_not_expired: 'Seçim süresi henüz dolmadı.',
+  // Protokol kullanımı (Faz 3 / Adım 4)
+  not_protocol_match: 'Bu maçta protokol kullanılamaz.',
+  protocol_not_selected: 'Bu protokol bu maç için seçili değil.',
+  protocol_already_used: 'Bu protokolü bu maçta zaten kullandın.',
+  protocol_not_implemented: 'Bu protokol henüz aktif değil.',
+  time_expired: 'Süren doldu, protokol kullanılamaz.',
+  no_digits_left: 'Elenecek rakam kalmadı.',
+  invalid_payload: 'Geçersiz seçim: rakam 1-9, pozisyon 1-3 olmalı.',
+  silenced: 'Susturuldun — bu sıra protokol kullanamazsın.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
-  const code = serverMessage && serverMessage in ERROR_MESSAGES ? serverMessage : 'unknown';
-  return new OnlineError(code, ERROR_MESSAGES[code]);
+  const known = !!serverMessage && serverMessage in ERROR_MESSAGES;
+  const code = known ? (serverMessage as string) : 'unknown';
+  // Tanınmayan hatada sunucunun ham metnini sakla (yutma — teşhis için yüzeye çıkar).
+  return new OnlineError(code, ERROR_MESSAGES[code], known ? undefined : serverMessage ?? undefined);
 }
 
 function requireClient(): NonNullable<typeof supabase> {
@@ -78,7 +112,13 @@ function requireClient(): NonNullable<typeof supabase> {
 async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
   const client = requireClient();
   const { data, error } = await client.rpc(fn, args);
-  if (error) throw toOnlineError(error.message);
+  if (error) {
+    // Teşhis: ham sunucu hatasını geliştirme konsoluna düş (UI'da yutulmasın).
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn(`[online] RPC "${fn}" hatası:`, error.message, error);
+    }
+    throw toOnlineError(error.message);
+  }
   return data as T;
 }
 
@@ -105,6 +145,7 @@ type OutcomePayload = {
   current_turn?: string | null;
   clock1_ms: number;
   clock2_ms: number;
+  fogged?: boolean;
 };
 
 function toTicket(p: TicketPayload): MatchTicket {
@@ -126,12 +167,136 @@ function toOutcome(p: OutcomePayload): GuessOutcome {
     currentTurn: p.current_turn ?? null,
     clock1Ms: p.clock1_ms,
     clock2Ms: p.clock2_ms,
+    // Yalnız işaretliyken eklenir (eski dönüş/teste şekil-uyumlu).
+    ...(p.fogged ? { fogged: true } : {}),
   };
 }
 
-/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç. */
+/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç (tek tur). */
 export async function findOrCreateQuickMatch(): Promise<MatchTicket> {
   return toTicket(await callRpc<TicketPayload>('find_or_create_quick_match'));
+}
+
+/** Protokol maçı: ayrı kuyruk, Best of 3 (win_target=2). Quick'ten ayrı eşleşir. */
+export async function findOrCreateProtocolMatch(): Promise<MatchTicket> {
+  return toTicket(await callRpc<TicketPayload>('find_or_create_protocol_match'));
+}
+
+/** Destiny's Hand: çağıranın dağıtılan eli + seçimi + yuva sayısı + kendi
+ *  kullanımları/elenenleri/ipuçları. Rakibinkiler ASLA gelmez (sunucu RLS). */
+export async function getMyHand(matchId: string): Promise<ProtocolHand> {
+  const p = await callRpc<{
+    hand?: string[];
+    selected?: string[];
+    slots?: number;
+    uses?: { protocol_id: string; round: number; outcome?: ProtocolUseOutcomeKind }[];
+    eliminations?: Record<string, number[]>;
+    hints?: Record<string, ProtocolHint[]>;
+    shield_armed?: boolean;
+    reflect_armed?: boolean;
+  }>('get_my_hand', { p_match_id: matchId });
+  return {
+    hand: p.hand ?? [],
+    selected: p.selected ?? [],
+    slots: Number(p.slots ?? 2),
+    uses: (p.uses ?? []).map((u) => ({
+      protocolId: u.protocol_id,
+      round: u.round,
+      ...(u.outcome ? { outcome: u.outcome } : {}),
+    })),
+    eliminations: p.eliminations ?? {},
+    hints: p.hints ?? {},
+    shieldArmed: p.shield_armed ?? false,
+    reflectArmed: p.reflect_armed ?? false,
+  };
+}
+
+/** Maç içi protokol kullanımı (use_protocol RPC). TÜM doğrulama + ETKİ sunucuda;
+ *  istemci yalnız sonucu okur. (Adı bilerek "use" ile başlamıyor — React hook
+ *  değildir.) payload 4a'da kullanılmaz; parametreli protokoller için ayrılmıştır. */
+export async function activateProtocol(
+  matchId: string,
+  protocolId: string,
+  payload?: Record<string, unknown>,
+): Promise<ProtocolUseOutcome> {
+  const p = await callRpc<{
+    match_id: string;
+    protocol_id: string;
+    round: number;
+    consumed?: boolean;
+    clock1_ms?: number;
+    clock2_ms?: number;
+    eliminated_digit?: number;
+    eliminated?: number[];
+    digits?: string;
+    feedback?: GuessFeedback;
+    no_guess?: boolean;
+    digit?: number;
+    position?: number;
+    match?: boolean;
+    revealed_digit?: number;
+    stolen_ms?: number;
+    frozen?: boolean;
+    slowed?: boolean;
+    outcome?: ProtocolUseOutcomeKind;
+    blocked?: boolean;
+    reflected?: boolean;
+    wasted_protocol?: string;
+    no_target_protocol?: boolean;
+    armed?: 'shield' | 'reflect';
+  }>('use_protocol', {
+    p_match_id: matchId,
+    p_protocol_id: protocolId,
+    p_payload: payload ?? null,
+  });
+  return {
+    matchId: p.match_id,
+    protocolId: p.protocol_id,
+    round: p.round,
+    ...(p.consumed != null ? { consumed: p.consumed } : {}),
+    ...(p.clock1_ms != null ? { clock1Ms: p.clock1_ms } : {}),
+    ...(p.clock2_ms != null ? { clock2Ms: p.clock2_ms } : {}),
+    ...(p.eliminated_digit != null ? { eliminatedDigit: p.eliminated_digit } : {}),
+    ...(p.eliminated ? { eliminated: p.eliminated } : {}),
+    ...(p.digits != null ? { digits: p.digits } : {}),
+    ...(p.feedback != null ? { feedback: p.feedback } : {}),
+    ...(p.no_guess != null ? { noGuess: p.no_guess } : {}),
+    ...(p.digit != null ? { digit: p.digit } : {}),
+    ...(p.position != null ? { position: p.position } : {}),
+    ...(p.match != null ? { match: p.match } : {}),
+    ...(p.revealed_digit != null ? { revealedDigit: p.revealed_digit } : {}),
+    ...(p.stolen_ms != null ? { stolenMs: p.stolen_ms } : {}),
+    ...(p.frozen != null ? { frozen: p.frozen } : {}),
+    ...(p.slowed != null ? { slowed: p.slowed } : {}),
+    ...(p.outcome != null ? { outcome: p.outcome } : {}),
+    ...(p.blocked != null ? { blocked: p.blocked } : {}),
+    ...(p.reflected != null ? { reflected: p.reflected } : {}),
+    ...(p.wasted_protocol != null ? { wastedProtocol: p.wasted_protocol } : {}),
+    ...(p.no_target_protocol != null ? { noTargetProtocol: p.no_target_protocol } : {}),
+    ...(p.armed != null ? { armed: p.armed } : {}),
+  };
+}
+
+/** Maç başı protokol seçimini sunucuya kilitler (elde mi / yuva ≤ mı sunucuda
+ *  doğrulanır; eksikse eldeki kartlardan rastgele tamamlanır). */
+export async function setProtocolSelection(
+  matchId: string,
+  ids: string[],
+): Promise<{ status: MatchStatus; selected: string[] }> {
+  const p = await callRpc<{ status: MatchStatus; selected?: string[] }>('set_protocol_selection', {
+    p_match_id: matchId,
+    p_ids: ids,
+  });
+  return { status: p.status, selected: p.selected ?? [] };
+}
+
+/** Seçim süresi dolunca eksik seçimleri sunucuda rastgele tamamlatıp belirlemeye
+ *  geçirir (idempotent; iki istemci de güvenle çağırabilir). */
+export async function resolveProtocolSelect(matchId: string): Promise<{ status: MatchStatus }> {
+  const p = await callRpc<{ status: MatchStatus }>('resolve_protocol_select', {
+    p_match_id: matchId,
+  });
+  return { status: p.status };
 }
 
 /** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra ayarlarıyla.
@@ -259,6 +424,12 @@ export async function getMyRank(): Promise<MyRank> {
     wins: number;
     played?: number;
     streak?: number;
+    xp?: number;
+    level?: number;
+    veri?: number;
+    level_floor?: number | null;
+    level_next?: number | null;
+    owned_protocols?: string[] | null;
   }>('get_my_rank');
   return {
     rank: Number(p.rank),
@@ -268,8 +439,26 @@ export async function getMyRank(): Promise<MyRank> {
     // Migration 20260606000000 öncesi sunucuya karşı güvenli varsayılanlar.
     played: Number(p.played ?? 0),
     streak: Number(p.streak ?? 0),
+    // Migration 20260607000000 öncesi sunucuya karşı güvenli varsayılanlar.
+    xp: Number(p.xp ?? 0),
+    level: Number(p.level ?? 1),
+    veri: Number(p.veri ?? 0),
+    levelFloor: Number(p.level_floor ?? 0),
+    levelNext: p.level_next == null ? null : Number(p.level_next),
+    // Migration 20260607000002 (protokoller) öncesi güvenli varsayılan.
+    owned: p.owned_protocols ?? [],
   };
 }
+
+/** Protokolü Veri ile açar (seviye/Veri/sahiplik sunucuda doğrulanır, atomik).
+ *  Dönen değer: güncel Veri + sahip olunan protokol id'leri. */
+export async function unlockProtocol(
+  id: string,
+): Promise<{ veri: number; owned: string[] }> {
+  const p = await callRpc<{ veri: number; owned: string[] }>('unlock_protocol', { p_id: id });
+  return { veri: Number(p.veri), owned: p.owned ?? [] };
+}
+
 
 /** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).
  *  Çağıranın bakış açısından kendi ve rakip sayısı; satır yoksa null.
@@ -338,4 +527,17 @@ export async function fetchPresence(matchId: string): Promise<PresenceInfo[]> {
     .eq('match_id', matchId);
   if (error) throw toOnlineError(error.message);
   return ((data ?? []) as PresenceRow[]).map(presenceRowToInfo);
+}
+
+/** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez).
+ *  Şerit "kullanıldı" durumu + yeniden bağlanınca senkron için. */
+export async function fetchProtocolUses(matchId: string): Promise<ProtocolUse[]> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from('match_protocol_uses')
+    .select('*')
+    .eq('match_id', matchId)
+    .order('id', { ascending: true });
+  if (error) throw toOnlineError(error.message);
+  return ((data ?? []) as ProtocolUseRow[]).map(protocolUseRowToUse);
 }

@@ -4,11 +4,13 @@ import {
   cancelWaiting,
   claimTimeout,
   findOrCreateQuickMatch,
+  getMyRank,
   joinPrivateRoom,
   leaveMatch,
   makeGuess,
   OnlineError,
   setSecret,
+  unlockProtocol,
 } from './matchService';
 
 jest.mock('../supabase', () => ({
@@ -167,5 +169,97 @@ describe('leaveMatch', () => {
       left: true,
       result: 'forfeit',
     });
+  });
+});
+
+describe('getMyRank', () => {
+  it('xp/level/veri + ilerleme eşiklerini MyRank olarak eşler', async () => {
+    rpcResolves({
+      rank: 3,
+      username: 'vavi',
+      rating: 1030,
+      wins: 4,
+      played: 7,
+      streak: 2,
+      xp: 435,
+      level: 4,
+      veri: 325,
+      level_floor: 420,
+      level_next: 640,
+    });
+    await expect(getMyRank()).resolves.toEqual({
+      rank: 3,
+      username: 'vavi',
+      rating: 1030,
+      wins: 4,
+      played: 7,
+      streak: 2,
+      xp: 435,
+      level: 4,
+      veri: 325,
+      levelFloor: 420,
+      levelNext: 640,
+      owned: [],
+    });
+    expect(rpcMock).toHaveBeenCalledWith('get_my_rank', undefined);
+  });
+
+  it('maks seviyede level_next=null korunur', async () => {
+    rpcResolves({
+      rank: 1,
+      username: 'vavi',
+      rating: 1500,
+      wins: 30,
+      played: 40,
+      streak: 5,
+      xp: 2500,
+      level: 10,
+      veri: 2400,
+      level_floor: 2340,
+      level_next: null,
+    });
+    await expect(getMyRank()).resolves.toMatchObject({ level: 10, levelNext: null });
+  });
+
+  it('eski sunucuya (alanlar yok) karşı güvenli varsayılanlara düşer', async () => {
+    rpcResolves({ rank: 5, username: 'vavi', rating: 990, wins: 1 });
+    await expect(getMyRank()).resolves.toEqual({
+      rank: 5,
+      username: 'vavi',
+      rating: 990,
+      wins: 1,
+      played: 0,
+      streak: 0,
+      xp: 0,
+      level: 1,
+      veri: 0,
+      levelFloor: 0,
+      levelNext: null,
+      owned: [],
+    });
+  });
+
+  it('owned_protocols alanını eşler', async () => {
+    rpcResolves({
+      rank: 2,
+      username: 'vavi',
+      rating: 1100,
+      wins: 5,
+      owned_protocols: ['time_add', 'info_eliminate', 'def_shield'],
+    });
+    await expect(getMyRank()).resolves.toMatchObject({
+      owned: ['time_add', 'info_eliminate', 'def_shield'],
+    });
+  });
+});
+
+describe('unlockProtocol', () => {
+  it('unlock_protocol dönüşünü eşler', async () => {
+    rpcResolves({ id: 'def_shield', veri: 50, owned: ['time_add', 'info_eliminate', 'def_shield'] });
+    await expect(unlockProtocol('def_shield')).resolves.toEqual({
+      veri: 50,
+      owned: ['time_add', 'info_eliminate', 'def_shield'],
+    });
+    expect(rpcMock).toHaveBeenCalledWith('unlock_protocol', { p_id: 'def_shield' });
   });
 });

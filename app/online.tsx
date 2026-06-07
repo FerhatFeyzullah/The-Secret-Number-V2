@@ -6,6 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useProfile } from '@/auth';
 import {
   createPrivateRoom,
+  findOrCreateProtocolMatch,
   findOrCreateQuickMatch,
   joinPrivateRoom,
   leaveMatch,
@@ -41,6 +42,10 @@ type Phase =
 /** Rakip bulunamadan önce beklenecek üst sınır. */
 const SEARCH_TIMEOUT_SEC = 60;
 
+/** Eşleşme (VS) ekranının gösterim süresi: el sıkışması otomatik, manuel onay yok.
+ *  Sunucu mark_ready pencerelerine aynı tamponu ekler (20260607000010). */
+const MATCH_FOUND_HOLD_MS = 7000;
+
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
 
@@ -56,12 +61,17 @@ export default function OnlineScreen() {
   const [joinBusy, setJoinBusy] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // Aranan/katılınan mod: maç satırı yüklenmeden önce VS ekranında YANLIŞ
+  // ("Hızlı Maç") etiket görünmesin diye akışı başlatan aksiyondan türetilir.
+  const [pendingMode, setPendingMode] = useState<MatchMode>('quick');
+  // VS ekranı en az MATCH_FOUND_HOLD_MS gösterildi mi (otomatik geçiş kapısı).
+  const [vsHoldDone, setVsHoldDone] = useState(false);
 
   // Canlı maç durumu: rakip katılınca status 'waiting' → 'setup' olur.
   const { match } = useMatch(matchId);
 
   // Lobi akışında sahiplenilen CANLI (waiting/setup) maçı izle: ekran
-  // beklenmedik şekilde terk edilirse (donanım geri tuşu vb.) kapatılır.
+  // beklenmedik şekilde terk edilirse (cihaz geri tuşu vb.) kapatılır.
   // leave_match her fazı doğru kapattığı için setup'a geçmiş maç da sızmaz.
   const liveMatchRef = useRef<string | null>(null);
   // Kendi çıkışımız: realtime'dan gelen cancelled'ı "rakip ayrıldı" sanma.
@@ -89,10 +99,15 @@ export default function OnlineScreen() {
     setError(null);
   }, []);
 
-  // Rakip katıldı (status setup/active) → kutlama anına geç.
+  // Rakip katıldı (status protocol_select/setup/active) → kutlama anına geç.
   useEffect(() => {
     if (phase !== 'searching' && phase !== 'create-room') return;
-    if (match && (match.status === 'setup' || match.status === 'active')) {
+    if (
+      match &&
+      (match.status === 'protocol_select' ||
+        match.status === 'setup' ||
+        match.status === 'active')
+    ) {
       setPhase('match-found');
     }
   }, [match, phase]);
@@ -139,15 +154,22 @@ export default function OnlineScreen() {
   }, [phase]);
 
   // ── Aksiyonlar ────────────────────────────────────────────────
-  const startQuick = useCallback(async () => {
+  // Hızlı Maç (quick, tek tur) ve Protokol Maçı (protocol, Best of 3) aynı arama
+  // akışını paylaşır; yalnızca eşleşme RPC'si değişir.
+  const lastModeRef = useRef<'quick' | 'protocol'>('quick');
+  const startSearch = useCallback(async (m: 'quick' | 'protocol') => {
+    lastModeRef.current = m;
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
     setMatchId(null);
+    setPendingMode(m);
     setPhase('searching');
     try {
-      const ticket = await findOrCreateQuickMatch();
+      const ticket = await (m === 'protocol'
+        ? findOrCreateProtocolMatch()
+        : findOrCreateQuickMatch());
       if (seq !== searchSeqRef.current) {
         // Bu arama iptal edildi/yenilendi: dönen maçı sessizce kapat.
         void leaveMatch(ticket.matchId).catch(() => {});
@@ -160,6 +182,9 @@ export default function OnlineScreen() {
       if (seq === searchSeqRef.current) setError(errMsg(e));
     }
   }, []);
+  const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
+  const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
+  const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
 
   // "Tekrar Oyna" ile gelindiğinde (quick=1) aramayı bir kez otomatik başlat.
   const { quick } = useLocalSearchParams<{ quick?: string }>();
@@ -189,6 +214,7 @@ export default function OnlineScreen() {
     leavingRef.current = false;
     setRoomCode(null);
     setMatchId(null);
+    setPendingMode('private');
     setPhase('create-room');
     try {
       const ticket = await createPrivateRoom(clockMs, firstTurnMode);
@@ -215,22 +241,27 @@ export default function OnlineScreen() {
     if (id) void leaveMatch(id).catch(() => {});
   }, []);
 
-  // Eşleşme ekranındaki İptal: setup'a geçmiş maç sunucuda da kapatılır;
-  // rakip realtime ile "maç iptal" görür.
-  const cancelMatchFound = useCallback(() => {
-    if (leavingRef.current) return; // tek atış
-    leavingRef.current = true;
-    searchSeqRef.current += 1;
+  // Eşleşme (VS) ekranı: el sıkışması OTOMATİK — ekrana girer girmez mark_ready
+  // gönderilir (idempotent boolean; sayı içermez) ve 7 sn'lik hazırlık penceresi
+  // başlar. Manuel "Hazır"/"İptal" yok; rakip ayrılırsa yukarıdaki maç-öldü
+  // izleyicisi lobiye döndürür, ekrandan çıkılırsa unmount temizliği maçı kapatır.
+  useEffect(() => {
+    if (phase !== 'match-found') {
+      setVsHoldDone(false);
+      return;
+    }
     const id = matchIdRef.current;
-    resetToLobby();
-    if (id) void leaveMatch(id).catch(() => {});
-  }, [resetToLobby]);
+    if (id) void markReady(id).catch(() => {});
+    const t = setTimeout(() => setVsHoldDone(true), MATCH_FOUND_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
 
   const joinRoom = useCallback(async (code: string) => {
     const seq = ++searchSeqRef.current;
     setJoinError(null);
     setNotice(null);
     leavingRef.current = false;
+    setPendingMode('private');
     setJoinBusy(true);
     try {
       const ticket = await joinPrivateRoom(code);
@@ -265,23 +296,29 @@ export default function OnlineScreen() {
     }).catch(() => {});
   }, [roomCode]);
 
-  const goSetup = useCallback(() => {
-    const id = matchId;
-    if (!id) return;
-    // "Hazır": present işaretini gönder (iki taraf present olunca sunucu 30 sn'lik
-    // belirleme sayacını başlatır). Karar/zaman sunucuda; sonuç realtime ile gelir.
-    void markReady(id).catch(() => {});
-    // Maçın sahipliği belirleme ekranına geçiyor; unmount temizliği yapma.
+  // 7 sn doldu + maç canlı → sonraki ekrana OTOMATİK geç (protokolde seçim,
+  // diğerlerinde belirleme). Maç bu sırada iptal olduysa yukarıdaki izleyici
+  // önce lobiye döndürür (status cancelled bu efekte hiç uğramaz).
+  useEffect(() => {
+    if (phase !== 'match-found' || !vsHoldDone || !matchId || !match) return;
+    if (match.status !== 'protocol_select' && match.status !== 'setup') return;
+    const toSelect = match.status === 'protocol_select';
+    // Maçın sahipliği bir sonraki ekrana geçiyor; unmount temizliği yapma.
     liveMatchRef.current = null;
     resetToLobby();
-    router.push({ pathname: '/match-setup', params: { matchId: id } });
-  }, [matchId, resetToLobby, router]);
+    router.push(
+      toSelect
+        ? { pathname: '/protocol-select', params: { matchId } }
+        : { pathname: '/match-setup', params: { matchId } },
+    );
+  }, [phase, vsHoldDone, matchId, match, resetToLobby, router]);
 
   // ── Türetilmiş gösterim ───────────────────────────────────────
   const opp = match ? (match.myRole === 'player1' ? match.player2 : match.player1) : null;
   // null = ad henüz yüklenmedi; MatchFoundScreen "…" gösterir (titreşim yok).
   const opponentName = opp?.username ?? null;
-  const mode: MatchMode = match?.mode ?? (roomCode ? 'private' : 'quick');
+  // Maç satırı yüklenmeden önce de DOĞRU etiket: akışı başlatan moddan düş.
+  const mode: MatchMode = match?.mode ?? pendingMode;
 
   let content;
   switch (phase) {
@@ -298,7 +335,7 @@ export default function OnlineScreen() {
     case 'no-opponent':
       content = (
         <NoOpponentScreen
-          onRetry={startQuick}
+          onRetry={retrySearch}
           onCreateRoom={() => setPhase('private-setup')}
           onBack={resetToLobby}
         />
@@ -351,8 +388,6 @@ export default function OnlineScreen() {
           clockMs={match?.clockMs ?? 60000}
           firstTurnMode={match?.firstTurnMode ?? 'random'}
           iAmCreator={match?.myRole === 'player1'}
-          onReady={goSetup}
-          onCancel={cancelMatchFound}
         />
       );
       break;
@@ -362,6 +397,7 @@ export default function OnlineScreen() {
         <LobbyHub
           notice={notice}
           onQuick={startQuick}
+          onProtocol={startProtocol}
           onPrivate={() => setPhase('private-choice')}
           onHowTo={() => router.push('/how-to-play')}
           onBack={() => router.back()}

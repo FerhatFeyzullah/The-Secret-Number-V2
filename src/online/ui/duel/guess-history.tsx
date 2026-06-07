@@ -1,7 +1,13 @@
+import { Feather } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
 import type { GuessFeedback, OnlineGuess } from '@/online';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
+
+/** Sis Perdesi: işaretli tahminin feedback'i bu kadar geç gösterilir
+ *  (yalnız gösterim; sunucu değerlendirmesi aynen yapılmıştır). */
+const FOG_MS = 4000;
 
 /** Sunucu feedback'ini çip etiketi + rengine çevirir.
  *  Pozisyon bilgisi YOK — yalnızca doğru rakam sayısı / sıra bilgisi. */
@@ -32,12 +38,37 @@ function FeedbackChip({ feedback }: { feedback: GuessFeedback }) {
   );
 }
 
+/** Sisli tahmin: feedback 4 sn maskelenir, sonra normal çip açılır. */
+function FoggedAwareChip({ entry }: { entry: OnlineGuess }) {
+  const [, setRevealed] = useState(0);
+  const age = Date.now() - Date.parse(entry.createdAt);
+  const masked = !!entry.fogged && age < FOG_MS;
+  useEffect(() => {
+    if (!masked) return;
+    const t = setTimeout(() => setRevealed((x) => x + 1), FOG_MS - age + 60);
+    return () => clearTimeout(t);
+    // age her render değişir; maske bir kez açılır — yalnız masked izlenir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [masked, entry.id]);
+  if (masked) {
+    return (
+      <View style={[styles.chip, styles.fogChip]}>
+        <Feather name="cloud" size={9} color={colors.dim} />
+        <Text style={[styles.chipText, { color: colors.dim }]} numberOfLines={1}>
+          sis perdesi…
+        </Text>
+      </View>
+    );
+  }
+  return <FeedbackChip feedback={entry.feedback} />;
+}
+
 function GuessRow({ entry, attempt, top }: { entry: OnlineGuess; attempt: number; top: boolean }) {
   return (
     <View style={[styles.row, top ? styles.rowTop : styles.rowIdle]}>
       <Text style={styles.attempt}>{attempt}</Text>
       <Text style={styles.digits}>{entry.digits.split('').join(' ')}</Text>
-      <FeedbackChip feedback={entry.feedback} />
+      <FoggedAwareChip entry={entry} />
     </View>
   );
 }
@@ -79,7 +110,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingLeft: 4,
-    marginBottom: 7,
+    marginBottom: 5,
   },
   headerText: {
     fontSize: 9,
@@ -99,17 +130,17 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   listContent: {
-    gap: 5,
-    paddingBottom: 8,
+    gap: 4,
+    paddingBottom: 6,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderRadius: 11,
+    borderRadius: 10,
   },
   rowTop: {
     backgroundColor: cyanAlpha(0.06),
@@ -127,12 +158,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   digits: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: colors.text,
     fontFamily: mono,
     letterSpacing: 3,
-    minWidth: 68,
+    minWidth: 60,
   },
   chip: {
     flexShrink: 1,
@@ -141,13 +172,17 @@ const styles = StyleSheet.create({
     gap: 5,
     borderWidth: 1,
     borderRadius: 20,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
   },
   chipDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
+  },
+  fogChip: {
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   chipText: {
     fontSize: 9,
@@ -158,7 +193,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     textAlign: 'center',
-    paddingVertical: 18,
+    paddingVertical: 12,
     fontSize: 10,
     color: withAlpha(colors.dim, 0.4),
     fontFamily: mono,

@@ -1,14 +1,15 @@
 /** Sunucudaki matches.status değerleri. */
 export type MatchStatus =
   | 'waiting'
+  | 'protocol_select'
   | 'setup'
   | 'active'
   | 'finished'
   | 'cancelled'
   | 'abandoned';
 
-/** Maç modu: hızlı eşleşme ya da kodlu özel oda. */
-export type MatchMode = 'quick' | 'private';
+/** Maç modu: hızlı eşleşme (tek tur), protokol maçı (Best of 3) ya da özel oda. */
+export type MatchMode = 'quick' | 'protocol' | 'private';
 
 /** Özel odada ilk tahmin sırası: rastgele ya da oda kuran (player1) başlar. */
 export type FirstTurnMode = 'random' | 'creator';
@@ -56,6 +57,13 @@ export type MatchState = {
   player2: MatchPlayer | null;
   /** Çağıranın rolü (maçın oyuncusu değilse state hiç üretilmez). */
   myRole: PlayerRole;
+  /** Maçı kazanmak için gereken tur sayısı (quick=1, protocol=2 → Best of 3). */
+  winTarget: number;
+  /** Şu anki tur (1..). Her turun kendi gizli sayısı/tahminleri vardır. */
+  currentRound: number;
+  /** player1/player2'nin kazandığı tur sayısı. */
+  p1RoundWins: number;
+  p2RoundWins: number;
   /** Sırası gelen oyuncunun id'si (active dışında null). */
   currentTurn: string | null;
   clock1Ms: number;
@@ -66,9 +74,24 @@ export type MatchState = {
   firstTurnMode: FirstTurnMode;
   /** Sıranın başladığı sunucu zamanı (ISO); görsel geri sayım bundan türetilir. */
   turnStartedAt: string | null;
+  /** Dondur (time_freeze): mevcut turun oyuncusunun saati işlemiyor. */
+  turnFrozen: boolean;
+  /** Yavaşlat (time_slow): player1/player2'nin mevcut-veya-sıradaki turu 1.5×
+   *  akar; o tur bitince sunucu söndürür. Görsel saat hesabına yansır. */
+  turnSlowP1: boolean;
+  turnSlowP2: boolean;
+  /** Sis Perdesi: o oyuncunun SONRAKİ tahmini gecikmeli gösterilir. */
+  fogP1: boolean;
+  fogP2: boolean;
+  /** Susturma: o oyuncu (sıradaki turu bitene kadar) protokol kullanamaz. */
+  silencedP1: boolean;
+  silencedP2: boolean;
   /** Sayı belirleme fazının bitiş anı (ISO). İki taraf da "Hazır" (present)
    *  olunca kurulur; o ana kadar null (sayaç başlamaz). */
   setupDeadline: string | null;
+  /** Protokol seçim fazının (Destiny's Hand) bitiş anı (ISO); yalnız
+   *  status='protocol_select' iken, iki taraf present olunca kurulur (20 sn). */
+  selectDeadline: string | null;
   /** present = "Hazır'a bastı / belirleme ekranına girdi" (mark_ready).
    *  İki taraf da present olunca setup_deadline (30 sn) başlar. Yalnızca boolean. */
   player1Present: boolean;
@@ -91,7 +114,107 @@ export type OnlineGuess = {
   guesser: string;
   digits: string;
   feedback: GuessFeedback;
+  /** Tahminin yapıldığı tur (Best of 3'te tura göre filtrelenir). */
+  round: number;
   createdAt: string;
+  /** Sis Perdesi: bu tahminin feedback'i 4 sn maskeyle gösterilir (yalnız
+   *  gösterim; değerlendirme sunucuda aynen yapılmıştır). */
+  fogged?: boolean;
+};
+
+/** Bilgi protokollerinin verdiği kalıcı ipuçları (yalnız çağıranın; tur bazlı).
+ *  readlast: rakibin son tahmini + ALDIĞI feedback (ekstra sızdırma yok) ·
+ *  postest: tek rakam+pozisyon evet/hayır · reveal: sayıdaki bir rakam
+ *  (pozisyonsuz). Gizli sayının tamamını temsil eden hiçbir şekil yoktur. */
+export type ProtocolHint =
+  | { t: 'readlast'; digits: string; feedback: GuessFeedback }
+  | { t: 'postest'; digit: number; pos: number; match: boolean }
+  | { t: 'reveal'; digit: number };
+
+/** Çağıranın protokol maçı eli + seçimi (get_my_hand).
+ *  Rakibin eli/seçimi/elenenleri/ipuçları ASLA gelmez (sunucu RLS). */
+export type ProtocolHand = {
+  /** Sunucuda dağıtılan el (sahip olunanlardan rastgele yuva+3, sahip ile sınırlı). */
+  hand: string[];
+  /** Kilitlenmiş seçim (henüz seçmediyse boş). */
+  selected: string[];
+  /** Seviyeye göre yuva sayısı (Sv1-3 → 2, Sv4+ → 3). */
+  slots: number;
+  /** KENDİ protokol kullanımların (şerit "kullanıldı" durumu; Faz 3 / Adım 4). */
+  uses: { protocolId: string; round: number; outcome?: ProtocolUseOutcomeKind }[];
+  /** Eleme'nin verdiği "sayıda yok" rakamları, tur → rakamlar (yalnız kendi). */
+  eliminations: Record<string, number[]>;
+  /** Bilgi protokolü ipuçları, tur → liste (yalnız kendi; Adım 4b). */
+  hints: Record<string, ProtocolHint[]>;
+  /** Kurulu savunmalar (yalnız kendi; ilk engele kadar bekler; Adım 4c). */
+  shieldArmed: boolean;
+  reflectArmed: boolean;
+};
+
+/** Kullanım kaydının sonucu: applied = etki uygulandı · blocked = hedefin
+ *  Kalkanı blokladı · reflected = hedefin Yansıtması gönderene çevirdi ·
+ *  wasted = Zorla Harca kurbanının protokolü etkisiz tüketildi (satır
+ *  kurbana aittir). */
+export type ProtocolUseOutcomeKind = 'applied' | 'blocked' | 'reflected' | 'wasted';
+
+/** Maç içi tek protokol kullanım kaydı (match_protocol_uses; sır içermez —
+ *  iki oyuncu da görür, "rakip X kullandı" bildirimi buradan). */
+export type ProtocolUse = {
+  id: number;
+  matchId: string;
+  player: string;
+  protocolId: string;
+  round: number;
+  createdAt: string;
+  /** Counter zinciri sonucu (Adım 4c); eski kayıtlarda 'applied'. */
+  outcome: ProtocolUseOutcomeKind;
+};
+
+/** use_protocol dönüşü: yalnız çağırana ait güvenli sonuç.
+ *  Etkiye göre alanlar dolar; gizli sayının tamamı hiçbir alanda yoktur. */
+export type ProtocolUseOutcome = {
+  matchId: string;
+  protocolId: string;
+  round: number;
+  /** false → etki boşa gitti, hak HARCANMADI (örn. readlast'ta rakip
+   *  tahminsiz). Yokken true varsayılır. */
+  consumed?: boolean;
+  /** Saat etkileri (time_add/steal/freeze): güncel saatler. */
+  clock1Ms?: number;
+  clock2Ms?: number;
+  /** info_eliminate: rakibin BU TURDAKİ sayısında OLMAYAN rakam. */
+  eliminatedDigit?: number;
+  /** info_eliminate: bu turda verilen tüm "yok" rakamları. */
+  eliminated?: number[];
+  /** info_readlast: rakibin son tahmini + aldığı feedback. */
+  digits?: string;
+  feedback?: GuessFeedback;
+  /** info_readlast: rakip bu turda henüz tahmin yapmadı (consumed=false). */
+  noGuess?: boolean;
+  /** info_postest: sorulan rakam/pozisyon + evet/hayır. */
+  digit?: number;
+  position?: number;
+  match?: boolean;
+  /** info_reveal: rakibin sayısında VAR olan bir rakam (pozisyonsuz). */
+  revealedDigit?: number;
+  /** time_steal: gerçekten çalınan süre (floor: rakip 5 sn altına inmez). */
+  stolenMs?: number;
+  /** time_freeze: bu turda kendi saatin donduruldu. */
+  frozen?: boolean;
+  /** time_slow: rakibin sıradaki turu 1.5× akacak. */
+  slowed?: boolean;
+  /** Engel sınıfı: counter zinciri sonucu (applied/blocked/reflected). */
+  outcome?: ProtocolUseOutcomeKind;
+  /** Engel: hedefin Kalkanı blokladı (Kalkan + engel tükendi). */
+  blocked?: boolean;
+  /** Engel: hedefin Yansıtması gönderene çevirdi (etki SANA uygulandı). */
+  reflected?: boolean;
+  /** disrupt_waste: hedefte tüketilen protokol id'si. */
+  wastedProtocol?: string;
+  /** disrupt_waste: hedefin harcanacak protokolü yoktu (consumed=false). */
+  noTargetProtocol?: boolean;
+  /** def_shield / def_reflect: savunma kuruldu. */
+  armed?: 'shield' | 'reflect';
 };
 
 /** Eşleşme RPC'lerinin (quick/private) ortak dönüşü. */
@@ -114,6 +237,8 @@ export type GuessOutcome = {
   currentTurn: string | null;
   clock1Ms: number;
   clock2Ms: number;
+  /** Sis Perdesi: bu tahminin feedback'i gecikmeli gösterilmeli (4 sn). */
+  fogged?: boolean;
 };
 
 /** Maç sonu gizli sayı ifşası (get_match_reveal).
@@ -145,6 +270,18 @@ export type MyRank = {
   played: number;
   /** Güncel galibiyet serisi (yalnızca Hızlı Maç; sunucuda tutulur). */
   streak: number;
+  /** Toplam deneyim puanı; YALNIZCA sunucuda artar (kazanan +90, kaybeden +25). */
+  xp: number;
+  /** Seviye 1-10; XP eşik tablosundan sunucuda hesaplanır. */
+  level: number;
+  /** Veri parası; YALNIZCA sunucuda artar (kazanan +70, kaybeden +15). */
+  veri: number;
+  /** Mevcut seviyenin alt XP eşiği (ilerleme çubuğunun 0 noktası). */
+  levelFloor: number;
+  /** Sonraki seviyenin XP eşiği; maks seviyede (10) null. */
+  levelNext: number | null;
+  /** Sahip olunan protokol id'leri (Faz 2a). */
+  owned: string[];
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */

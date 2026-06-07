@@ -14,9 +14,15 @@ export type {
   OnlineGuess,
   PlayerRole,
   PresenceInfo,
+  ProtocolHand,
+  ProtocolHint,
+  ProtocolUse,
+  ProtocolUseOutcome,
+  ProtocolUseOutcomeKind,
 } from './types';
 export { displayClocks, feedbackToGuessResult } from './mapping';
 export {
+  activateProtocol,
   cancelSetupTimeout,
   cancelWaiting,
   claimTimeout,
@@ -24,10 +30,13 @@ export {
   fetchGuesses,
   fetchMatchState,
   fetchPresence,
+  fetchProtocolUses,
+  findOrCreateProtocolMatch,
   findOrCreateQuickMatch,
   forfeitDisconnect,
   getLeaderboard,
   getMatchReveal,
+  getMyHand,
   getMyRank,
   heartbeat,
   joinPrivateRoom,
@@ -35,6 +44,10 @@ export {
   makeGuess,
   markReady,
   OnlineError,
+  resolveProtocolSelect,
+  setProtocolSelection,
   setSecret,
+  unlockProtocol,
 } from './matchService';
 export { useMatch, type UseMatchResult } from './useMatch';
+export { levelTitle, isEliteLevel, MAX_LEVEL, ELITE_LEVEL } from './progression';

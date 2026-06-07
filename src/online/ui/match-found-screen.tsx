@@ -1,16 +1,16 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native';
 
 import type { FirstTurnMode, MatchMode } from '@/online/types';
-import { GlassButton } from '@/ui/glass';
 import { colors, cyanAlpha, mono } from '@/ui/theme';
 import { Avatar } from './parts';
 
 const clockLabel = (ms: number) => (ms === 120000 ? '2 dk' : ms === 90000 ? '1.5 dk' : '1 dk');
 
 /** Kısa kutlama anı: VS açılışı + gerçek oyuncu adları + maç bilgisi.
- *  "Hazır" ile belirleme ekranına geçilir (gizli/otomatik timer yok). */
+ *  El sıkışması OTOMATİK: ekran ~7 sn gösterilir, sonraki ekrana kendiliğinden
+ *  geçilir (mark_ready'yi üst akış gönderir) — manuel "Hazır"/"İptal" yok. */
 export function MatchFoundScreen({
   myName,
   opponentName,
@@ -18,8 +18,6 @@ export function MatchFoundScreen({
   clockMs,
   firstTurnMode,
   iAmCreator,
-  onReady,
-  onCancel,
 }: {
   myName: string;
   /** null = ad henüz yükleniyor; "Rakip"e düşmek yerine "…" gösterilir
@@ -32,8 +30,6 @@ export function MatchFoundScreen({
   firstTurnMode: FirstTurnMode;
   /** Çağıran oda kuran (player1) mı — ilk sıra metnini kişiselleştirir. */
   iAmCreator: boolean;
-  onReady: () => void;
-  onCancel: () => void;
 }) {
   const oppName = opponentName ?? '…';
   const oppInitial = opponentName ? opponentName.charAt(0) : '?';
@@ -57,7 +53,8 @@ export function MatchFoundScreen({
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
   };
 
-  const modeLabel = mode === 'quick' ? 'Hızlı Maç' : 'Özel Oyun';
+  const modeLabel =
+    mode === 'quick' ? 'Hızlı Maç' : mode === 'protocol' ? 'Protokol Maçı' : 'Özel Oyun';
   const turnPhrase =
     firstTurnMode === 'random' ? 'Rastgele' : iAmCreator ? 'Sen başlıyorsun' : 'Rakip başlıyor';
 
@@ -95,7 +92,11 @@ export function MatchFoundScreen({
         ].map((item) => (
           <View key={item.label} style={styles.infoItem}>
             <Text style={styles.infoLabel}>{item.label}</Text>
-            <Text style={styles.infoVal} numberOfLines={1}>
+            <Text
+              style={styles.infoVal}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}>
               {item.val}
             </Text>
           </View>
@@ -109,17 +110,22 @@ export function MatchFoundScreen({
         </Text>
       </Animated.View>
 
+      {mode === 'protocol' ? (
+        <Animated.View style={[styles.firstTurn, rise]}>
+          <Feather name="layers" size={12} color={colors.violet} />
+          <Text style={styles.firstTurnText}>
+            <Text style={[styles.firstTurnVal, { color: colors.violet }]}>Best of 3</Text> · 2 tur
+            kazanan alır
+          </Text>
+        </Animated.View>
+      ) : null}
+
+      {/* Otomatik hazırlık: buton yok, sade yükleme görünümü (≈7 sn). */}
       <Animated.View style={[styles.action, fade]}>
-        <GlassButton
-          label="HAZIR"
-          accent={colors.cyan}
-          variant="fill"
-          icon={<Feather name="play" size={16} color={colors.cyan} />}
-          onPress={onReady}
-        />
-        <Pressable onPress={onCancel} hitSlop={8} style={styles.cancel}>
-          <Text style={styles.cancelText}>İptal</Text>
-        </Pressable>
+        <View style={styles.preparing}>
+          <ActivityIndicator color={colors.cyan} size="small" />
+          <Text style={styles.preparingText}>OYUN HAZIRLANIYOR…</Text>
+        </View>
       </Animated.View>
     </View>
   );
@@ -188,9 +194,10 @@ const styles = StyleSheet.create({
   },
   info: {
     flexDirection: 'row',
-    gap: 28,
+    alignSelf: 'stretch',
+    gap: 12,
     paddingVertical: 16,
-    paddingHorizontal: 26,
+    paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: colors.glass,
     borderWidth: 1,
@@ -200,21 +207,25 @@ const styles = StyleSheet.create({
   firstTurn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    marginBottom: 40,
+    marginBottom: 8,
+    paddingHorizontal: 12,
   },
   firstTurnText: {
+    flexShrink: 1,
     fontSize: 11,
     color: colors.dim,
     fontFamily: mono,
+    textAlign: 'center',
   },
   firstTurnVal: {
     color: colors.amber,
     fontWeight: '800',
   },
   infoItem: {
+    flex: 1,
     alignItems: 'center',
-    maxWidth: 90,
   },
   infoLabel: {
     fontSize: 9,
@@ -234,14 +245,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     gap: 14,
+    marginTop: 28,
   },
-  cancel: {
-    paddingVertical: 4,
+  preparing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
   },
-  cancelText: {
+  preparingText: {
     fontSize: 11,
+    letterSpacing: 3,
     color: colors.dim,
     fontFamily: mono,
-    letterSpacing: 0.5,
   },
 });
