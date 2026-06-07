@@ -15,6 +15,7 @@ import {
   OnlineError,
   useMatch,
   type MatchReveal,
+  type ProtocolHint,
 } from '@/online';
 import { getProtocol } from '@/protocols/catalog';
 import { useSfx, type SfxName } from '@/sfx';
@@ -24,7 +25,9 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 import { DigitPad } from './duel/digit-pad';
 import { GuessHistory } from './duel/guess-history';
+import { HintsBar } from './duel/hints-bar';
 import { PlayerChip } from './duel/player-pod';
+import { PostestPrompt } from './duel/postest-prompt';
 import { ProtocolStrip, type ProtocolTileState } from './duel/protocol-strip';
 import { ResultOverlay } from './duel/result-overlay';
 import { RoundSetup } from './duel/round-setup';
@@ -149,12 +152,14 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
 
   // ── Protokol şeridi (yalnız Protokol Maçı) ────────────────────
-  // Kendi seçili protokollerin + elenen rakamların (get_my_hand). Seçim maç
-  // başında kilitlenir → bir kez çekilir. Rakibin eli/elenenleri zaten gelmez.
+  // Kendi seçili protokollerin + elenen rakamların/ipuçlarının (get_my_hand).
+  // Seçim maç başında kilitlenir → bir kez çekilir. Rakibinkiler zaten gelmez.
   const [myProtocols, setMyProtocols] = useState<string[] | null>(null);
-  // Eleme'nin verdiği "sayıda yok" rakamları, tur → rakamlar (kalıcı gösterge;
-  // yeniden bağlanınca get_my_hand'den, kullanım anında RPC dönüşünden dolar).
+  // Eleme'nin "sayıda yok" rakamları + bilgi protokolü ipuçları, tur bazlı
+  // (kalıcı gösterge; yeniden bağlanınca get_my_hand'den, kullanım anında RPC
+  // dönüşünden dolar).
   const [eliminations, setEliminations] = useState<Record<string, number[]>>({});
+  const [hints, setHints] = useState<Record<string, ProtocolHint[]>>({});
   useEffect(() => {
     if (!isProtocol || myProtocols !== null) return;
     let alive = true;
@@ -165,6 +170,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           if (!alive) return;
           setMyProtocols(h.selected);
           setEliminations(h.eliminations);
+          setHints(h.hints);
           return;
         } catch {
           if (!alive) return;
@@ -177,6 +183,13 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       alive = false;
     };
   }, [isProtocol, matchId, myProtocols]);
+
+  const appendHint = useCallback((forRound: number, hint: ProtocolHint) => {
+    setHints((prev) => ({
+      ...prev,
+      [String(forRound)]: [...(prev[String(forRound)] ?? []), hint],
+    }));
+  }, []);
 
   // Kısa bilgi toast'u (kullanım onayı / hata / rakip bildirimi).
   const [toast, setToast] = useState<string | null>(null);
@@ -220,27 +233,73 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   // yalnız sonuç gösterimi. Çifte dokunuş busy kilidiyle engellenir (sunucu da
   // idempotent — ikinci çağrı protocol_already_used döner).
   const [protoBusy, setProtoBusy] = useState(false);
-  const onUseProtocol = useCallback(
-    async (id: string) => {
+  const [postestOpen, setPostestOpen] = useState(false);
+  const runProtocol = useCallback(
+    async (id: string, payload?: Record<string, unknown>) => {
       if (protoBusy) return;
       setProtoBusy(true);
       buzz('tap');
       try {
-        const res = await activateProtocol(matchId, id);
-        setLocalUsedIds((prev) => new Set(prev).add(id));
+        const res = await activateProtocol(matchId, id, payload);
+        // consumed=false → etki boşa gitti, hak HARCANMADI (tile açık kalır).
+        if (res.consumed !== false) setLocalUsedIds((prev) => new Set(prev).add(id));
         play('good');
         buzz('feedback');
-        if (id === 'time_add') {
-          showToast('Süre Enjeksiyonu: +12 sn');
-        } else if (res.eliminatedDigit != null) {
-          const key = String(res.round);
-          setEliminations((prev) => ({
-            ...prev,
-            [key]: res.eliminated ?? [...(prev[key] ?? []), res.eliminatedDigit!],
-          }));
-          showToast(`Eleme: sayıda ${res.eliminatedDigit} yok`);
-        } else {
-          showToast('Protokol kullanıldı');
+        switch (id) {
+          case 'time_add':
+            showToast('Süre Enjeksiyonu: +12 sn');
+            break;
+          case 'info_eliminate': {
+            const key = String(res.round);
+            setEliminations((prev) => ({
+              ...prev,
+              [key]: res.eliminated ?? [...(prev[key] ?? []), res.eliminatedDigit!],
+            }));
+            showToast(`Eleme: sayıda ${res.eliminatedDigit} yok`);
+            break;
+          }
+          case 'info_readlast':
+            if (res.consumed === false) {
+              showToast('Rakip bu turda henüz tahmin yapmadı — hak harcanmadı');
+            } else {
+              appendHint(res.round, {
+                t: 'readlast',
+                digits: res.digits!,
+                feedback: res.feedback!,
+              });
+              showToast(`Rakip Okuması: ${res.digits} dedi`);
+            }
+            break;
+          case 'info_postest':
+            appendHint(res.round, {
+              t: 'postest',
+              digit: res.digit!,
+              pos: res.position!,
+              match: !!res.match,
+            });
+            showToast(
+              `Konum Testi: ${res.digit}, ${res.position}. pozisyonda — ${res.match ? 'EVET' : 'HAYIR'}`,
+            );
+            break;
+          case 'info_reveal':
+            appendHint(res.round, { t: 'reveal', digit: res.revealedDigit! });
+            showToast(`Sayı İşareti: sayıda ${res.revealedDigit} var`);
+            break;
+          case 'time_steal':
+            showToast(
+              res.stolenMs
+                ? `Saat Çalma: rakipten +${Math.round(res.stolenMs / 1000)} sn`
+                : 'Saat Çalma: rakipte çalınacak süre yok (5 sn tabanı)',
+            );
+            break;
+          case 'time_freeze':
+            showToast('Dondur: bu turda saatin işlemiyor');
+            break;
+          case 'time_slow':
+            showToast('Yavaşlat: rakibin sıradaki turu 1.5× hızlı akacak');
+            break;
+          default:
+            showToast('Protokol kullanıldı');
         }
       } catch (e) {
         // Sunucu reddi (sıra geçti / hak dolu vb.) — durumu kullanıcıya söyle.
@@ -252,7 +311,21 @@ export function DuelScreen({ matchId }: { matchId: string }) {
         setProtoBusy(false);
       }
     },
-    [protoBusy, matchId, play, buzz, showToast],
+    [protoBusy, matchId, play, buzz, showToast, appendHint],
+  );
+
+  // Şerit dokunuşu: Konum Testi önce rakam+pozisyon girişi ister; gerisi
+  // doğrudan RPC. (Etki her durumda sunucuda.)
+  const onUseProtocol = useCallback(
+    (id: string) => {
+      if (id === 'info_postest') {
+        buzz('tap');
+        setPostestOpen(true);
+        return;
+      }
+      void runProtocol(id);
+    },
+    [runProtocol, buzz],
   );
 
   // "Rakip X kullandı" bildirimi (yalnız canlı realtime kayıttan; sır içermez).
@@ -264,8 +337,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingProtocolUse?.nonce]);
 
-  // Bu turda elenen ("sayıda yok") rakamlar — kalıcı gösterge.
+  // Bu turun kalıcı bilgileri: elenenler + bilgi protokolü ipuçları.
   const eliminatedNow = eliminations[String(round)] ?? [];
+  const hintsNow = hints[String(round)] ?? [];
 
   // Maç bitince iki gizli sayıyı çek (yalnızca finished'te sunucu döndürür).
   useEffect(() => {
@@ -463,20 +537,8 @@ export function DuelScreen({ matchId }: { matchId: string }) {
 
         <GuessHistory guesses={myGuesses} />
 
-        {/* Eleme'nin verdiği kalıcı bilgi: bu turda sayıda OLMAYAN rakamlar. */}
-        {eliminatedNow.length > 0 ? (
-          <View style={styles.eliminated}>
-            <Feather name="slash" size={11} color={colors.cyan} />
-            <Text style={styles.eliminatedLabel}>SAYIDA YOK</Text>
-            <View style={styles.eliminatedDigits}>
-              {eliminatedNow.map((d) => (
-                <Text key={d} style={styles.eliminatedDigit}>
-                  {d}
-                </Text>
-              ))}
-            </View>
-          </View>
-        ) : null}
+        {/* Bilgi protokollerinin verdiği kalıcı ipuçları (bu turun; unutma). */}
+        <HintsBar eliminated={eliminatedNow} hints={hintsNow} />
 
         {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
 
@@ -510,6 +572,17 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           </View>
         ) : null}
       </View>
+
+      {/* Konum Testi girişi (info_postest): rakam + pozisyon → use_protocol. */}
+      <PostestPrompt
+        visible={postestOpen}
+        busy={protoBusy}
+        onClose={() => setPostestOpen(false)}
+        onSubmit={(digit, position) => {
+          setPostestOpen(false);
+          void runProtocol('info_postest', { digit, position });
+        }}
+      />
 
       {finished ? (
         <ResultOverlay
@@ -581,37 +654,6 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 11,
     textAlign: 'center',
-  },
-  eliminated: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: cyanAlpha(0.35),
-    backgroundColor: cyanAlpha(0.08),
-  },
-  eliminatedLabel: {
-    fontSize: 9,
-    color: colors.dim,
-    letterSpacing: 1.5,
-    fontFamily: mono,
-  },
-  eliminatedDigits: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  eliminatedDigit: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.cyan,
-    fontFamily: mono,
-    textDecorationLine: 'line-through',
-    textShadowColor: cyanAlpha(0.5),
-    textShadowRadius: 8,
   },
   toastWrap: {
     position: 'absolute',

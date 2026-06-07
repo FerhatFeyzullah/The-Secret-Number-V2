@@ -42,8 +42,9 @@ export const STARTER_PROTOCOLS = ['time_add', 'info_eliminate'] as const;
 /** 14 protokol — sunucu tablosuyla aynı sırada/değerlerde.
  *  Kullanım hakkı VARSAYILANI: maç başına 1 (usesPerMatch:1, perRoundReset:false;
  *  Best of 3 boyunca tek — turlar arası SIFIRLANMAZ). usageTiming yalnız
- *  uygulanmış protokollerde (4a: time_add + info_eliminate) bağlayıcıdır;
- *  diğerleri 4b/4c/4d'de etkiyle birlikte kesinleşir. */
+ *  uygulanmış protokollerde (4a: time_add, info_eliminate · 4b: info_readlast,
+ *  info_postest, info_reveal, time_steal, time_freeze, time_slow) bağlayıcıdır;
+ *  kalanlar 4c/4d'de etkiyle birlikte kesinleşir. */
 export const PROTOCOLS: readonly Protocol[] = [
   { id: 'time_add',        name: 'Süre Enjeksiyonu', pillar: 'time',    effect: '+12sn kendine',                                  levelGate: 1,  veriCost: 0,    oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'info_eliminate',  name: 'Eleme',            pillar: 'info',    effect: 'Sayıda olmayan bir rakamı öğren',                levelGate: 1,  veriCost: 0,    oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
@@ -52,7 +53,7 @@ export const PROTOCOLS: readonly Protocol[] = [
   { id: 'time_steal',      name: 'Saat Çalma',       pillar: 'time',    effect: 'Rakipten 10sn al (rakip min 5sn)',               levelGate: 3,  veriCost: 350,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'disrupt_fog',     name: 'Sis Perdesi',      pillar: 'disrupt', effect: 'Rakip geri bildirimi 4sn gecikir',               levelGate: 3,  veriCost: 350,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'info_postest',    name: 'Konum Testi',      pillar: 'info',    effect: 'Bir rakam doğru pozisyonda mı (evet/hayır)',     levelGate: 4,  veriCost: 450,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
-  { id: 'time_freeze',     name: 'Dondur',           pillar: 'time',    effect: 'Rakip sırasında saati durur',                    levelGate: 5,  veriCost: 550,  oneShot: false, usageTiming: 'anytime',  usesPerMatch: 1, perRoundReset: false },
+  { id: 'time_freeze',     name: 'Dondur',           pillar: 'time',    effect: 'Bu turda kendi saatin işlemez',                  levelGate: 5,  veriCost: 550,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'disrupt_silence', name: 'Susturma',         pillar: 'disrupt', effect: 'Rakip 1 sıra yetenek kullanamaz',                levelGate: 5,  veriCost: 600,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'time_slow',       name: 'Yavaşlat',         pillar: 'time',    effect: 'Rakip saati 1.5× hızlı akar (1 sıra)',           levelGate: 6,  veriCost: 700,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },
   { id: 'disrupt_waste',   name: 'Zorla Harca',      pillar: 'disrupt', effect: 'Rakibin bir yeteneğini boşa tüket',              levelGate: 7,  veriCost: 850,  oneShot: false, usageTiming: 'own_turn', usesPerMatch: 1, perRoundReset: false },

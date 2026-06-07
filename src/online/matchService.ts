@@ -25,6 +25,7 @@ import type {
   PlayerRole,
   PresenceInfo,
   ProtocolHand,
+  ProtocolHint,
   ProtocolUse,
   ProtocolUseOutcome,
 } from './types';
@@ -91,6 +92,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   protocol_not_implemented: 'Bu protokol henüz aktif değil.',
   time_expired: 'Süren doldu, protokol kullanılamaz.',
   no_digits_left: 'Elenecek rakam kalmadı.',
+  invalid_payload: 'Geçersiz seçim: rakam 1-9, pozisyon 1-3 olmalı.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -176,7 +178,7 @@ export async function findOrCreateProtocolMatch(): Promise<MatchTicket> {
 }
 
 /** Destiny's Hand: çağıranın dağıtılan eli + seçimi + yuva sayısı + kendi
- *  kullanımları/elenenleri. Rakibin eli/elenenleri ASLA gelmez (sunucu RLS). */
+ *  kullanımları/elenenleri/ipuçları. Rakibinkiler ASLA gelmez (sunucu RLS). */
 export async function getMyHand(matchId: string): Promise<ProtocolHand> {
   const p = await callRpc<{
     hand?: string[];
@@ -184,6 +186,7 @@ export async function getMyHand(matchId: string): Promise<ProtocolHand> {
     slots?: number;
     uses?: { protocol_id: string; round: number }[];
     eliminations?: Record<string, number[]>;
+    hints?: Record<string, ProtocolHint[]>;
   }>('get_my_hand', { p_match_id: matchId });
   return {
     hand: p.hand ?? [],
@@ -191,6 +194,7 @@ export async function getMyHand(matchId: string): Promise<ProtocolHand> {
     slots: Number(p.slots ?? 2),
     uses: (p.uses ?? []).map((u) => ({ protocolId: u.protocol_id, round: u.round })),
     eliminations: p.eliminations ?? {},
+    hints: p.hints ?? {},
   };
 }
 
@@ -206,10 +210,21 @@ export async function activateProtocol(
     match_id: string;
     protocol_id: string;
     round: number;
+    consumed?: boolean;
     clock1_ms?: number;
     clock2_ms?: number;
     eliminated_digit?: number;
     eliminated?: number[];
+    digits?: string;
+    feedback?: GuessFeedback;
+    no_guess?: boolean;
+    digit?: number;
+    position?: number;
+    match?: boolean;
+    revealed_digit?: number;
+    stolen_ms?: number;
+    frozen?: boolean;
+    slowed?: boolean;
   }>('use_protocol', {
     p_match_id: matchId,
     p_protocol_id: protocolId,
@@ -219,10 +234,21 @@ export async function activateProtocol(
     matchId: p.match_id,
     protocolId: p.protocol_id,
     round: p.round,
+    ...(p.consumed != null ? { consumed: p.consumed } : {}),
     ...(p.clock1_ms != null ? { clock1Ms: p.clock1_ms } : {}),
     ...(p.clock2_ms != null ? { clock2Ms: p.clock2_ms } : {}),
     ...(p.eliminated_digit != null ? { eliminatedDigit: p.eliminated_digit } : {}),
     ...(p.eliminated ? { eliminated: p.eliminated } : {}),
+    ...(p.digits != null ? { digits: p.digits } : {}),
+    ...(p.feedback != null ? { feedback: p.feedback } : {}),
+    ...(p.no_guess != null ? { noGuess: p.no_guess } : {}),
+    ...(p.digit != null ? { digit: p.digit } : {}),
+    ...(p.position != null ? { position: p.position } : {}),
+    ...(p.match != null ? { match: p.match } : {}),
+    ...(p.revealed_digit != null ? { revealedDigit: p.revealed_digit } : {}),
+    ...(p.stolen_ms != null ? { stolenMs: p.stolen_ms } : {}),
+    ...(p.frozen != null ? { frozen: p.frozen } : {}),
+    ...(p.slowed != null ? { slowed: p.slowed } : {}),
   };
 }
 
