@@ -608,11 +608,13 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    // Çift satırlar kenara yaslanır; tek kalan son kart SOLDA normal genişlikte
+    // durur (flexGrow yok → esnemez). Dikey boşluk rowGap ile.
+    justifyContent: 'space-between',
+    rowGap: 10,
   },
   card: {
-    width: '47.5%',
-    flexGrow: 1,
+    width: '48%',
     backgroundColor: colors.glass,
     borderWidth: 1.5,
     borderColor: colors.glassBorder,

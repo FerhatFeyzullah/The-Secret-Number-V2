@@ -168,7 +168,8 @@ function DetailDialog({
             </View>
           </View>
 
-          <Text style={styles.dialogEffect}>{proto.effect}</Text>
+          <Text style={[styles.dialogSummary, { color: accent }]}>{proto.effect}</Text>
+          <Text style={styles.dialogEffect}>{proto.longDescription}</Text>
 
           {/* Gereksinim + maliyet */}
           <View style={styles.dialogChips}>
@@ -713,6 +714,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: colors.dim,
     fontFamily: mono,
+  },
+  dialogSummary: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    fontFamily: mono,
+    letterSpacing: 0.2,
+    marginBottom: 8,
   },
   dialogEffect: {
     fontSize: 12,
