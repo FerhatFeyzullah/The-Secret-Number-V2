@@ -59,9 +59,16 @@ export type UseMatchResult = {
   /** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez),
    *  realtime güncel. Şerit "kullanıldı" durumu buradan türetilir. */
   protocolUses: ProtocolUse[];
-  /** RAKİBİN az önce kullandığı protokol (yalnız realtime INSERT'ten; geçmiş
-   *  kayıtlar tetiklemez). nonce her gelişte artar — kısa bildirim için. */
-  incomingProtocolUse: { player: string; protocolId: string; nonce: number } | null;
+  /** Az önce düşen protokol olayı (yalnız realtime INSERT'ten; geçmiş kayıtlar
+   *  tetiklemez): rakibin kullanımı (her outcome) YA DA kendi protokolünün
+   *  Zorla Harca ile tüketilmesi (outcome='wasted', satır sana ait). nonce
+   *  her gelişte artar — kısa bildirim için. */
+  incomingProtocolUse: {
+    player: string;
+    protocolId: string;
+    outcome: ProtocolUse['outcome'];
+    nonce: number;
+  } | null;
 };
 
 /**
@@ -84,11 +91,12 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // Rakipten gelen efemeral emoji (broadcast); nonce ile her geliş ayrışır.
   const [incomingEmoji, setIncomingEmoji] = useState<{ emoji: string; nonce: number } | null>(null);
   const emojiNonceRef = useRef(0);
-  // Protokol kullanım kayıtları (realtime + refresh) ve rakip-kullandı sinyali.
+  // Protokol kullanım kayıtları (realtime + refresh) ve canlı olay sinyali.
   const [protocolUses, setProtocolUses] = useState<ProtocolUse[]>([]);
   const [incomingProtocolUse, setIncomingProtocolUse] = useState<{
     player: string;
     protocolId: string;
+    outcome: ProtocolUse['outcome'];
     nonce: number;
   } | null>(null);
   const protoNonceRef = useRef(0);
@@ -275,13 +283,15 @@ export function useMatch(matchId: string | null): UseMatchResult {
             setProtocolUses((prev) =>
               prev.some((u) => u.id === use.id) ? prev : [...prev, use],
             );
-            // Yalnız RAKİBİN canlı kullanımı bildirim tetikler (kendi RPC
-            // dönüşünle zaten onaylanır; geçmiş kayıtlar refresh'ten gelir).
-            if (use.player !== myIdRef.current) {
+            // Bildirim: rakibin canlı kullanımı (her outcome) YA DA kendi
+            // protokolünün harcanması (wasted satırı kurbana yazılır). Kendi
+            // normal kullanımın RPC dönüşüyle zaten onaylanır.
+            if (use.player !== myIdRef.current || use.outcome === 'wasted') {
               protoNonceRef.current += 1;
               setIncomingProtocolUse({
                 player: use.player,
                 protocolId: use.protocolId,
+                outcome: use.outcome,
                 nonce: protoNonceRef.current,
               });
             }

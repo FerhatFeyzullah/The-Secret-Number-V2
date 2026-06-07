@@ -160,6 +160,10 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   // dönüşünden dolar).
   const [eliminations, setEliminations] = useState<Record<string, number[]>>({});
   const [hints, setHints] = useState<Record<string, ProtocolHint[]>>({});
+  // Kurulu savunmalar (Kalkan/Yansıtma): get_my_hand + kurma RPC'sinden;
+  // rakibin engeli bloklanınca/yansıyınca (realtime kayıt) söner.
+  const [shieldArmed, setShieldArmed] = useState(false);
+  const [reflectArmed, setReflectArmed] = useState(false);
   useEffect(() => {
     if (!isProtocol || myProtocols !== null) return;
     let alive = true;
@@ -171,6 +175,8 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           setMyProtocols(h.selected);
           setEliminations(h.eliminations);
           setHints(h.hints);
+          setShieldArmed(h.shieldArmed);
+          setReflectArmed(h.reflectArmed);
           return;
         } catch {
           if (!alive) return;
@@ -183,6 +189,10 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       alive = false;
     };
   }, [isProtocol, matchId, myProtocols]);
+
+  // Susturulduysan (rakibin Susturma'sı) sıradaki turun bitene kadar hiçbir
+  // protokol kullanamazsın — sunucu zaten reddeder, UI tile'ları pasifler.
+  const silencedMe = !!match && (p1 ? match.silencedP1 : match.silencedP2);
 
   const appendHint = useCallback((forRound: number, hint: ProtocolHint) => {
     setHints((prev) => ({
@@ -215,19 +225,24 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     return ids;
   }, [protocolUses, myId, localUsedIds]);
 
-  // Tile durumları: kullanıldı → cooldown; zamanlama uymuyor (own_turn + sıra
-  // rakipte ya da maç aktif değil) → blocked; aksi halde ready.
+  // Tile durumları: kurulu savunma → armed (kullanım kaydından ÖNCE bakılır —
+  // kurulum hakkı zaten işlenmiştir); kullanıldı/harcandı → cooldown;
+  // susturuldun ya da zamanlama uymuyor → blocked; aksi halde ready.
   const protocolTiles = useMemo<ProtocolTileState[]>(() => {
     if (!isProtocol) return [];
     return (myProtocols ?? []).map((id) => {
+      if ((id === 'def_shield' && shieldArmed) || (id === 'def_reflect' && reflectArmed)) {
+        return { id, status: 'armed' as const, note: 'AKTİF' };
+      }
       if (myUsedIds.has(id)) return { id, status: 'cooldown' as const, note: 'KULLANILDI' };
+      if (silencedMe) return { id, status: 'blocked' as const, note: 'SUSTURULDUN' };
       const timing = getProtocol(id)?.usageTiming ?? 'own_turn';
       const available = status === 'active' && (timing !== 'own_turn' || isMine);
       return available
         ? { id, status: 'ready' as const }
         : { id, status: 'blocked' as const, note: 'SIRAN DEĞİL' };
     });
-  }, [isProtocol, myProtocols, myUsedIds, status, isMine]);
+  }, [isProtocol, myProtocols, myUsedIds, status, isMine, shieldArmed, reflectArmed, silencedMe]);
 
   // Protokol kullan: TÜM doğrulama + etki sunucuda (use_protocol RPC); burada
   // yalnız sonuç gösterimi. Çifte dokunuş busy kilidiyle engellenir (sunucu da
@@ -298,6 +313,38 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           case 'time_slow':
             showToast('Yavaşlat: rakibin sıradaki turu 1.5× hızlı akacak');
             break;
+          case 'def_shield':
+            setShieldArmed(true);
+            showToast('Kalkan kuruldu — gelen ilk engeli bloklar');
+            break;
+          case 'def_reflect':
+            setReflectArmed(true);
+            showToast('Yansıtma kuruldu — gelen ilk engel sahibine döner');
+            break;
+          case 'disrupt_fog':
+          case 'disrupt_silence':
+          case 'disrupt_waste': {
+            // Engel sınıfı: counter zinciri sonucu (sunucu kararı).
+            const name = getProtocol(id)?.name ?? 'Engel';
+            if (res.blocked) {
+              showToast(`${name} bloklandı — rakibin Kalkanı tüketti`);
+            } else if (res.reflected) {
+              buzz('lose');
+              showToast(`${name} yansıtıldı — etkisi sana döndü!`);
+            } else if (id === 'disrupt_fog') {
+              showToast('Sis Perdesi: rakibin sonraki geri bildirimi gecikecek');
+            } else if (id === 'disrupt_silence') {
+              showToast('Susturma: rakip sıradaki turunda protokol kullanamaz');
+            } else if (res.noTargetProtocol) {
+              showToast('Rakibin harcanacak protokolü yok — hak harcanmadı');
+            } else {
+              const wastedName = res.wastedProtocol
+                ? getProtocol(res.wastedProtocol)?.name ?? res.wastedProtocol
+                : 'protokol';
+              showToast(`Zorla Harca: rakibin ${wastedName} protokolü tüketildi`);
+            }
+            break;
+          }
           default:
             showToast('Protokol kullanıldı');
         }
@@ -328,11 +375,30 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     [runProtocol, buzz],
   );
 
-  // "Rakip X kullandı" bildirimi (yalnız canlı realtime kayıttan; sır içermez).
+  // Canlı protokol olayı bildirimi (realtime kayıttan; sır içermez):
+  // rakip kullandı / kalkanın blokladı / yansıttın / protokolün harcandı.
   useEffect(() => {
     if (!incomingProtocolUse) return;
-    const name = getProtocol(incomingProtocolUse.protocolId)?.name ?? 'protokol';
-    showToast(`Rakip ${name} kullandı`);
+    const { player, protocolId, outcome } = incomingProtocolUse;
+    const name = getProtocol(protocolId)?.name ?? 'protokol';
+    if (player === myId) {
+      // wasted satırı kurbana yazılır → rakip senin protokolünü harcattı.
+      if (outcome === 'wasted') showToast(`Rakip ${name} protokolünü harcattı!`);
+    } else if (outcome === 'blocked') {
+      setShieldArmed(false); // kalkanın tükendi
+      showToast(`Kalkanın rakibin ${name} engelini blokladı`);
+    } else if (outcome === 'reflected') {
+      setReflectArmed(false); // yansıtman tükendi
+      showToast(`${name} engelini rakibe geri yansıttın!`);
+    } else if (outcome === 'wasted') {
+      // Rakibin protokolünün harcanma satırı — kendi RPC dönüşün zaten bildirdi.
+    } else if (protocolId === 'disrupt_silence') {
+      showToast('Rakip seni susturdu — bu sıra protokol kullanamazsın');
+    } else if (protocolId === 'disrupt_fog') {
+      showToast('Rakip Sis Perdesi kullandı — sonraki geri bildirimin gecikecek');
+    } else {
+      showToast(`Rakip ${name} kullandı`);
+    }
     buzz('feedback');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingProtocolUse?.nonce]);
@@ -563,7 +629,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
         {/* Protokol şeridi: yalnız Protokol Maçı'nda ve seçim varsa yer kaplar
             (quick/offline'da render edilmez → alt boşluk oluşmaz). */}
         {protocolTiles.length > 0 ? (
-          <ProtocolStrip tiles={protocolTiles} onUse={onUseProtocol} />
+          <ProtocolStrip tiles={protocolTiles} onUse={onUseProtocol} silenced={silencedMe} />
         ) : null}
 
         {toast ? (

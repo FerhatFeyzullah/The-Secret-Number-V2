@@ -18,6 +18,7 @@ export type {
   ProtocolHint,
   ProtocolUse,
   ProtocolUseOutcome,
+  ProtocolUseOutcomeKind,
 } from './types';
 export { displayClocks, feedbackToGuessResult } from './mapping';
 export {

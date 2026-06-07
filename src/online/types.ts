@@ -80,6 +80,12 @@ export type MatchState = {
    *  akar; o tur bitince sunucu söndürür. Görsel saat hesabına yansır. */
   turnSlowP1: boolean;
   turnSlowP2: boolean;
+  /** Sis Perdesi: o oyuncunun SONRAKİ tahmini gecikmeli gösterilir. */
+  fogP1: boolean;
+  fogP2: boolean;
+  /** Susturma: o oyuncu (sıradaki turu bitene kadar) protokol kullanamaz. */
+  silencedP1: boolean;
+  silencedP2: boolean;
   /** Sayı belirleme fazının bitiş anı (ISO). İki taraf da "Hazır" (present)
    *  olunca kurulur; o ana kadar null (sayaç başlamaz). */
   setupDeadline: string | null;
@@ -111,6 +117,9 @@ export type OnlineGuess = {
   /** Tahminin yapıldığı tur (Best of 3'te tura göre filtrelenir). */
   round: number;
   createdAt: string;
+  /** Sis Perdesi: bu tahminin feedback'i 4 sn maskeyle gösterilir (yalnız
+   *  gösterim; değerlendirme sunucuda aynen yapılmıştır). */
+  fogged?: boolean;
 };
 
 /** Bilgi protokollerinin verdiği kalıcı ipuçları (yalnız çağıranın; tur bazlı).
@@ -132,12 +141,21 @@ export type ProtocolHand = {
   /** Seviyeye göre yuva sayısı (Sv1-3 → 2, Sv4+ → 3). */
   slots: number;
   /** KENDİ protokol kullanımların (şerit "kullanıldı" durumu; Faz 3 / Adım 4). */
-  uses: { protocolId: string; round: number }[];
+  uses: { protocolId: string; round: number; outcome?: ProtocolUseOutcomeKind }[];
   /** Eleme'nin verdiği "sayıda yok" rakamları, tur → rakamlar (yalnız kendi). */
   eliminations: Record<string, number[]>;
   /** Bilgi protokolü ipuçları, tur → liste (yalnız kendi; Adım 4b). */
   hints: Record<string, ProtocolHint[]>;
+  /** Kurulu savunmalar (yalnız kendi; ilk engele kadar bekler; Adım 4c). */
+  shieldArmed: boolean;
+  reflectArmed: boolean;
 };
+
+/** Kullanım kaydının sonucu: applied = etki uygulandı · blocked = hedefin
+ *  Kalkanı blokladı · reflected = hedefin Yansıtması gönderene çevirdi ·
+ *  wasted = Zorla Harca kurbanının protokolü etkisiz tüketildi (satır
+ *  kurbana aittir). */
+export type ProtocolUseOutcomeKind = 'applied' | 'blocked' | 'reflected' | 'wasted';
 
 /** Maç içi tek protokol kullanım kaydı (match_protocol_uses; sır içermez —
  *  iki oyuncu da görür, "rakip X kullandı" bildirimi buradan). */
@@ -148,6 +166,8 @@ export type ProtocolUse = {
   protocolId: string;
   round: number;
   createdAt: string;
+  /** Counter zinciri sonucu (Adım 4c); eski kayıtlarda 'applied'. */
+  outcome: ProtocolUseOutcomeKind;
 };
 
 /** use_protocol dönüşü: yalnız çağırana ait güvenli sonuç.
@@ -183,6 +203,18 @@ export type ProtocolUseOutcome = {
   frozen?: boolean;
   /** time_slow: rakibin sıradaki turu 1.5× akacak. */
   slowed?: boolean;
+  /** Engel sınıfı: counter zinciri sonucu (applied/blocked/reflected). */
+  outcome?: ProtocolUseOutcomeKind;
+  /** Engel: hedefin Kalkanı blokladı (Kalkan + engel tükendi). */
+  blocked?: boolean;
+  /** Engel: hedefin Yansıtması gönderene çevirdi (etki SANA uygulandı). */
+  reflected?: boolean;
+  /** disrupt_waste: hedefte tüketilen protokol id'si. */
+  wastedProtocol?: string;
+  /** disrupt_waste: hedefin harcanacak protokolü yoktu (consumed=false). */
+  noTargetProtocol?: boolean;
+  /** def_shield / def_reflect: savunma kuruldu. */
+  armed?: 'shield' | 'reflect';
 };
 
 /** Eşleşme RPC'lerinin (quick/private) ortak dönüşü. */
@@ -205,6 +237,8 @@ export type GuessOutcome = {
   currentTurn: string | null;
   clock1Ms: number;
   clock2Ms: number;
+  /** Sis Perdesi: bu tahminin feedback'i gecikmeli gösterilmeli (4 sn). */
+  fogged?: boolean;
 };
 
 /** Maç sonu gizli sayı ifşası (get_match_reveal).
