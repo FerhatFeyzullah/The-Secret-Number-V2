@@ -1,16 +1,16 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native';
 
 import type { FirstTurnMode, MatchMode } from '@/online/types';
-import { GlassButton } from '@/ui/glass';
 import { colors, cyanAlpha, mono } from '@/ui/theme';
 import { Avatar } from './parts';
 
 const clockLabel = (ms: number) => (ms === 120000 ? '2 dk' : ms === 90000 ? '1.5 dk' : '1 dk');
 
 /** Kısa kutlama anı: VS açılışı + gerçek oyuncu adları + maç bilgisi.
- *  "Hazır" ile belirleme ekranına geçilir (gizli/otomatik timer yok). */
+ *  El sıkışması OTOMATİK: ekran ~7 sn gösterilir, sonraki ekrana kendiliğinden
+ *  geçilir (mark_ready'yi üst akış gönderir) — manuel "Hazır"/"İptal" yok. */
 export function MatchFoundScreen({
   myName,
   opponentName,
@@ -18,8 +18,6 @@ export function MatchFoundScreen({
   clockMs,
   firstTurnMode,
   iAmCreator,
-  onReady,
-  onCancel,
 }: {
   myName: string;
   /** null = ad henüz yükleniyor; "Rakip"e düşmek yerine "…" gösterilir
@@ -32,8 +30,6 @@ export function MatchFoundScreen({
   firstTurnMode: FirstTurnMode;
   /** Çağıran oda kuran (player1) mı — ilk sıra metnini kişiselleştirir. */
   iAmCreator: boolean;
-  onReady: () => void;
-  onCancel: () => void;
 }) {
   const oppName = opponentName ?? '…';
   const oppInitial = opponentName ? opponentName.charAt(0) : '?';
@@ -124,17 +120,12 @@ export function MatchFoundScreen({
         </Animated.View>
       ) : null}
 
+      {/* Otomatik hazırlık: buton yok, sade yükleme görünümü (≈7 sn). */}
       <Animated.View style={[styles.action, fade]}>
-        <GlassButton
-          label="HAZIR"
-          accent={colors.cyan}
-          variant="fill"
-          icon={<Feather name="play" size={16} color={colors.cyan} />}
-          onPress={onReady}
-        />
-        <Pressable onPress={onCancel} hitSlop={8} style={styles.cancel}>
-          <Text style={styles.cancelText}>İptal</Text>
-        </Pressable>
+        <View style={styles.preparing}>
+          <ActivityIndicator color={colors.cyan} size="small" />
+          <Text style={styles.preparingText}>OYUN HAZIRLANIYOR…</Text>
+        </View>
       </Animated.View>
     </View>
   );
@@ -256,13 +247,16 @@ const styles = StyleSheet.create({
     gap: 14,
     marginTop: 28,
   },
-  cancel: {
-    paddingVertical: 4,
+  preparing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
   },
-  cancelText: {
+  preparingText: {
     fontSize: 11,
+    letterSpacing: 3,
     color: colors.dim,
     fontFamily: mono,
-    letterSpacing: 0.5,
   },
 });
