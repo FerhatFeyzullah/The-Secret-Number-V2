@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useRouter } from 'expo-router';
+import { Redirect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -121,6 +121,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!isMine) setEntry([]);
   }, [isMine]);
+
 
   // Bir tur bitip yeni tur belirlemesine geçince, biten turun sonucunu sapta:
   // kazanan = "win" feedback'li tahminin sahibi (yoksa süre → skor deltası);
@@ -578,6 +579,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
 
   // Yüklenme / hata / oyun-dışı fazlar.
   if (!match) {
+    // Yükleme bitti + maç YOK + hata da yok = gerçekten bulunamadı / oyuncu değil
+    // → güvenli yönlendirme (<Redirect>). Ağ hatasında mesaj + "Ana Menü" butonu.
+    if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen>
         <View style={styles.centered}>
