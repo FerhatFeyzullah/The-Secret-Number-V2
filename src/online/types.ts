@@ -155,6 +155,12 @@ export type MyRank = {
   levelFloor: number;
   /** Sonraki seviyenin XP eşiği; maks seviyede (10) null. */
   levelNext: number | null;
+  /** Sahip olunan protokol id'leri (Faz 2a). */
+  owned: string[];
+  /** Maça götürülecek seçili protokol id'leri. */
+  loadout: string[];
+  /** Loadout yuva limiti (Sv1-2 → 2, Sv3+ → 3). */
+  loadoutSlots: number;
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */
