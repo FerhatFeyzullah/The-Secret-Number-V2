@@ -125,9 +125,19 @@ export default function MenuScreen() {
             ) : null}
           </View>
         </Pressable>
-        <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.gear}>
-          <Ionicons name="settings-outline" size={22} color={colors.cyan} />
-        </Pressable>
+        <View style={styles.rightControls}>
+          <Pressable
+            onPress={() => router.push('/protocols')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Protokoller"
+            style={styles.headerBtn}>
+            <Feather name="cpu" size={20} color={colors.cyan} />
+          </Pressable>
+          <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.headerBtn}>
+            <Ionicons name="settings-outline" size={22} color={colors.cyan} />
+          </Pressable>
+        </View>
       </View>
 
       {/* Orta blok: istatistik kartları kalkınca logo + menü dikeyde ortalanır */}
@@ -266,8 +276,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: mono,
   },
-  gear: {
+  rightControls: {
     marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
