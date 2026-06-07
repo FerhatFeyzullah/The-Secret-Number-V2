@@ -6,11 +6,12 @@ import { colors, mono, withAlpha } from '@/ui/theme';
 
 import { PILLAR_COLOR, protocolIcon } from '../protocol-visuals';
 
-/** Tile görsel durumu — veri Adım 4'te bağlanır (şimdilik hepsi 'ready').
+/** Tile görsel durumu:
  *  ready    → tam renk + glow, basılabilir
- *  cooldown → kullanıldı/beklemede (soluk + kilit ve örn. "1 TUR" etiketi)
- *  blocked  → şu an kullanılamaz (örn. sıra sende değil; soluk, basılamaz) */
-export type ProtocolTileStatus = 'ready' | 'cooldown' | 'blocked';
+ *  armed    → kurulu savunma (Kalkan/Yansıtma) — tam renk + glow, BEKLİYOR
+ *  cooldown → kullanıldı/beklemede (soluk + kilit ve örn. "KULLANILDI")
+ *  blocked  → şu an kullanılamaz (sıra sende değil / susturuldun; soluk) */
+export type ProtocolTileStatus = 'ready' | 'armed' | 'cooldown' | 'blocked';
 
 export type ProtocolTileState = {
   id: string;
@@ -22,6 +23,7 @@ export type ProtocolTileState = {
 function statusLabel(t: ProtocolTileState): string {
   if (t.note) return t.note;
   if (t.status === 'ready') return 'HAZIR';
+  if (t.status === 'armed') return 'AKTİF';
   if (t.status === 'cooldown') return 'BEKLEME';
   return 'KAPALI';
 }
@@ -31,22 +33,26 @@ function Tile({ tile, onUse }: { tile: ProtocolTileState; onUse: (id: string) =>
   if (!proto) return null;
   const color = PILLAR_COLOR[proto.pillar];
   const ready = tile.status === 'ready';
+  // Kurulu savunma: tam renk + güçlü glow, ama basılamaz (bekliyor).
+  const lit = ready || tile.status === 'armed';
 
   return (
     <Pressable
       onPress={ready ? () => onUse(tile.id) : undefined}
       disabled={!ready}
-      style={({ pressed }) => [styles.tile, !ready && styles.tileOff, pressed && ready && styles.tilePressed]}>
+      style={({ pressed }) => [styles.tile, !lit && styles.tileOff, pressed && ready && styles.tilePressed]}>
       <View
         style={[
           styles.tileIcon,
           {
-            borderColor: withAlpha(color, ready ? 0.55 : 0.3),
-            backgroundColor: withAlpha(color, ready ? 0.16 : 0.08),
-            boxShadow: ready ? `0 0 12px ${withAlpha(color, 0.35)}` : undefined,
+            borderColor: withAlpha(color, lit ? 0.55 : 0.3),
+            backgroundColor: withAlpha(color, lit ? 0.16 : 0.08),
+            boxShadow: lit
+              ? `0 0 ${tile.status === 'armed' ? 16 : 12}px ${withAlpha(color, tile.status === 'armed' ? 0.5 : 0.35)}`
+              : undefined,
           },
         ]}>
-        <Feather name={protocolIcon(tile.id)} size={17} color={ready ? color : colors.dim} />
+        <Feather name={protocolIcon(tile.id)} size={17} color={lit ? color : colors.dim} />
         {proto.oneShot ? (
           <View style={styles.oneShot}>
             <Text style={styles.oneShotText}>1×</Text>
@@ -63,12 +69,12 @@ function Tile({ tile, onUse }: { tile: ProtocolTileState; onUse: (id: string) =>
           <View
             style={[
               styles.statusDot,
-              { backgroundColor: ready ? color : colors.dim },
-              ready && { boxShadow: `0 0 5px ${color}` },
+              { backgroundColor: lit ? color : colors.dim },
+              lit && { boxShadow: `0 0 5px ${color}` },
             ]}
           />
         )}
-        <Text style={[styles.statusText, { color: ready ? color : colors.dim }]}>
+        <Text style={[styles.statusText, { color: lit ? color : colors.dim }]}>
           {statusLabel(tile)}
         </Text>
       </View>
@@ -77,36 +83,65 @@ function Tile({ tile, onUse }: { tile: ProtocolTileState; onUse: (id: string) =>
 }
 
 /** Sürekli görünür protokol şeridi (düello altı): maç için KENDİ seçtiğin
- *  protokoller (≤3) — rakibinki asla gösterilmez. Bu adımda yalnız görsel
- *  yüzey; basınca etki YOK (onUse stub'ı Adım 4'te gerçek RPC'ye bağlanır). */
+ *  protokoller (≤3) — rakibinki asla gösterilmez. Basınca use_protocol RPC
+ *  tetiklenir (etki sunucuda). silenced=true → "susturuldun" göstergesi. */
 export function ProtocolStrip({
   tiles,
   onUse,
+  silenced = false,
 }: {
   tiles: ProtocolTileState[];
   onUse: (id: string) => void;
+  silenced?: boolean;
 }) {
   if (tiles.length === 0) return null;
   return (
-    <View style={styles.root}>
-      {tiles.map((t) => (
-        <Tile key={t.id} tile={t} onUse={onUse} />
-      ))}
+    <View style={[styles.root, silenced && styles.rootSilenced]}>
+      {silenced ? (
+        <View style={styles.silenced}>
+          <Feather name="volume-x" size={10} color={colors.danger} />
+          <Text style={styles.silencedText}>SUSTURULDUN</Text>
+        </View>
+      ) : null}
+      <View style={styles.row}>
+        {tiles.map((t) => (
+          <Tile key={t.id} tile={t} onUse={onUse} />
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.glassBorder,
     borderRadius: 16,
     paddingVertical: 7,
     paddingHorizontal: 10,
+    gap: 4,
+  },
+  rootSilenced: {
+    borderColor: withAlpha(colors.danger, 0.4),
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  silenced: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  silencedText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: colors.danger,
+    fontFamily: mono,
+    letterSpacing: 1.5,
   },
   tile: {
     flex: 1,

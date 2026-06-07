@@ -28,6 +28,7 @@ import type {
   ProtocolHint,
   ProtocolUse,
   ProtocolUseOutcome,
+  ProtocolUseOutcomeKind,
 } from './types';
 
 /** RPC'lerin fırlattığı, sunucu hata koduna göre Türkçe mesaj taşıyan hata. */
@@ -93,6 +94,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   time_expired: 'Süren doldu, protokol kullanılamaz.',
   no_digits_left: 'Elenecek rakam kalmadı.',
   invalid_payload: 'Geçersiz seçim: rakam 1-9, pozisyon 1-3 olmalı.',
+  silenced: 'Susturuldun — bu sıra protokol kullanamazsın.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -143,6 +145,7 @@ type OutcomePayload = {
   current_turn?: string | null;
   clock1_ms: number;
   clock2_ms: number;
+  fogged?: boolean;
 };
 
 function toTicket(p: TicketPayload): MatchTicket {
@@ -164,6 +167,8 @@ function toOutcome(p: OutcomePayload): GuessOutcome {
     currentTurn: p.current_turn ?? null,
     clock1Ms: p.clock1_ms,
     clock2Ms: p.clock2_ms,
+    // Yalnız işaretliyken eklenir (eski dönüş/teste şekil-uyumlu).
+    ...(p.fogged ? { fogged: true } : {}),
   };
 }
 
@@ -184,17 +189,25 @@ export async function getMyHand(matchId: string): Promise<ProtocolHand> {
     hand?: string[];
     selected?: string[];
     slots?: number;
-    uses?: { protocol_id: string; round: number }[];
+    uses?: { protocol_id: string; round: number; outcome?: ProtocolUseOutcomeKind }[];
     eliminations?: Record<string, number[]>;
     hints?: Record<string, ProtocolHint[]>;
+    shield_armed?: boolean;
+    reflect_armed?: boolean;
   }>('get_my_hand', { p_match_id: matchId });
   return {
     hand: p.hand ?? [],
     selected: p.selected ?? [],
     slots: Number(p.slots ?? 2),
-    uses: (p.uses ?? []).map((u) => ({ protocolId: u.protocol_id, round: u.round })),
+    uses: (p.uses ?? []).map((u) => ({
+      protocolId: u.protocol_id,
+      round: u.round,
+      ...(u.outcome ? { outcome: u.outcome } : {}),
+    })),
     eliminations: p.eliminations ?? {},
     hints: p.hints ?? {},
+    shieldArmed: p.shield_armed ?? false,
+    reflectArmed: p.reflect_armed ?? false,
   };
 }
 
@@ -225,6 +238,12 @@ export async function activateProtocol(
     stolen_ms?: number;
     frozen?: boolean;
     slowed?: boolean;
+    outcome?: ProtocolUseOutcomeKind;
+    blocked?: boolean;
+    reflected?: boolean;
+    wasted_protocol?: string;
+    no_target_protocol?: boolean;
+    armed?: 'shield' | 'reflect';
   }>('use_protocol', {
     p_match_id: matchId,
     p_protocol_id: protocolId,
@@ -249,6 +268,12 @@ export async function activateProtocol(
     ...(p.stolen_ms != null ? { stolenMs: p.stolen_ms } : {}),
     ...(p.frozen != null ? { frozen: p.frozen } : {}),
     ...(p.slowed != null ? { slowed: p.slowed } : {}),
+    ...(p.outcome != null ? { outcome: p.outcome } : {}),
+    ...(p.blocked != null ? { blocked: p.blocked } : {}),
+    ...(p.reflected != null ? { reflected: p.reflected } : {}),
+    ...(p.wasted_protocol != null ? { wastedProtocol: p.wasted_protocol } : {}),
+    ...(p.no_target_protocol != null ? { noTargetProtocol: p.no_target_protocol } : {}),
+    ...(p.armed != null ? { armed: p.armed } : {}),
   };
 }
 

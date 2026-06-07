@@ -31,10 +31,15 @@ export type MatchRow = {
   // Konfig (özel oda ayarları); eski satırlarda olmayabilir → mapping default'lar.
   clock_ms?: number;
   first_turn_mode?: FirstTurnMode;
-  // Saat protokolü bayrakları (Faz 3 / Adım 4b); eski satırlarda olmayabilir.
+  // Saat/engel protokolü bayrakları (Faz 3 / Adım 4b-4c); eski satırlarda
+  // olmayabilir.
   turn_frozen?: boolean;
   turn_slow_p1?: boolean;
   turn_slow_p2?: boolean;
+  fog_p1?: boolean;
+  fog_p2?: boolean;
+  silenced_p1?: boolean;
+  silenced_p2?: boolean;
   setup_deadline: string | null;
   // Protokol seçim fazı (Destiny's Hand) bitiş anı; eski satırlarda olmayabilir.
   select_deadline?: string | null;
@@ -58,6 +63,8 @@ export type GuessRow = {
   feedback: GuessFeedback;
   round?: number;
   created_at: string;
+  /** Sis Perdesi işareti (4c); eski satırlarda olmayabilir. */
+  fogged?: boolean;
 };
 
 /** presence tablosundan/realtime'dan gelen ham satır. */
@@ -76,6 +83,8 @@ export type ProtocolUseRow = {
   protocol_id: string;
   round: number;
   created_at: string;
+  /** Counter zinciri sonucu (4c); eski satırlarda olmayabilir. */
+  outcome?: string;
 };
 
 /**
@@ -113,6 +122,10 @@ export function matchRowToState(
     turnFrozen: row.turn_frozen ?? false,
     turnSlowP1: row.turn_slow_p1 ?? false,
     turnSlowP2: row.turn_slow_p2 ?? false,
+    fogP1: row.fog_p1 ?? false,
+    fogP2: row.fog_p2 ?? false,
+    silencedP1: row.silenced_p1 ?? false,
+    silencedP2: row.silenced_p2 ?? false,
     setupDeadline: row.setup_deadline,
     selectDeadline: row.select_deadline ?? null,
     player1Present: row.player1_present ?? false,
@@ -134,6 +147,8 @@ export function guessRowToGuess(row: GuessRow): OnlineGuess {
     feedback: row.feedback,
     round: row.round ?? 1,
     createdAt: row.created_at,
+    // Yalnız işaretliyken eklenir (eski satır/teste şekil-uyumlu).
+    ...(row.fogged ? { fogged: true } : {}),
   };
 }
 
@@ -153,6 +168,7 @@ export function protocolUseRowToUse(row: ProtocolUseRow): ProtocolUse {
     protocolId: row.protocol_id,
     round: row.round,
     createdAt: row.created_at,
+    outcome: (row.outcome as ProtocolUse['outcome']) ?? 'applied',
   };
 }
 
