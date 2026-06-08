@@ -292,6 +292,9 @@ export type MyRank = {
   ownedSignals: string[];
   /** Kalıcı sinyal destesi (≤6) — maç sonu reaksiyonları (Sinyal Adım 2). */
   signalDeck: string[];
+  /** Güncel sezon kimliği (Lig sistemi); haftalık sıfırlamada artar. Lig
+   *  migration'ı öncesi sunucuya karşı null. İstemci yeni sezonu bundan algılar. */
+  seasonId: number | null;
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */

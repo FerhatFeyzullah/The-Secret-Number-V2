@@ -202,6 +202,7 @@ describe('getMyRank', () => {
       owned: [],
       ownedSignals: [],
       signalDeck: [],
+      seasonId: null,
     });
     expect(rpcMock).toHaveBeenCalledWith('get_my_rank', undefined);
   });
@@ -240,7 +241,13 @@ describe('getMyRank', () => {
       owned: [],
       ownedSignals: [],
       signalDeck: [],
+      seasonId: null,
     });
+  });
+
+  it('season_id alanını (lig/sezon) eşler', async () => {
+    rpcResolves({ rank: 2, username: 'vavi', rating: 1100, wins: 5, season_id: 3 });
+    await expect(getMyRank()).resolves.toMatchObject({ seasonId: 3 });
   });
 
   it('owned_signals / signal_deck alanlarını eşler', async () => {

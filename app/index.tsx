@@ -5,15 +5,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
+import { LeagueBadge } from '@/leagues/badge';
+import { LeagueMapModal } from '@/leagues/league-map-modal';
+import { SeasonResetModal } from '@/leagues/season-reset-modal';
 import { getMyRank } from '@/online';
 import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
 import {
   getLastMode,
   getLastSeenLevel,
+  getLastSeenSeason,
   getSeen,
   markSeen,
   setLastMode,
   setLastSeenLevel,
+  setLastSeenSeason,
   type GameMode,
 } from '@/storage';
 import { InfoModal } from '@/ui/info-modal';
@@ -38,6 +43,10 @@ export default function MenuScreen() {
   const [statsOpen, setStatsOpen] = useState(false);
   // Seviye atladıysa kutlanacak seviye (null = kutlama yok).
   const [levelUp, setLevelUp] = useState<number | null>(null);
+  // Yeni sezon algılandıysa sezon-sıfırlama modalı açık (Kupa'dan lig türetir).
+  const [seasonResetOpen, setSeasonResetOpen] = useState(false);
+  // Lig haritası modalı (tüm kademeler + mevcut konum) — lig rozetine dokununca.
+  const [leagueMapOpen, setLeagueMapOpen] = useState(false);
   // Basılı-tut bilgi balonu (rozetler); null = kapalı. Normal dokunuş davranışı
   // (kupa → lider tablosu) korunur; uzun basış yalnız tooltip gösterir. Parmak
   // kalkınca hemen değil, 3 sn sonra kapanır.
@@ -103,6 +112,14 @@ export default function MenuScreen() {
           const prev = await getLastSeenLevel();
           if (alive && prev != null && r.level > prev) setLevelUp(r.level);
           await setLastSeenLevel(r.level);
+          // Sezon sıfırlama: yeni season_id görülürse tek sefer modal (flicker-safe:
+          // hem get_my_rank hem kayıtlı sezon çözülmeden gösterilmez). İlk kayıtta
+          // (prev null) sessizce ilkler — yeni kullanıcıya "kupan çekildi" denmez.
+          if (r.seasonId != null) {
+            const prevSeason = await getLastSeenSeason();
+            if (alive && prevSeason != null && r.seasonId > prevSeason) setSeasonResetOpen(true);
+            await setLastSeenSeason(r.seasonId);
+          }
         })
         .catch(() => {
           if (alive) {
@@ -154,6 +171,16 @@ export default function MenuScreen() {
             </Text>
             {session ? (
               <View style={styles.badges}>
+                {rating != null ? (
+                  // Lig rozeti (Kupa'dan türetilir) → dokunuş lig haritası modalı.
+                  <Pressable
+                    onPress={() => setLeagueMapOpen(true)}
+                    hitSlop={6}
+                    accessibilityLabel="Lig haritası"
+                    style={styles.leagueChip}>
+                    <LeagueBadge rating={rating} size={18} showName={false} />
+                  </Pressable>
+                ) : null}
                 {rating != null ? (
                   // Dokunuş = lider tablosu (korunur); basılı tut = bilgi balonu.
                   <Pressable
@@ -283,6 +310,18 @@ export default function MenuScreen() {
         onClose={() => setLevelUp(null)}
       />
       <InfoModal visible={welcomeVisible} onClose={closeWelcome} {...WELCOME_INTRO} />
+      {/* Haftalık sezon sıfırlandığında bir kez (yeni season_id). */}
+      <SeasonResetModal
+        visible={seasonResetOpen}
+        rating={rating ?? 1000}
+        onClose={() => setSeasonResetOpen(false)}
+      />
+      {/* Lig haritası — lig rozetine dokununca tüm kademeler + mevcut konum. */}
+      <LeagueMapModal
+        visible={leagueMapOpen}
+        rating={rating}
+        onClose={() => setLeagueMapOpen(false)}
+      />
     </Screen>
   );
 }
@@ -349,6 +388,10 @@ const styles = StyleSheet.create({
     left: 0,
     marginTop: 8,
     zIndex: 50,
+  },
+  leagueChip: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   trophy: {
     flexDirection: 'row',

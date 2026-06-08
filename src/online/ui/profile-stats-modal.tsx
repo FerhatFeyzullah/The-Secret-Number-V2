@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LeagueBadge } from '@/leagues/badge';
+import { LeagueMapModal } from '@/leagues/league-map-modal';
 import { getMyRank, isEliteLevel, levelTitle, OnlineError, type MyRank } from '@/online';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
@@ -78,6 +80,7 @@ export function ProfileStatsModal({
   // İlerleme tanıtımı (flicker-safe): profil ilk açıldığında bayrak yüklenip
   // !seen ise InfoModal açılır; "?" başlık butonu her zaman açar.
   const [progressIntro, setProgressIntro] = useState(false);
+  const [leagueMapOpen, setLeagueMapOpen] = useState(false);
   const progressCheckedRef = useRef(false);
   useEffect(() => {
     if (!visible) {
@@ -198,6 +201,16 @@ export function ProfileStatsModal({
                 )}
               </View>
             ) : null}
+            {/* Lig rozeti (Kupa'dan türetilir) — dokunuş lig haritası modalı. */}
+            {signedIn && !loading && data ? (
+              <Pressable
+                onPress={() => setLeagueMapOpen(true)}
+                hitSlop={6}
+                accessibilityLabel="Lig haritası"
+                style={styles.leagueRow}>
+                <LeagueBadge rating={data.rating} size={22} />
+              </Pressable>
+            ) : null}
           </View>
 
           {/* Seviye (XP ilerlemesi) + unvan + Veri — yalnızca sunucudan gelir.
@@ -286,6 +299,11 @@ export function ProfileStatsModal({
           icon="trending-up"
           accent={colors.cyan}
           sections={PROGRESSION_SECTIONS}
+        />
+        <LeagueMapModal
+          visible={leagueMapOpen}
+          rating={data?.rating ?? null}
+          onClose={() => setLeagueMapOpen(false)}
         />
       </View>
     </Modal>
@@ -386,6 +404,10 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(colors.amber, 0.12),
     borderWidth: 1,
     borderColor: withAlpha(colors.amber, 0.32),
+  },
+  leagueRow: {
+    marginTop: 8,
+    alignItems: 'center',
   },
   trophyText: {
     color: colors.amber,
