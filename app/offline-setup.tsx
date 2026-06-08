@@ -1,11 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { getSeen, markSeen } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
+import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors, mono } from '@/ui/theme';
+
+/** Offline kurulum tanıtımı — mod farkı, sayı kuralı, pratik amaçlı. */
+const OFFLINE_SECTIONS: InfoSection[] = [
+  {
+    icon: 'hash',
+    accent: colors.cyan,
+    title: 'Tahmin Hakkı',
+    body: 'Sınırlı sayıda tahmin kredisi alırsın; krediler biterse kaybedersin. Daha az hak = daha zor.',
+  },
+  {
+    icon: 'clock',
+    accent: colors.amber,
+    title: 'Süreli',
+    body: 'Geri sayan bir saate karşı oynarsın; süre dolarsa kaybedersin.',
+  },
+  {
+    icon: 'target',
+    accent: colors.teal,
+    title: 'Sayı Kuralı',
+    body: 'Gizli sayı 3 FARKLI rakamdan oluşur (1-9 arası, sıfır YOK).',
+  },
+  {
+    icon: 'info',
+    accent: colors.violet,
+    title: 'Pratik Amaçlı',
+    body: 'Çevrimdışı oyun Kupa, XP ya da Veri kazandırmaz — tamamen pratik ve eğlence içindir.',
+  },
+];
 
 const guessOptions = [5, 7, 10, 12];
 const timeOptions = [
@@ -30,9 +60,27 @@ export default function OfflineSetupScreen() {
     router.push({ pathname: '/offline', params: { mode, limit: String(limit) } });
   };
 
+  // Tanıtım (flicker-safe): intro BAŞTA false; bayrak yüklenip !seen ise açılır.
+  const [intro, setIntro] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const seen = await getSeen('offlineIntro');
+      if (alive && !seen) setIntro(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const openIntro = useCallback(() => setIntro(true), []);
+  const closeIntro = useCallback(() => {
+    setIntro(false);
+    void markSeen('offlineIntro');
+  }, []);
+
   return (
     <Screen>
-      <ScreenHeader title="Oyun Kurulumu" />
+      <ScreenHeader title="Oyun Kurulumu" onInfo={openIntro} />
       <ScrollView contentContainerStyle={styles.list}>
         <Pressable onPress={() => setMode('guesses')}>
           <GlassCard style={mode === 'guesses' ? styles.cardActive : styles.card}>
@@ -135,6 +183,15 @@ export default function OfflineSetupScreen() {
           <GlassButton label="Başla" accent={colors.dim} onPress={() => {}} />
         )}
       </ScrollView>
+
+      <InfoModal
+        visible={intro}
+        onClose={closeIntro}
+        title="OYUN KURULUMU"
+        icon="settings"
+        accent={colors.cyan}
+        sections={OFFLINE_SECTIONS}
+      />
     </Screen>
   );
 }

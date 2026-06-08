@@ -1,10 +1,10 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
-import { getToggle, setToggle } from '@/storage';
+import { getToggle, resetSeen, setToggle } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { InfoModal } from '@/ui/info-modal';
 import { Screen, ScreenHeader } from '@/ui/screen';
@@ -59,6 +59,12 @@ export default function SettingsScreen() {
   const changeHaptics = (value: boolean) => {
     setHaptics(value);
     setToggle('haptics', value);
+  };
+
+  // Tüm bilgilendirme bayraklarını sil → tanıtım modalları yeniden ilk-kez gibi.
+  const resetIntros = async () => {
+    await resetSeen();
+    Alert.alert('Bilgilendirmeler sıfırlandı', 'Tüm tanıtım modalları yeniden gösterilecek.');
   };
 
   return (
@@ -146,6 +152,7 @@ export default function SettingsScreen() {
 
         <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
         <GlassButton small label="Tanıtımı Göster" onPress={() => setWelcomeOpen(true)} />
+        <GlassButton small label="Bilgilendirmeleri Sıfırla" onPress={() => void resetIntros()} />
 
         <GlassCard>
           <Text style={styles.sectionTitle}>Hakkında</Text>
