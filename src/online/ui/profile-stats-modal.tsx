@@ -4,7 +4,38 @@ import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getMyRank, isEliteLevel, levelTitle, OnlineError, type MyRank } from '@/online';
+import { getSeen, markSeen } from '@/storage';
+import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
+
+/** İlerleme sistemi tanıtımı — gerçek değerlerle birebir (1-10 seviye kalıcı XP,
+ *  unvanlar, Kupa rekabet sıralaması, Veri oyun parası). */
+const PROGRESSION_SECTIONS: InfoSection[] = [
+  {
+    icon: 'trending-up',
+    accent: colors.violet,
+    title: 'Seviye & XP',
+    body: 'XP topladıkça 1-10 arası seviyen yükselir (kalıcıdır, asla sıfırlanmaz). Her seviyenin XP eşiği vardır ve yeni protokollere erişim açar.',
+  },
+  {
+    icon: 'star',
+    accent: colors.gold,
+    title: 'Unvan',
+    body: 'Seviyene bağlı bir unvanın olur (Çırak’tan Efsane’ye). Son seviyeler (8-10) elit/altın gösterilir.',
+  },
+  {
+    icon: 'award',
+    accent: colors.amber,
+    title: 'Kupa',
+    body: 'Rekabet sıralaman. Hızlı ve Protokol maçlarını kazandıkça artar, kaybedince düşer.',
+  },
+  {
+    icon: 'database',
+    accent: colors.teal,
+    title: 'Veri',
+    body: 'Oyun paran. Maçlardan kazanılır; protokol (ve ileride emoji) açmak için harcanır.',
+  },
+];
 
 /** Yüklenirken kutu içinde yanıp sönen yer tutucu çubuk (iskelet). */
 function Skel({ width }: { width: number }) {
@@ -43,6 +74,33 @@ export function ProfileStatsModal({
   const insets = useSafeAreaInsets();
 
   const pop = useRef(new Animated.Value(0)).current;
+
+  // İlerleme tanıtımı (flicker-safe): profil ilk açıldığında bayrak yüklenip
+  // !seen ise InfoModal açılır; "?" başlık butonu her zaman açar.
+  const [progressIntro, setProgressIntro] = useState(false);
+  const progressCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!visible) {
+      setProgressIntro(false);
+      progressCheckedRef.current = false;
+      return;
+    }
+    if (progressCheckedRef.current) return;
+    progressCheckedRef.current = true;
+    let alive = true;
+    void (async () => {
+      const seen = await getSeen('progression');
+      if (alive && !seen) setProgressIntro(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [visible]);
+  const openProgressIntro = useCallback(() => setProgressIntro(true), []);
+  const closeProgressIntro = useCallback(() => {
+    setProgressIntro(false);
+    void markSeen('progression');
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -112,6 +170,9 @@ export function ProfileStatsModal({
           {/* Başlık çubuğu */}
           <View style={styles.head}>
             <Text style={styles.title}>PROFİL</Text>
+            <Pressable onPress={openProgressIntro} hitSlop={10} style={styles.help}>
+              <Feather name="help-circle" size={16} color={colors.cyan} />
+            </Pressable>
             <Pressable onPress={onClose} hitSlop={10} style={styles.close}>
               <Feather name="x" size={16} color={colors.dim} />
             </Pressable>
@@ -217,6 +278,15 @@ export function ProfileStatsModal({
             </View>
           )}
         </Animated.View>
+
+        <InfoModal
+          visible={progressIntro}
+          onClose={closeProgressIntro}
+          title="İLERLEME"
+          icon="trending-up"
+          accent={colors.cyan}
+          sections={PROGRESSION_SECTIONS}
+        />
       </View>
     </Modal>
   );
@@ -255,6 +325,17 @@ const styles = StyleSheet.create({
     fontFamily: mono,
     textShadowColor: cyanAlpha(0.4),
     textShadowRadius: 12,
+  },
+  help: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: withAlpha(colors.cyan, 0.35),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   close: {
     width: 30,

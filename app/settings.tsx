@@ -6,8 +6,10 @@ import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-nat
 import { useAuth, useProfile } from '@/auth';
 import { getToggle, setToggle } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
+import { InfoModal } from '@/ui/info-modal';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors } from '@/ui/theme';
+import { WELCOME_INTRO } from '@/ui/welcome-intro';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -17,6 +19,8 @@ export default function SettingsScreen() {
   const [name, setName] = useState('');
   const [sound, setSound] = useState(true);
   const [haptics, setHaptics] = useState(true);
+  // Karşılama/tanıtım modalını elle yeniden açma (seen bayrağından bağımsız).
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   // Kaynaktaki ad değişince (giriş/çıkış, sunucu teyidi) inputu eşitle.
   useEffect(() => {
@@ -141,6 +145,7 @@ export default function SettingsScreen() {
         </GlassCard>
 
         <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
+        <GlassButton small label="Tanıtımı Göster" onPress={() => setWelcomeOpen(true)} />
 
         <GlassCard>
           <Text style={styles.sectionTitle}>Hakkında</Text>
@@ -150,6 +155,8 @@ export default function SettingsScreen() {
           </Text>
         </GlassCard>
       </ScrollView>
+
+      <InfoModal visible={welcomeOpen} onClose={() => setWelcomeOpen(false)} {...WELCOME_INTRO} />
     </Screen>
   );
 }
