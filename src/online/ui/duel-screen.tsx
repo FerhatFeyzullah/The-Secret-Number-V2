@@ -10,6 +10,7 @@ import {
   activateProtocol,
   getMatchReveal,
   getMyHand,
+  getMyRank,
   makeGuess,
   OnlineError,
   useMatch,
@@ -54,14 +55,16 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     clocks,
     loading,
     error,
-    sendEmoji,
-    incomingEmoji,
+    sendSignal,
+    incomingSignal,
     protocolUses,
     incomingProtocolUse,
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
+  // Maç sonu reaksiyon seti: oyuncunun sinyal destesi (sunucudan, Adım 2).
+  const [signalDeck, setSignalDeck] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Son biten turun sonucu (Best of 3 tur arası ekranı için): kim + neden.
@@ -469,6 +472,18 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     };
   }, [finished, matchId]);
 
+  // Maç bitince sinyal destesini çek (sonuç ekranı reaksiyon şeridi için).
+  useEffect(() => {
+    if (!finished) return;
+    let alive = true;
+    getMyRank()
+      .then((r) => alive && setSignalDeck(r.signalDeck))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [finished]);
+
   // Bitiş sesi/haptiği (bir kez).
   const finishFxRef = useRef(false);
   useEffect(() => {
@@ -721,8 +736,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           theirSecret={reveal?.opponent ?? null}
           opponentName={opponentName}
           opponentInitial={opponentName.charAt(0)}
-          incomingEmoji={incomingEmoji}
-          onSendEmoji={sendEmoji}
+          deck={signalDeck}
+          incomingSignal={incomingSignal}
+          onSendSignal={sendSignal}
           onRematch={goRematch}
           onMenu={goMenu}
         />
