@@ -26,7 +26,7 @@ const LOW_MS = 5_000;
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
 
-/** Destiny's Hand — maç başı protokol seçimi (Protokol Maçı, belirleme öncesi).
+/** Kader Eli — maç başı protokol seçimi (Protokol Maçı, belirleme öncesi).
  *  El SUNUCUDA dağıtılır (get_my_hand); seçim set_protocol_selection'a yazılır.
  *  Süre dolunca/eksik seçimde sunucu rastgele tamamlar. Rakibin eli gizli.
  *  Sayaç ancak iki taraf da present olunca (select_deadline) başlar. */
@@ -277,7 +277,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
         {/* Maç bağlamı */}
         <View style={styles.context}>
           <View style={styles.ctxDot} />
-          <Text style={styles.ctxText}>Protokol Maçı · Best of 3</Text>
+          <Text style={styles.ctxText}>Protokol Maçı · 3 tur</Text>
         </View>
 
         {!bothPresent ? (
@@ -299,7 +299,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
               <Text style={{ color: colors.dim }}> / {slots} seçildi</Text>
             </Text>
             <Text style={[styles.counterHint, { color: full ? colors.cyan : colors.dim }]}>
-              {full ? 'Limit dolu — hazır olabilirsin' : `${slots - selected.length} slot daha seçilebilir`}
+              {full ? 'Limit dolu — hazır olabilirsin' : `${slots - selected.length} yuva daha seçilebilir`}
             </Text>
           </View>
         </View>

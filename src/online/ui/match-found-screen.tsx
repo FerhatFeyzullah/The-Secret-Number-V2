@@ -114,8 +114,8 @@ export function MatchFoundScreen({
         <Animated.View style={[styles.firstTurn, rise]}>
           <Feather name="layers" size={12} color={colors.violet} />
           <Text style={styles.firstTurnText}>
-            <Text style={[styles.firstTurnVal, { color: colors.violet }]}>Best of 3</Text> · 2 tur
-            kazanan alır
+            <Text style={[styles.firstTurnVal, { color: colors.violet }]}>3 tur</Text> · iki
+            galibiyet alır
           </Text>
         </Animated.View>
       ) : null}
