@@ -84,12 +84,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getProfileName().then(setDisplayName).finally(() => setInitializing(false));
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      lastUserId.current = data.session?.user.id ?? null;
-      loadDisplayName(data.session).finally(() => setInitializing(false));
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const client = supabase;
+    // Saklı oturumu cihaz state'inden temizleyip "çıkış yapılmış" duruma geç.
+    // Geçersiz/bulunamayan refresh token (eski ya da sunucuda iptal edilmiş oturum)
+    // durumunda kullanılır: hata gösterme, takılma, çökme yok → giriş ekranı.
+    const resetToSignedOut = async () => {
+      // scope:'local' → ağ çağrısı yok; yalnız cihazdaki bayat token'ı siler ki
+      // sonraki açılışlarda tekrar yenilenmeye çalışılıp aynı hatayı vermesin.
+      await client.auth.signOut({ scope: 'local' }).catch(() => {});
+      setSession(null);
+      lastUserId.current = null;
+      await loadDisplayName(null);
+    };
+
+    // Açılışta saklı oturumu yükle. getSession süresi dolmuş access token'ı
+    // yenilemeyi dener; refresh token geçersiz/yoksa hata döner → sessizce temizle.
+    // Geçerli oturum normal şekilde yüklenir (akış bozulmaz).
+    client.auth
+      .getSession()
+      .then(async ({ data, error }) => {
+        if (error) {
+          await resetToSignedOut();
+          return;
+        }
+        setSession(data.session);
+        lastUserId.current = data.session?.user.id ?? null;
+        await loadDisplayName(data.session);
+      })
+      // getSession beklenmedik şekilde reddederse de temiz duruma düş.
+      .catch(() => resetToSignedOut())
+      .finally(() => setInitializing(false));
+
+    const { data: sub } = client.auth.onAuthStateChange((_event, next) => {
+      // Arka planda token yenileme başarısız olursa supabase SIGNED_OUT yayar →
+      // next null gelir → temiz "çıkış" durumu (giriş ekranı), hata gösterilmez.
       setSession(next);
       const nextUserId = next?.user.id ?? null;
       if (nextUserId !== lastUserId.current) {
