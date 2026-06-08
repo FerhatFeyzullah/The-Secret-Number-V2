@@ -288,6 +288,10 @@ export type MyRank = {
   levelNext: number | null;
   /** Sahip olunan protokol id'leri (Faz 2a). */
   owned: string[];
+  /** Sahip olunan sinyal id'leri (Sinyal Adım 2). */
+  ownedSignals: string[];
+  /** Kalıcı sinyal destesi (≤6) — maç sonu reaksiyonları (Sinyal Adım 2). */
+  signalDeck: string[];
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */

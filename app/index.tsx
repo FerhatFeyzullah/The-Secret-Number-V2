@@ -199,6 +199,14 @@ export default function MenuScreen() {
         </Pressable>
         <View style={styles.rightControls}>
           <Pressable
+            onPress={() => router.push('/store')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Mağaza"
+            style={styles.headerBtn}>
+            <Feather name="shopping-bag" size={20} color={colors.cyan} />
+          </Pressable>
+          <Pressable
             onPress={() => router.push('/protocols')}
             hitSlop={10}
             accessibilityRole="button"
