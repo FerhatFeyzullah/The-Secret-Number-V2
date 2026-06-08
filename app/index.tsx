@@ -7,8 +7,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth, useProfile } from '@/auth';
 import { getMyRank } from '@/online';
 import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
-import { getLastMode, getLastSeenLevel, setLastMode, setLastSeenLevel, type GameMode } from '@/storage';
+import {
+  getLastMode,
+  getLastSeenLevel,
+  getSeen,
+  markSeen,
+  setLastMode,
+  setLastSeenLevel,
+  type GameMode,
+} from '@/storage';
+import { InfoModal } from '@/ui/info-modal';
 import { InfoTipBubble, TIPS, type TipId } from '@/ui/info-tip';
+import { WELCOME_INTRO } from '@/ui/welcome-intro';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
@@ -48,6 +58,24 @@ export default function MenuScreen() {
   // Son seçilen modu hatırla (yereldir, profil verisi değil).
   useEffect(() => {
     getLastMode().then(setMode);
+  }, []);
+
+  // Karşılama modalı (flicker-safe): bayrak yüklenene kadar AÇILMAZ; ilk açılışsa
+  // (görülmediyse) açılır. İlk ekran olduğundan yarış/yanıp sönme kritik.
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const seen = await getSeen('welcome');
+      if (alive && !seen) setWelcomeVisible(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const closeWelcome = useCallback(() => {
+    setWelcomeVisible(false);
+    void markSeen('welcome');
   }, []);
 
   const selectMode = (next: GameMode) => {
@@ -230,6 +258,7 @@ export default function MenuScreen() {
         level={levelUp ?? 1}
         onClose={() => setLevelUp(null)}
       />
+      <InfoModal visible={welcomeVisible} onClose={closeWelcome} {...WELCOME_INTRO} />
     </Screen>
   );
 }
