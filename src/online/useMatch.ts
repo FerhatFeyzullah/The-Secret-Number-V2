@@ -53,11 +53,12 @@ export type UseMatchResult = {
   error: string | null;
   /** Tüm durumu sunucudan yeniden çeker (ör. ekrana dönünce). */
   refresh: () => Promise<void>;
-  /** Maç kanalına efemeral emoji yayınlar (realtime broadcast; DB'ye YAZMAZ). */
-  sendEmoji: (emoji: string) => void;
-  /** Rakipten gelen son emoji (kendi yayınların filtrelenir). nonce her gelişte
-   *  artar; tüketici aynı emoji tekrarında bile pop animasyonunu yenileyebilir. */
-  incomingEmoji: { emoji: string; nonce: number } | null;
+  /** Maç kanalına efemeral SİNYAL id'si yayınlar (maç sonu reaksiyonu; realtime
+   *  broadcast; DB'ye YAZMAZ). Kullanılabilir set oyuncunun sinyal destesidir. */
+  sendSignal: (signalId: string) => void;
+  /** Rakipten gelen son sinyal id'si (kendi yayınların filtrelenir). nonce her
+   *  gelişte artar; tüketici aynı sinyal tekrarında bile pop'u yenileyebilir. */
+  incomingSignal: { id: string; nonce: number } | null;
   /** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez),
    *  realtime güncel. Şerit "kullanıldı" durumu buradan türetilir. */
   protocolUses: ProtocolUse[];
@@ -90,9 +91,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const [loading, setLoading] = useState(matchId != null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  // Rakipten gelen efemeral emoji (broadcast); nonce ile her geliş ayrışır.
-  const [incomingEmoji, setIncomingEmoji] = useState<{ emoji: string; nonce: number } | null>(null);
-  const emojiNonceRef = useRef(0);
+  // Rakipten gelen efemeral sinyal (broadcast); nonce ile her geliş ayrışır.
+  const [incomingSignal, setIncomingSignal] = useState<{ id: string; nonce: number } | null>(null);
+  const signalNonceRef = useRef(0);
   // Protokol kullanım kayıtları (realtime + refresh) ve canlı olay sinyali.
   const [protocolUses, setProtocolUses] = useState<ProtocolUse[]>([]);
   const [incomingProtocolUse, setIncomingProtocolUse] = useState<{
@@ -315,12 +316,12 @@ export function useMatch(matchId: string | null): UseMatchResult {
             }
           },
         )
-        .on('broadcast', { event: 'emoji' }, ({ payload }) => {
-          // Efemeral emoji: yalnızca rakibinkini göster (kendi yayınını filtrele).
-          const p = payload as { emoji?: string; from?: string } | undefined;
-          if (!p?.emoji || p.from === myIdRef.current) return;
-          emojiNonceRef.current += 1;
-          setIncomingEmoji({ emoji: p.emoji, nonce: emojiNonceRef.current });
+        .on('broadcast', { event: 'signal' }, ({ payload }) => {
+          // Efemeral sinyal: yalnızca rakibinkini göster (kendi yayınını filtrele).
+          const p = payload as { signal?: string; from?: string } | undefined;
+          if (!p?.signal || p.from === myIdRef.current) return;
+          signalNonceRef.current += 1;
+          setIncomingSignal({ id: p.signal, nonce: signalNonceRef.current });
         })
         .subscribe((status) => {
           if (disposed) return;
@@ -455,11 +456,15 @@ export function useMatch(matchId: string | null): UseMatchResult {
     if (opponentGone && matchId) void heartbeat(matchId).catch(() => {});
   }, [opponentGone, matchId]);
 
-  // Efemeral emoji yayını: kanal üzerinden broadcast (DB'ye yazmaz).
-  const sendEmoji = useCallback((emoji: string) => {
+  // Efemeral sinyal yayını: kanal üzerinden broadcast (DB'ye yazmaz).
+  const sendSignal = useCallback((signalId: string) => {
     const ch = channelRef.current;
     if (!ch) return;
-    void ch.send({ type: 'broadcast', event: 'emoji', payload: { emoji, from: myIdRef.current } });
+    void ch.send({
+      type: 'broadcast',
+      event: 'signal',
+      payload: { signal: signalId, from: myIdRef.current },
+    });
   }, []);
 
   return {
@@ -471,8 +476,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
     loading,
     error,
     refresh,
-    sendEmoji,
-    incomingEmoji,
+    sendSignal,
+    incomingSignal,
     protocolUses,
     incomingProtocolUse,
   };

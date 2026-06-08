@@ -153,8 +153,6 @@ export default function SettingsScreen() {
         <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
         <GlassButton small label="Tanıtımı Göster" onPress={() => setWelcomeOpen(true)} />
         <GlassButton small label="Bilgilendirmeleri Sıfırla" onPress={() => void resetIntros()} />
-        {/* GEÇİCİ — Sinyal Adım 1 önizlemesi (değerlendirme sonrası silinecek). */}
-        <GlassButton small label="🔧 Sinyal Önizleme" onPress={() => router.push('/signals-preview')} />
 
         <GlassCard>
           <Text style={styles.sectionTitle}>Hakkında</Text>
