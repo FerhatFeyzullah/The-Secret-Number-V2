@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LeagueBadge } from '@/leagues/badge';
+import { LeagueMapModal } from '@/leagues/league-map-modal';
 import {
   getLeaderboard,
   getMyRank,
@@ -78,6 +79,7 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leagueMapOpen, setLeagueMapOpen] = useState(false);
   const insets = useSafeAreaInsets();
 
   const pop = useRef(new Animated.Value(0)).current;
@@ -199,7 +201,12 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
                     <Text style={styles.rowName} numberOfLines={1}>
                       {displayName(me.username)} <Text style={styles.meTag}>· SEN</Text>
                     </Text>
-                    <LeagueBadge rating={me.rating} size={16} showName={false} />
+                    <Pressable
+                      onPress={() => setLeagueMapOpen(true)}
+                      hitSlop={6}
+                      accessibilityLabel="Lig haritası">
+                      <LeagueBadge rating={me.rating} size={16} showName={false} />
+                    </Pressable>
                     <Rating value={me.rating} />
                   </View>
                 </View>
@@ -207,6 +214,11 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
             </>
           )}
         </Animated.View>
+        <LeagueMapModal
+          visible={leagueMapOpen}
+          rating={me?.rating ?? null}
+          onClose={() => setLeagueMapOpen(false)}
+        />
       </View>
     </Modal>
   );

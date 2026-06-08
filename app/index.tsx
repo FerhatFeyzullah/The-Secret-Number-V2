@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
 import { LeagueBadge } from '@/leagues/badge';
+import { LeagueMapModal } from '@/leagues/league-map-modal';
 import { SeasonResetModal } from '@/leagues/season-reset-modal';
 import { getMyRank } from '@/online';
 import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
@@ -44,6 +45,8 @@ export default function MenuScreen() {
   const [levelUp, setLevelUp] = useState<number | null>(null);
   // Yeni sezon algılandıysa sezon-sıfırlama modalı açık (Kupa'dan lig türetir).
   const [seasonResetOpen, setSeasonResetOpen] = useState(false);
+  // Lig haritası modalı (tüm kademeler + mevcut konum) — lig rozetine dokununca.
+  const [leagueMapOpen, setLeagueMapOpen] = useState(false);
   // Basılı-tut bilgi balonu (rozetler); null = kapalı. Normal dokunuş davranışı
   // (kupa → lider tablosu) korunur; uzun basış yalnız tooltip gösterir. Parmak
   // kalkınca hemen değil, 3 sn sonra kapanır.
@@ -169,14 +172,11 @@ export default function MenuScreen() {
             {session ? (
               <View style={styles.badges}>
                 {rating != null ? (
-                  // Lig rozeti (Kupa'dan türetilir) → dokunuş lider tablosu.
+                  // Lig rozeti (Kupa'dan türetilir) → dokunuş lig haritası modalı.
                   <Pressable
-                    onPress={() => setBoardOpen(true)}
-                    onLongPress={() => openTip('rating')}
-                    onPressOut={scheduleTipClose}
-                    delayLongPress={300}
+                    onPress={() => setLeagueMapOpen(true)}
                     hitSlop={6}
-                    accessibilityLabel="Lig"
+                    accessibilityLabel="Lig haritası"
                     style={styles.leagueChip}>
                     <LeagueBadge rating={rating} size={18} showName={false} />
                   </Pressable>
@@ -315,6 +315,12 @@ export default function MenuScreen() {
         visible={seasonResetOpen}
         rating={rating ?? 1000}
         onClose={() => setSeasonResetOpen(false)}
+      />
+      {/* Lig haritası — lig rozetine dokununca tüm kademeler + mevcut konum. */}
+      <LeagueMapModal
+        visible={leagueMapOpen}
+        rating={rating}
+        onClose={() => setLeagueMapOpen(false)}
       />
     </Screen>
   );
