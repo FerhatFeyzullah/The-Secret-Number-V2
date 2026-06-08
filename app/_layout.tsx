@@ -1,16 +1,30 @@
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
 
 import { AuthProvider } from '@/auth';
 import { MatchSessionProvider } from '@/online';
 import { colors } from '@/ui/theme';
+import { IntroOverlay } from '@/ui/intro-overlay';
 
 // Kök yığının çapası HER ZAMAN ana menü (index). Cihaz son açık derin route'a
 // (ör. /match/[id], /match-setup) geri yüklense bile yığının ilk ekranı index
 // olur → geri tuşu/swipe ana menüye gider, ASLA uygulamadan çıkmaz.
 export const unstable_settings = { initialRouteName: 'index' };
 
+// Native splash'i biz kapatacağız (intro overlay hazır olunca) → splash ile intro
+// arasında menü flash'i olmaz.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function RootLayout() {
+  // Her soğuk başlangıçta yayıncı intro'su (route DEĞİL, overlay → nav yığını temiz).
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => {
+    // İlk render sonrası: native splash'i kapat (altında intro overlay zaten boyalı).
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   return (
     <AuthProvider>
       {/* Merkezi "aktif maç sahibi": maç-ekran kümesi dışına çıkıldığında tek
@@ -31,6 +45,9 @@ export default function RootLayout() {
         </Stack>
       </MatchSessionProvider>
       <StatusBar style="light" />
+      {/* Açılış intro'su — en üstte, menüyü kaplar; bitince fade-out + unmount,
+          altta hazır menü görünür. Geri tuşu intro'ya dönmez (overlay, route değil). */}
+      {!introDone ? <IntroOverlay onDone={() => setIntroDone(true)} /> : null}
     </AuthProvider>
   );
 }
