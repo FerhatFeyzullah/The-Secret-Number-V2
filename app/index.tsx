@@ -197,27 +197,43 @@ export default function MenuScreen() {
             ) : null}
           </View>
         </Pressable>
-        <View style={styles.rightControls}>
-          <Pressable
-            onPress={() => router.push('/store')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Mağaza"
-            style={styles.headerBtn}>
-            <Feather name="shopping-bag" size={20} color={colors.cyan} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/protocols')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Protokoller"
-            style={styles.headerBtn}>
-            <Feather name="cpu" size={20} color={colors.cyan} />
-          </Pressable>
-          <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.headerBtn}>
-            <Ionicons name="settings-outline" size={22} color={colors.cyan} />
-          </Pressable>
-        </View>
+        {/* Ayarlar tek başına sağ üstte (değişmedi). */}
+        <Pressable
+          onPress={() => router.push('/settings')}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Ayarlar"
+          style={[styles.headerBtn, styles.settingsBtn]}>
+          <Ionicons name="settings-outline" size={22} color={colors.cyan} />
+        </Pressable>
+      </View>
+
+      {/* Profil isminin altında dikey ikon sütunu: Mağaza → Protokoller → Emoji destesi */}
+      <View style={styles.sideIcons}>
+        <Pressable
+          onPress={() => router.push('/store')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Mağaza"
+          style={styles.headerBtn}>
+          <Feather name="shopping-bag" size={20} color={colors.cyan} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/protocols')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Protokoller"
+          style={styles.headerBtn}>
+          <Feather name="cpu" size={20} color={colors.cyan} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/signal-deck')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Emoji destesi"
+          style={styles.headerBtn}>
+          <Feather name="smile" size={20} color={colors.cyan} />
+        </Pressable>
       </View>
 
       {/* Orta blok: istatistik kartları kalkınca logo + menü dikeyde ortalanır */}
@@ -274,7 +290,9 @@ export default function MenuScreen() {
 const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // Sağ kontroller dikey sütun olduğundan üstten hizala: profil sol-üstte,
+    // ikon sütunu sağ-üstten aşağı iner (çakışma olmaz).
+    alignItems: 'flex-start',
     gap: 12,
     paddingVertical: 12,
   },
@@ -366,11 +384,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: mono,
   },
-  rightControls: {
+  // Ayarlar tek başına sağ üstte (profil satırının sağına yaslı).
+  settingsBtn: {
     marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  },
+  // Profil altında dikey ikon sütunu (sola yaslı; çakışma yok).
+  sideIcons: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 4,
   },
   headerBtn: {
     width: 40,
