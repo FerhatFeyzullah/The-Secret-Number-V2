@@ -91,11 +91,15 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   selected: {
-    // kabarık his: ince neon kenar + glow
-    shadowOpacity: 0.5,
-    shadowRadius: 9,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
+    // Kabarık his: iOS'ta ince neon glow (shadowColor inline accent ile).
+    // Android'de elevation Material gölgesi, yarı saydam turuncu/camgöbeği dolgunun
+    // ardına KOYU bir leke basıyordu (iOS'ta sorun yok) → Android'de kapatıldı.
+    // Seçili durum zaten accent kenar + renkli dolgu ile net belli.
+    ...Platform.select({
+      ios: { shadowOpacity: 0.5, shadowRadius: 9, shadowOffset: { width: 0, height: 0 } },
+      android: { elevation: 0 },
+      default: {},
+    }),
   },
   label: {
     color: colors.dim,
