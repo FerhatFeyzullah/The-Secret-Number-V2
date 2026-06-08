@@ -15,10 +15,40 @@ import {
 import { useAuth } from '@/auth';
 import { getMyRank, OnlineError, unlockProtocol, type MyRank } from '@/online';
 import { PILLAR_LABELS, PROTOCOLS, type Pillar, type Protocol } from '@/protocols/catalog';
+import { getSeen, markSeen } from '@/storage';
+import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { Screen } from '@/ui/screen';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { type FeatherName } from './parts';
 import { PILLAR_COLOR, protocolIcon } from './protocol-visuals';
+
+/** Protokoller sayfası tanıtımı — protokol nedir, nasıl açılır, maçta kullanım. */
+const PROTOCOLS_PAGE_SECTIONS: InfoSection[] = [
+  {
+    icon: 'cpu',
+    accent: colors.cyan,
+    title: 'Protokol Nedir?',
+    body: 'Protokol Maçı’nda kullanabileceğin özel güçler. 4 kategori: Bilgi, Zaman, Sabotaj, Savunma.',
+  },
+  {
+    icon: 'unlock',
+    accent: colors.teal,
+    title: 'Nasıl Açılır?',
+    body: 'Her protokolün bir Seviye kapısı vardır. Seviyene ulaşınca Veri harcayarak açarsın (bazıları başta açıktır).',
+  },
+  {
+    icon: 'layers',
+    accent: colors.violet,
+    title: 'Maçta Nasıl Kullanılır?',
+    body: 'Açtığın protokoller Protokol Maçı başında “Kader Eli” ile karşına rastgele gelir; seçtiklerini düelloda alt şeritten kullanırsın.',
+  },
+  {
+    icon: 'info',
+    accent: colors.amber,
+    title: 'Detay',
+    body: 'Bir karta dokun → o protokolün tam açıklamasını, seviyesini ve Veri maliyetini gör.',
+  },
+];
 
 const PILLAR_ORDER: Pillar[] = ['info', 'time', 'disrupt', 'defense'];
 
@@ -168,7 +198,8 @@ function DetailDialog({
             </View>
           </View>
 
-          <Text style={styles.dialogEffect}>{proto.effect}</Text>
+          <Text style={[styles.dialogSummary, { color: accent }]}>{proto.effect}</Text>
+          <Text style={styles.dialogEffect}>{proto.longDescription}</Text>
 
           {/* Gereksinim + maliyet */}
           <View style={styles.dialogChips}>
@@ -244,6 +275,26 @@ export function ProtocolTreeScreen() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // İlk-kez tanıtım modalı (flicker-safe): introVisible BAŞTA false → bayrak
+  // AsyncStorage'dan gelene kadar modal asla açılmaz. Yükleme bitince ve
+  // görülmediyse açılır. "?" başlık butonu ise her zaman açar.
+  const [introVisible, setIntroVisible] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const seen = await getSeen('protocolsPage');
+      if (alive && !seen) setIntroVisible(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const openIntro = useCallback(() => setIntroVisible(true), []);
+  const closeIntro = useCallback(() => {
+    setIntroVisible(false);
+    void markSeen('protocolsPage');
+  }, []);
+
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -293,14 +344,17 @@ export function ProtocolTreeScreen() {
         <Feather name="arrow-left" size={18} color={colors.text} />
       </Pressable>
       <Text style={styles.headerTitle}>PROTOKOLLER</Text>
-      {session && data ? (
-        <View style={styles.veriBalance}>
-          <Feather name="hexagon" size={12} color={colors.teal} />
-          <Text style={styles.veriBalanceText}>{fmtVeri(veri)}</Text>
-        </View>
-      ) : (
-        <View style={styles.back} />
-      )}
+      <View style={styles.headerRight}>
+        <Pressable onPress={openIntro} hitSlop={10} style={styles.help}>
+          <Feather name="help-circle" size={17} color={colors.cyan} />
+        </Pressable>
+        {session && data ? (
+          <View style={styles.veriBalance}>
+            <Feather name="hexagon" size={12} color={colors.teal} />
+            <Text style={styles.veriBalanceText}>{fmtVeri(veri)}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 
@@ -409,6 +463,14 @@ export function ProtocolTreeScreen() {
           onBuy={buy}
         />
       ) : null}
+      <InfoModal
+        visible={introVisible}
+        onClose={closeIntro}
+        title="PROTOKOLLER"
+        icon="cpu"
+        accent={colors.cyan}
+        sections={PROTOCOLS_PAGE_SECTIONS}
+      />
     </Screen>
   );
 }
@@ -427,6 +489,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.glassBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  help: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: withAlpha(colors.cyan, 0.4),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -713,6 +790,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: colors.dim,
     fontFamily: mono,
+  },
+  dialogSummary: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    fontFamily: mono,
+    letterSpacing: 0.2,
+    marginBottom: 8,
   },
   dialogEffect: {
     fontSize: 12,

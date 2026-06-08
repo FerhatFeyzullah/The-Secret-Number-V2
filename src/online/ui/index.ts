@@ -3,6 +3,8 @@ export { SearchingScreen } from './searching-screen';
 export { NoOpponentScreen } from './no-opponent-screen';
 export { PrivateChoiceScreen } from './private-choice-screen';
 export { ProtocolTreeScreen } from './protocol-tree-screen';
+export { StoreScreen } from './store-screen';
+export { SignalDeckScreen } from './signal-deck-screen';
 export { ProtocolSelectScreen } from './protocol-select-screen';
 export { PrivateRoomSetupScreen } from './private-room-setup-screen';
 export { SecretSetupScreen } from './setup-screen';

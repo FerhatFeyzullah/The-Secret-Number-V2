@@ -200,6 +200,8 @@ describe('getMyRank', () => {
       levelFloor: 420,
       levelNext: 640,
       owned: [],
+      ownedSignals: [],
+      signalDeck: [],
     });
     expect(rpcMock).toHaveBeenCalledWith('get_my_rank', undefined);
   });
@@ -236,6 +238,23 @@ describe('getMyRank', () => {
       levelFloor: 0,
       levelNext: null,
       owned: [],
+      ownedSignals: [],
+      signalDeck: [],
+    });
+  });
+
+  it('owned_signals / signal_deck alanlarını eşler', async () => {
+    rpcResolves({
+      rank: 2,
+      username: 'vavi',
+      rating: 1100,
+      wins: 5,
+      owned_signals: ['sig_victory', 'sig_shock'],
+      signal_deck: ['sig_victory'],
+    });
+    await expect(getMyRank()).resolves.toMatchObject({
+      ownedSignals: ['sig_victory', 'sig_shock'],
+      signalDeck: ['sig_victory'],
     });
   });
 

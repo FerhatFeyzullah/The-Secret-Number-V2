@@ -430,6 +430,8 @@ export async function getMyRank(): Promise<MyRank> {
     level_floor?: number | null;
     level_next?: number | null;
     owned_protocols?: string[] | null;
+    owned_signals?: string[] | null;
+    signal_deck?: string[] | null;
   }>('get_my_rank');
   return {
     rank: Number(p.rank),
@@ -447,6 +449,9 @@ export async function getMyRank(): Promise<MyRank> {
     levelNext: p.level_next == null ? null : Number(p.level_next),
     // Migration 20260607000002 (protokoller) öncesi güvenli varsayılan.
     owned: p.owned_protocols ?? [],
+    // Migration 20260607000014 (sinyaller) öncesi güvenli varsayılanlar.
+    ownedSignals: p.owned_signals ?? [],
+    signalDeck: p.signal_deck ?? [],
   };
 }
 
@@ -459,15 +464,44 @@ export async function unlockProtocol(
   return { veri: Number(p.veri), owned: p.owned ?? [] };
 }
 
+/** Sinyali Veri ile açar (fiyat/Veri/sahiplik sunucuda doğrulanır, atomik).
+ *  Dönen: güncel Veri + sahip olunan sinyal id'leri. */
+export async function unlockSignal(
+  id: string,
+): Promise<{ veri: number; ownedSignals: string[] }> {
+  const p = await callRpc<{ veri: number; owned_signals: string[] }>('unlock_signal', { p_id: id });
+  return { veri: Number(p.veri), ownedSignals: p.owned_signals ?? [] };
+}
+
+/** Kalıcı sinyal destesini kaydeder (≤6, hepsi owned, tekrar yok — sunucuda
+ *  doğrulanır). Dönen: güncel deste. */
+export async function setSignalDeck(ids: string[]): Promise<{ signalDeck: string[] }> {
+  const p = await callRpc<{ signal_deck: string[] }>('set_signal_deck', { p_ids: ids });
+  return { signalDeck: p.signal_deck ?? [] };
+}
+
 
 /** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).
  *  Çağıranın bakış açısından kendi ve rakip sayısı; satır yoksa null.
  *  Maç bitmeden çağrılırsa sunucu 'match_not_finished' fırlatır. */
 export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
-  const p = await callRpc<{ mine: string | null; opponent: string | null }>('get_match_reveal', {
-    p_match_id: matchId,
-  });
-  return { mine: p.mine ?? null, opponent: p.opponent ?? null };
+  const p = await callRpc<{
+    mine: string | null;
+    opponent: string | null;
+    scored?: boolean;
+    rating_delta?: number | null;
+    xp_delta?: number | null;
+    veri_delta?: number | null;
+  }>('get_match_reveal', { p_match_id: matchId });
+  return {
+    mine: p.mine ?? null,
+    opponent: p.opponent ?? null,
+    // İlerleme sayan maç (matchmade) + delta uygulanmışsa kazanım gösterilir.
+    scored: !!p.scored && p.rating_delta != null,
+    ratingDelta: p.rating_delta ?? null,
+    xpDelta: p.xp_delta ?? null,
+    veriDelta: p.veri_delta ?? null,
+  };
 }
 
 async function currentUserId(): Promise<string | null> {

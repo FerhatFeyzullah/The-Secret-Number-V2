@@ -60,3 +60,47 @@ export async function getToggle(key: 'sound' | 'haptics') {
 export async function setToggle(key: 'sound' | 'haptics', enabled: boolean) {
   await AsyncStorage.setItem(KEYS[key], enabled ? 'on' : 'off');
 }
+
+// ── Bilgilendirme modalları: "ilk kez görüldü" bayrakları ──────────────
+// Her ilk-kez tanıtım modalı için ayrı bayrak. Generic get/mark deseni.
+const SEEN_PREFIX = 'seen.';
+
+export type SeenKey =
+  | 'quickIntro' // Grup 1
+  | 'protocolIntro'
+  | 'protocolsPage'
+  | 'progression' // Grup 2
+  | 'welcome'
+  | 'privateRoom' // Grup 3
+  | 'offlineIntro'
+  | 'storeIntro' // Sinyal mağazası
+  | 'signalDeck'; // Sinyal destesi (Sinyallerim)
+
+/** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
+const SEEN_KEYS: readonly SeenKey[] = [
+  'quickIntro',
+  'protocolIntro',
+  'protocolsPage',
+  'progression',
+  'welcome',
+  'privateRoom',
+  'offlineIntro',
+  'storeIntro',
+  'signalDeck',
+];
+
+/** Bayrak okundu mu? AsyncStorage'dan gelene kadar çağıran beklemeli
+ *  (flicker-safe: yüklenmeden modal açılmamalı). */
+export async function getSeen(key: SeenKey): Promise<boolean> {
+  return (await AsyncStorage.getItem(SEEN_PREFIX + key)) === '1';
+}
+
+export async function markSeen(key: SeenKey): Promise<void> {
+  await AsyncStorage.setItem(SEEN_PREFIX + key, '1');
+}
+
+/** Tüm seen.* bayraklarını sil → bütün bilgilendirme modalları yeniden ilk-kez
+ *  gibi gösterilir (kullanıcı "tekrar göster" + test için). */
+export async function resetSeen(): Promise<void> {
+  await AsyncStorage.multiRemove(SEEN_KEYS.map((k) => SEEN_PREFIX + k));
+}

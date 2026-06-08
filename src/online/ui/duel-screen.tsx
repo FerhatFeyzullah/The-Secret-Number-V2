@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useRouter } from 'expo-router';
+import { Redirect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -10,10 +10,11 @@ import {
   activateProtocol,
   getMatchReveal,
   getMyHand,
-  leaveMatch,
+  getMyRank,
   makeGuess,
   OnlineError,
   useMatch,
+  useMatchSession,
   type MatchReveal,
   type ProtocolHint,
 } from '@/online';
@@ -46,6 +47,7 @@ const errMsg = (e: unknown) =>
 export function DuelScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
+  const session = useMatchSession();
   const { name } = useProfile();
   const {
     match,
@@ -53,14 +55,16 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     clocks,
     loading,
     error,
-    sendEmoji,
-    incomingEmoji,
+    sendSignal,
+    incomingSignal,
     protocolUses,
     incomingProtocolUse,
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
+  // Maç sonu reaksiyon seti: oyuncunun sinyal destesi (sunucudan, Adım 2).
+  const [signalDeck, setSignalDeck] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Son biten turun sonucu (Best of 3 tur arası ekranı için): kim + neden.
@@ -121,6 +125,12 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!isMine) setEntry([]);
   }, [isMine]);
+
+  // Merkezi maç sahibine kaydol: çıkış temizliği tek yerden (provider izleyici).
+  useEffect(() => {
+    session.claim(matchId, 'match');
+  }, [matchId, session]);
+
 
   // Bir tur bitip yeni tur belirlemesine geçince, biten turun sonucunu sapta:
   // kazanan = "win" feedback'li tahminin sahibi (yoksa süre → skor deltası);
@@ -445,11 +455,34 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     let alive = true;
     getMatchReveal(matchId)
       .then((r) => alive && setReveal(r))
-      .catch(() => alive && setReveal({ mine: null, opponent: null }));
+      .catch(
+        () =>
+          alive &&
+          setReveal({
+            mine: null,
+            opponent: null,
+            scored: false,
+            ratingDelta: null,
+            xpDelta: null,
+            veriDelta: null,
+          }),
+      );
     return () => {
       alive = false;
     };
   }, [finished, matchId]);
+
+  // Maç bitince sinyal destesini çek (sonuç ekranı reaksiyon şeridi için).
+  useEffect(() => {
+    if (!finished) return;
+    let alive = true;
+    getMyRank()
+      .then((r) => alive && setSignalDeck(r.signalDeck))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [finished]);
 
   // Bitiş sesi/haptiği (bir kez).
   const finishFxRef = useRef(false);
@@ -469,17 +502,21 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const leavingRef = useRef(false);
   const goMenu = useCallback(() => {
     leavingRef.current = true;
+    session.release(); // maç bitti (sonuç ekranından) → izleyici leave atmasın
     router.dismissTo('/');
-  }, [router]);
+  }, [router, session]);
 
   // Tekrar Oyna: doğrudan Hızlı Maç arama akışına (lobiye değil). Bu maçın
   // aboneliği/kanalı unmount'ta temizlenir; online ekranı quick paramıyla
   // aramayı otomatik başlatır.
   const goRematch = useCallback(() => {
     leavingRef.current = true;
+    session.release(); // biten maç → leave gerekmez
     router.replace({ pathname: '/online', params: { quick: '1' } });
-  }, [router]);
+  }, [router, session]);
 
+  // Çıkış onayı (UX): aktif maçta geri = hükmen kayıp uyarısı. Onaylanınca asıl
+  // leave_match'i MERKEZİ sahip yapar (session.leave → forfeit), tek yerden.
   useEffect(() => {
     const sub = navigation.addListener('beforeRemove', (e) => {
       // Maç bitti ya da çıkışı zaten onayladıysak engelleme.
@@ -495,7 +532,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
             style: 'destructive',
             onPress: () => {
               leavingRef.current = true;
-              void leaveMatch(matchId).catch(() => {});
+              session.leave(); // forfeit (idempotent, yarışsız) — tek leave noktası
               navigation.dispatch(e.data.action);
             },
           },
@@ -503,7 +540,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       );
     });
     return sub;
-  }, [navigation, match?.status, matchId]);
+  }, [navigation, match?.status, session]);
 
   // ── Giriş aksiyonları ─────────────────────────────────────────
   const addDigit = useCallback(
@@ -556,6 +593,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
 
   // Yüklenme / hata / oyun-dışı fazlar.
   if (!match) {
+    // Yükleme bitti + maç YOK + hata da yok = gerçekten bulunamadı / oyuncu değil
+    // → güvenli yönlendirme (<Redirect>). Ağ hatasında mesaj + "Ana Menü" butonu.
+    if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen>
         <View style={styles.centered}>
@@ -681,12 +721,24 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       {finished ? (
         <ResultOverlay
           win={win}
+          result={match?.result ?? null}
+          bestOf={isProtocol}
+          myWins={myWins}
+          oppWins={oppWins}
+          reward={
+            reveal == null
+              ? undefined // henüz yükleniyor → kazanım bloğu gösterme
+              : reveal.scored && reveal.ratingDelta != null
+                ? { rating: reveal.ratingDelta, xp: reveal.xpDelta ?? 0, veri: reveal.veriDelta ?? 0 }
+                : null // ilerleme saymayan maç (özel oda)
+          }
           mySecret={reveal?.mine ?? null}
           theirSecret={reveal?.opponent ?? null}
           opponentName={opponentName}
           opponentInitial={opponentName.charAt(0)}
-          incomingEmoji={incomingEmoji}
-          onSendEmoji={sendEmoji}
+          deck={signalDeck}
+          incomingSignal={incomingSignal}
+          onSendSignal={sendSignal}
           onRematch={goRematch}
           onMenu={goMenu}
         />

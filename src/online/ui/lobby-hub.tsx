@@ -1,11 +1,80 @@
 import { Feather } from '@expo/vector-icons';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { getSeen, markSeen } from '@/storage';
+import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { ChoiceCard, LobbyHeader } from './parts';
 
-/** Online lobi ana ekranı: Hızlı Maç (hero) + Özel Oyun + "Nasıl çalışır?".
- *  Tasarımdaki sahte "çevrimiçi sayısı" rozet/sayaçları kaldırıldı (veri yok). */
+/** Hızlı Maç tanıtımı — gerçek mekanikle birebir (3 farklı rakam, pozisyonsuz
+ *  geri bildirim, kişi-başı saat, Kupa/XP/Veri kazanımı). */
+const QUICK_SECTIONS: InfoSection[] = [
+  {
+    icon: 'hash',
+    accent: colors.cyan,
+    title: 'Gizli Sayı',
+    body: '3 FARKLI rakamdan oluşur (1-9 arası, sıfır YOK). Sen ve rakibin birer gizli sayı belirlersiniz.',
+  },
+  {
+    icon: 'target',
+    accent: colors.cyan,
+    title: 'Sırayla Tahmin',
+    body: 'Sırayla rakibin gizli sayısını tahmin edersin. Her tahmin yine 3 farklı rakamdır.',
+  },
+  {
+    icon: 'eye',
+    accent: colors.teal,
+    title: 'Geri Bildirim',
+    body: 'Kaç rakamının doğru olduğu söylenir; ama YERİ söylenmez. Rakamlar doğru olup sırası yanlışsa ayrıca belirtilir.',
+  },
+  {
+    icon: 'clock',
+    accent: colors.amber,
+    title: 'Süre',
+    body: 'Her oyuncunun kendi saati vardır ve yalnız sırandayken işler. Süren biterse turu kaybedersin.',
+  },
+  {
+    icon: 'award',
+    accent: colors.amber,
+    title: 'Kazanım',
+    body: 'Kazanınca Kupa, XP ve Veri kazanırsın (kaybedince daha azı). Veri ile yeni protokoller açılır.',
+  },
+];
+
+/** Protokol Maçı tanıtımı — iki tur kazanma, Kader Eli, protokol rolü, farkı. */
+const PROTOCOL_SECTIONS: InfoSection[] = [
+  {
+    icon: 'layers',
+    accent: colors.violet,
+    title: 'İki Tur Kazanan Alır',
+    body: 'En çok 3 tur oynanır; önce 2 turu kazanan maçı alır. Her turun kendi gizli sayısı vardır.',
+  },
+  {
+    icon: 'shuffle',
+    accent: colors.cyan,
+    title: 'Kader Eli',
+    body: 'Maç başında, sahip olduğun protokollerden rastgele bir EL dağıtılır. Yuva sayına göre 2-3 tanesini seçip maça götürürsün.',
+  },
+  {
+    icon: 'zap',
+    accent: colors.amber,
+    title: 'Protokoller',
+    body: 'Maç içi özel güçler: zaman, ipucu, sabotaj, savunma. Her biri maç başına 1 kez kullanılır.',
+  },
+  {
+    icon: 'columns',
+    accent: colors.teal,
+    title: 'Hızlı Maç’tan Farkı',
+    body: 'Aynı tahmin kuralları + 3 tur + protokoller. Hızlı Maç tek turdur ve protokol içermez.',
+  },
+];
+
+type Intro = { kind: 'quick' | 'protocol'; proceed: boolean };
+
+/** Online lobi ana ekranı: Hızlı Maç (hero) + Protokol Maçı + Özel Oyun.
+ *  İlk dokunuşta ilgili tanıtım modalı araya girer (sonra şeffaf); "?" rozeti
+ *  modalı her zaman tekrar açar. */
 export function LobbyHub({
   notice,
   onQuick,
@@ -22,6 +91,31 @@ export function LobbyHub({
   onHowTo: () => void;
   onBack: () => void;
 }) {
+  const [intro, setIntro] = useState<Intro | null>(null);
+
+  // İlk dokunuş: tanıtımı görmediyse modal araya girer; gördüyse direkt başlar.
+  // (Tap'ta await sonrası açıldığı için flicker yok.)
+  const tapQuick = async () => {
+    if (await getSeen('quickIntro')) onQuick();
+    else setIntro({ kind: 'quick', proceed: true });
+  };
+  const tapProtocol = async () => {
+    if (await getSeen('protocolIntro')) onProtocol();
+    else setIntro({ kind: 'protocol', proceed: true });
+  };
+
+  // "?" rozeti: seen'den bağımsız her zaman açar, aramayı BAŞLATMAZ.
+  const infoQuick = () => setIntro({ kind: 'quick', proceed: false });
+  const infoProtocol = () => setIntro({ kind: 'protocol', proceed: false });
+
+  const closeIntro = () => {
+    const cur = intro;
+    setIntro(null);
+    if (!cur) return;
+    void markSeen(cur.kind === 'quick' ? 'quickIntro' : 'protocolIntro');
+    if (cur.proceed) (cur.kind === 'quick' ? onQuick : onProtocol)();
+  };
+
   return (
     <View style={styles.root}>
       <LobbyHeader title="ÇEVRİMİÇİ" onBack={onBack} />
@@ -45,7 +139,8 @@ export function LobbyHub({
           accent={colors.cyan}
           title="Hızlı Maç"
           subtitle="Rastgele rakiple eşleş"
-          onPress={onQuick}>
+          onPress={tapQuick}
+          onInfo={infoQuick}>
           <View style={styles.tags}>
             <Text style={styles.tag}>⏱ Zamana Karşı</Text>
             <Text style={styles.tag}>🔢 3 haneli kod</Text>
@@ -56,8 +151,9 @@ export function LobbyHub({
           icon="layers"
           accent={colors.violet}
           title="Protokol Maçı"
-          subtitle="Best of 3 · protokollü düello"
-          onPress={onProtocol}>
+          subtitle="Protokollü düello · 3 tur"
+          onPress={tapProtocol}
+          onInfo={infoProtocol}>
           <View style={styles.tags}>
             <Text style={styles.tag}>🏆 2 tur kazanan alır</Text>
           </View>
@@ -71,6 +167,25 @@ export function LobbyHub({
           onPress={onPrivate}
         />
       </View>
+
+      <InfoModal
+        visible={intro?.kind === 'quick'}
+        onClose={closeIntro}
+        title="HIZLI MAÇ"
+        icon="zap"
+        accent={colors.cyan}
+        sections={QUICK_SECTIONS}
+        ctaLabel={intro?.proceed ? 'Anladım, Başla' : 'Anladım'}
+      />
+      <InfoModal
+        visible={intro?.kind === 'protocol'}
+        onClose={closeIntro}
+        title="PROTOKOL MAÇI"
+        icon="layers"
+        accent={colors.violet}
+        sections={PROTOCOL_SECTIONS}
+        ctaLabel={intro?.proceed ? 'Anladım, Başla' : 'Anladım'}
+      />
 
       {/* <View style={styles.footer}>
         <Pressable onPress={onHowTo} hitSlop={8} style={styles.howTo}>

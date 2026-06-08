@@ -248,6 +248,12 @@ export type MatchReveal = {
   mine: string | null;
   /** Rakibin gizli sayısı — SADECE maç bitince gelir. */
   opponent: string | null;
+  /** Maç ilerleme saydı mı (matchmade quick/protocol). false → özel oda/saymayan. */
+  scored: boolean;
+  /** Bu maçtan çağıranın Kupa/XP/Veri değişimi (sunucu hesaplar; saymıyorsa null). */
+  ratingDelta: number | null;
+  xpDelta: number | null;
+  veriDelta: number | null;
 };
 
 /** Lider tablosu satırı (get_leaderboard; yalnızca okuma, puan sunucuda hesaplanır). */
@@ -282,6 +288,10 @@ export type MyRank = {
   levelNext: number | null;
   /** Sahip olunan protokol id'leri (Faz 2a). */
   owned: string[];
+  /** Sahip olunan sinyal id'leri (Sinyal Adım 2). */
+  ownedSignals: string[];
+  /** Kalıcı sinyal destesi (≤6) — maç sonu reaksiyonları (Sinyal Adım 2). */
+  signalDeck: string[];
 };
 
 /** Bir oyuncunun bağlantı bilgisi (presence tablosundan). */

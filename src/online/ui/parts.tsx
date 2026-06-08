@@ -9,7 +9,16 @@ export type FeatherName = keyof typeof Feather.glyphMap;
 /** Lobi alt-ekran başlığı: geri ok callback ile (durum makinesinde faz-geri
  *  ya da route'tan çıkış için). ScreenHeader router.back() yaptığından burada
  *  ayrı bir başlık kullanıyoruz. */
-export function LobbyHeader({ title, onBack }: { title: string; onBack?: () => void }) {
+export function LobbyHeader({
+  title,
+  onBack,
+  onInfo,
+}: {
+  title: string;
+  onBack?: () => void;
+  /** Verilirse sağda "?" çıkar; bilgilendirme modalını açar. */
+  onInfo?: () => void;
+}) {
   return (
     <View style={styles.header}>
       {onBack ? (
@@ -20,7 +29,13 @@ export function LobbyHeader({ title, onBack }: { title: string; onBack?: () => v
         <View style={styles.headerSide} />
       )}
       <Text style={styles.headerTitle}>{title}</Text>
-      <View style={styles.headerSide} />
+      {onInfo ? (
+        <Pressable onPress={onInfo} hitSlop={12} style={styles.headerBack}>
+          <Feather name="help-circle" size={18} color={colors.cyan} />
+        </Pressable>
+      ) : (
+        <View style={styles.headerSide} />
+      )}
     </View>
   );
 }
@@ -77,6 +92,7 @@ export function ChoiceCard({
   title,
   subtitle,
   onPress,
+  onInfo,
   hero = false,
   children,
 }: {
@@ -85,6 +101,9 @@ export function ChoiceCard({
   title: string;
   subtitle: string;
   onPress: () => void;
+  /** Verilirse sağ-üst köşede "?" rozeti çıkar; bilgilendirme modalını açar
+   *  (kartın onPress'ini tetiklemez — üstteki Pressable dokunuşu yakalar). */
+  onInfo?: () => void;
   hero?: boolean;
   children?: ReactNode;
 }) {
@@ -109,6 +128,15 @@ export function ChoiceCard({
         {children}
       </View>
       <Feather name="chevron-right" size={18} color={accent} style={{ opacity: 0.7 }} />
+
+      {onInfo ? (
+        <Pressable
+          onPress={onInfo}
+          hitSlop={10}
+          style={[styles.infoBadge, { borderColor: withAlpha(accent, 0.5) }]}>
+          <Feather name="help-circle" size={15} color={accent} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -219,6 +247,18 @@ const styles = StyleSheet.create({
   cardPressed: {
     transform: [{ scale: 0.99 }],
     backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  infoBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    backgroundColor: 'rgba(8,15,30,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardBody: {
     flex: 1,

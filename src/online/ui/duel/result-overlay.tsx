@@ -2,34 +2,74 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import type { MatchResult } from '@/online/types';
+import { getSignal, SIGNALS } from '@/signals/catalog';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { Avatar } from '../parts';
 
-// Maça yakışan, kışkırtıcı/saldırgan olmayan set.
-const EMOJIS = ['👍', '🔥', '😎', '😅', '😮', '👏'];
+/** Maç sonu kazanımı (sunucudan; istemci yeniden hesaplamaz). */
+export type MatchReward = { rating: number; xp: number; veri: number };
+
+/** Bitiş sebebi etiketi — oyuncunun perspektifinden (madde 8). result yoksa
+ *  güvenli varsayılan. forfeit'te kaybeden ayrılan taraftır. */
+function reasonText(win: boolean, result: MatchResult | null): string {
+  switch (result) {
+    case 'win':
+      return win ? 'Rakibin sayısını buldun!' : 'Rakip senin sayını buldu';
+    case 'timeout':
+      return win ? 'Rakibin süresi doldu' : 'Süren doldu';
+    case 'forfeit':
+      return win ? 'Rakip maçtan ayrıldı' : 'Maçtan ayrıldın';
+    default:
+      return win ? 'Kazandın' : 'Kaybettin';
+  }
+}
+
+const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 const spaced = (s: string | null) => (s ? s.split('').join(' ') : '—');
+/** Deste boşsa (olmamalı) güvenli geri-dönüş: starter sinyaller. */
+const STARTERS = SIGNALS.filter((s) => s.starter).map((s) => s.id);
+/** Arka arkaya spam'i engelle (maç sonu reaksiyonu). */
+const SEND_COOLDOWN_MS = 600;
 
 /** Kazan/kaybet ekranı: verdict + iki gizli sayı ifşası + Tekrar Oyna / Ana Menü
- *  + akordeon emoji şeridi (efemeral realtime broadcast). Rakibin gönderdiği
- *  emoji, rakip avatarının yanında pop'layıp birkaç saniye sonra solar. */
+ *  + akordeon SİNYAL şeridi (oyuncunun 6'lık destesi; efemeral realtime broadcast).
+ *  Rakibin gönderdiği sinyal, rakip avatarının yanında büyük/animasyonlu pop'layıp
+ *  birkaç saniye sonra solar. Kendi gönderdiğin şeritte vurgulanır (onay). */
 export function ResultOverlay({
   win,
+  result,
+  bestOf = false,
+  myWins = 0,
+  oppWins = 0,
+  reward,
   mySecret,
   theirSecret,
   opponentName,
   opponentInitial,
-  incomingEmoji,
-  onSendEmoji,
+  deck,
+  incomingSignal,
+  onSendSignal,
   onRematch,
   onMenu,
 }: {
   win: boolean;
+  /** Bitiş sebebi (win/timeout/forfeit) — perspektife göre etiket. */
+  result: MatchResult | null;
+  /** Best of 3 ise tur skoru gösterilir. */
+  bestOf?: boolean;
+  myWins?: number;
+  oppWins?: number;
+  /** Kazanım (Kupa/XP/Veri); null → ilerleme saymayan maç (özel oda). */
+  reward?: MatchReward | null;
   mySecret: string | null;
   theirSecret: string | null;
   opponentName: string;
   opponentInitial: string;
-  incomingEmoji: { emoji: string; nonce: number } | null;
-  onSendEmoji: (emoji: string) => void;
+  /** Oyuncunun sinyal destesi (≤6 id) — maç sonu reaksiyon seti. */
+  deck: string[];
+  incomingSignal: { id: string; nonce: number } | null;
+  onSendSignal: (signalId: string) => void;
   onRematch: () => void;
   onMenu: () => void;
 }) {
@@ -38,10 +78,13 @@ export function ResultOverlay({
   const acc = useRef(new Animated.Value(0)).current;
   const [sent, setSent] = useState<string | null>(null);
   const sentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSendRef = useRef(0);
 
-  // Rakip emojisi: gelen son emojiyi avatar yanında pop'lat, sonra solup gitsin.
-  const [oppEmoji, setOppEmoji] = useState<string | null>(null);
+  // Rakip sinyali: gelen son sinyali avatar yanında pop'lat, sonra solup gitsin.
+  const [oppSignal, setOppSignal] = useState<string | null>(null);
   const oppAnim = useRef(new Animated.Value(0)).current;
+
+  const pool = deck.length ? deck : STARTERS;
 
   useEffect(() => {
     Animated.spring(v, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();
@@ -52,8 +95,8 @@ export function ResultOverlay({
   }, [open, acc]);
 
   useEffect(() => {
-    if (!incomingEmoji) return;
-    setOppEmoji(incomingEmoji.emoji);
+    if (!incomingSignal) return;
+    setOppSignal(incomingSignal.id);
     oppAnim.setValue(0);
     const anim = Animated.sequence([
       Animated.spring(oppAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
@@ -61,18 +104,21 @@ export function ResultOverlay({
       Animated.timing(oppAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]);
     anim.start(({ finished }) => {
-      if (finished) setOppEmoji(null);
+      if (finished) setOppSignal(null);
     });
     return () => anim.stop();
-  }, [incomingEmoji, oppAnim]);
+  }, [incomingSignal, oppAnim]);
 
   useEffect(() => () => {
     if (sentTimer.current) clearTimeout(sentTimer.current);
   }, []);
 
-  const handleSend = (e: string) => {
-    onSendEmoji(e);
-    setSent(e);
+  const handleSend = (id: string) => {
+    const now = Date.now();
+    if (now - lastSendRef.current < SEND_COOLDOWN_MS) return; // spam koruması
+    lastSendRef.current = now;
+    onSendSignal(id);
+    setSent(id);
     if (sentTimer.current) clearTimeout(sentTimer.current);
     sentTimer.current = setTimeout(() => setSent(null), 1400);
   };
@@ -91,6 +137,7 @@ export function ResultOverlay({
     opacity: oppAnim,
     transform: [{ scale: oppAnim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
   };
+  const OppIcon = oppSignal ? getSignal(oppSignal)?.component ?? null : null;
 
   return (
     <Animated.View style={[styles.root, enter]}>
@@ -100,17 +147,45 @@ export function ResultOverlay({
         style={[styles.verdict, { color: win ? colors.ice : '#fca5a5', textShadowColor: accent }, pop]}>
         {win ? 'KAZANDIN!' : 'KAYBETTİN'}
       </Animated.Text>
-      <Text style={styles.subtitle}>{win ? 'RAKİBİN KODUNU KIRDIN' : 'RAKİP KODUNU KIRDI'}</Text>
+      <Text style={styles.subtitle}>{reasonText(win, result)}</Text>
+      {bestOf ? (
+        <Text style={styles.score}>
+          Maç skoru <Text style={{ color: colors.cyan }}>{myWins}</Text>
+          <Text style={{ color: colors.dim }}> – </Text>
+          <Text style={{ color: colors.amber }}>{oppWins}</Text>
+        </Text>
+      ) : null}
 
-      {/* Rakip kimliği + gelen emoji baloncuğu (rakibe bağlı, anlamlı konum). */}
+      {/* Kazanım: yalnız ilerleme sayan maçta (matchmade); değerler sunucudan.
+          reward undefined → henüz yükleniyor (gösterme); null → saymayan maç. */}
+      {reward ? (
+        <View style={styles.rewards}>
+          <View style={styles.rewardChip}>
+            <Feather name="award" size={13} color={colors.amber} />
+            <Text style={[styles.rewardVal, { color: colors.amber }]}>{fmt(reward.rating)}</Text>
+          </View>
+          <View style={styles.rewardChip}>
+            <Feather name="zap" size={13} color={colors.violet} />
+            <Text style={[styles.rewardVal, { color: colors.violet }]}>{fmt(reward.xp)} XP</Text>
+          </View>
+          <View style={styles.rewardChip}>
+            <Feather name="database" size={13} color={colors.teal} />
+            <Text style={[styles.rewardVal, { color: colors.teal }]}>{fmt(reward.veri)}</Text>
+          </View>
+        </View>
+      ) : reward === null ? (
+        <Text style={styles.noScore}>Bu maç ilerleme saymaz</Text>
+      ) : null}
+
+      {/* Rakip kimliği + gelen sinyal baloncuğu (rakibe bağlı, anlamlı konum). */}
       <View style={styles.oppRow}>
         <Avatar initial={opponentInitial} accent={colors.amber} size={40} />
         <Text style={styles.oppName} numberOfLines={1}>
           {opponentName}
         </Text>
-        {oppEmoji ? (
+        {OppIcon ? (
           <Animated.View style={[styles.bubble, bubbleStyle]}>
-            <Text style={styles.bubbleText}>{oppEmoji}</Text>
+            <OppIcon size={40} animated />
           </Animated.View>
         ) : null}
       </View>
@@ -131,22 +206,27 @@ export function ResultOverlay({
         </View>
       </View>
 
-      {/* Akordeon emoji şeridi (aç/kapa smooth). */}
+      {/* Akordeon SİNYAL şeridi (deste; aç/kapa smooth). */}
       <Animated.View style={[styles.accordion, accStyle]}>
-        <View style={styles.emojiStrip}>
-          {EMOJIS.map((e) => (
-            <Pressable
-              key={e}
-              onPress={() => handleSend(e)}
-              style={[styles.emoji, sent === e && styles.emojiSent]}>
-              <Text style={styles.emojiText}>{e}</Text>
-            </Pressable>
-          ))}
+        <View style={styles.signalStrip}>
+          {pool.map((id) => {
+            const sig = getSignal(id);
+            if (!sig) return null;
+            const Icon = sig.component;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => handleSend(id)}
+                style={[styles.signalBtn, sent === id && styles.signalBtnSent]}>
+                <Icon size={34} animated={false} />
+              </Pressable>
+            );
+          })}
         </View>
       </Animated.View>
-      <Text style={[styles.sentHint, !sent && styles.sentHintHidden]}>Gönderildi {sent ?? ''}</Text>
+      <Text style={[styles.sentHint, !sent && styles.sentHintHidden]}>Gönderildi ✓</Text>
 
-      {/* Buton satırı: Tekrar Oyna · Ana Menü · emoji aç/kapa */}
+      {/* Buton satırı: Tekrar Oyna · Ana Menü · sinyal aç/kapa */}
       <View style={styles.buttonRow}>
         <Pressable
           onPress={onRematch}
@@ -160,7 +240,8 @@ export function ResultOverlay({
         </Pressable>
         <Pressable
           onPress={() => setOpen((o) => !o)}
-          style={[styles.emojiToggle, open && styles.emojiToggleOpen]}>
+          accessibilityLabel="Sinyal gönder"
+          style={[styles.signalToggle, open && styles.signalToggleOpen]}>
           <Feather name="smile" size={20} color={open ? colors.amber : colors.text} />
         </Pressable>
       </View>
@@ -193,10 +274,48 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
+    fontSize: 12,
+    color: colors.text,
+    fontFamily: mono,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  score: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
+    color: colors.ice,
+    marginBottom: 14,
+  },
+  rewards: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  rewardChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    borderRadius: 20,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
+  rewardVal: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: mono,
+    letterSpacing: 0.3,
+  },
+  noScore: {
     fontSize: 10,
     color: colors.dim,
     fontFamily: mono,
-    letterSpacing: 2,
+    letterSpacing: 1,
     marginBottom: 20,
   },
   oppRow: {
@@ -205,6 +324,7 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 18,
     paddingHorizontal: 4,
+    minHeight: 48,
   },
   oppName: {
     fontSize: 12,
@@ -215,18 +335,15 @@ const styles = StyleSheet.create({
   },
   bubble: {
     marginLeft: 4,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: withAlpha(colors.amber, 0.16),
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: withAlpha(colors.amber, 0.14),
     borderWidth: 1,
     borderColor: withAlpha(colors.amber, 0.45),
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: `0 0 14px ${withAlpha(colors.amber, 0.4)}`,
-  },
-  bubbleText: {
-    fontSize: 20,
+    boxShadow: `0 0 16px ${withAlpha(colors.amber, 0.4)}`,
   },
   reveal: {
     flexDirection: 'row',
@@ -268,28 +385,25 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
   },
-  emojiStrip: {
+  signalStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
   },
-  emoji: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  signalBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiSent: {
+  signalBtnSent: {
     backgroundColor: withAlpha(colors.cyan, 0.18),
-    borderColor: withAlpha(colors.cyan, 0.4),
+    borderColor: withAlpha(colors.cyan, 0.45),
     transform: [{ scale: 1.12 }],
-  },
-  emojiText: {
-    fontSize: 20,
   },
   sentHint: {
     height: 16,
@@ -330,7 +444,7 @@ const styles = StyleSheet.create({
     fontFamily: mono,
     letterSpacing: 1,
   },
-  emojiToggle: {
+  signalToggle: {
     width: 50,
     borderRadius: 14,
     borderWidth: 1.5,
@@ -339,7 +453,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiToggleOpen: {
+  signalToggleOpen: {
     borderColor: withAlpha(colors.amber, 0.5),
     backgroundColor: withAlpha(colors.amber, 0.14),
   },

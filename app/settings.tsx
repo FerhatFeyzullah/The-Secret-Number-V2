@@ -1,13 +1,15 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
-import { getToggle, setToggle } from '@/storage';
+import { getToggle, resetSeen, setToggle } from '@/storage';
 import { GlassButton, GlassCard } from '@/ui/glass';
+import { InfoModal } from '@/ui/info-modal';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors } from '@/ui/theme';
+import { WELCOME_INTRO } from '@/ui/welcome-intro';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -17,6 +19,8 @@ export default function SettingsScreen() {
   const [name, setName] = useState('');
   const [sound, setSound] = useState(true);
   const [haptics, setHaptics] = useState(true);
+  // Karşılama/tanıtım modalını elle yeniden açma (seen bayrağından bağımsız).
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   // Kaynaktaki ad değişince (giriş/çıkış, sunucu teyidi) inputu eşitle.
   useEffect(() => {
@@ -55,6 +59,12 @@ export default function SettingsScreen() {
   const changeHaptics = (value: boolean) => {
     setHaptics(value);
     setToggle('haptics', value);
+  };
+
+  // Tüm bilgilendirme bayraklarını sil → tanıtım modalları yeniden ilk-kez gibi.
+  const resetIntros = async () => {
+    await resetSeen();
+    Alert.alert('Bilgilendirmeler sıfırlandı', 'Tüm tanıtım modalları yeniden gösterilecek.');
   };
 
   return (
@@ -141,6 +151,8 @@ export default function SettingsScreen() {
         </GlassCard>
 
         <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
+        <GlassButton small label="Tanıtımı Göster" onPress={() => setWelcomeOpen(true)} />
+        <GlassButton small label="Bilgilendirmeleri Sıfırla" onPress={() => void resetIntros()} />
 
         <GlassCard>
           <Text style={styles.sectionTitle}>Hakkında</Text>
@@ -150,6 +162,8 @@ export default function SettingsScreen() {
           </Text>
         </GlassCard>
       </ScrollView>
+
+      <InfoModal visible={welcomeOpen} onClose={() => setWelcomeOpen(false)} {...WELCOME_INTRO} />
     </Screen>
   );
 }

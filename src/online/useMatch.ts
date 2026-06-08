@@ -31,8 +31,10 @@ const HEARTBEAT_MS = 5_000;
 const TICK_MS = 250;
 /** Rakipten bu kadar süre sinyal yoksa "bağlantısı koptu" göstergesi. */
 const UNSTABLE_AFTER_MS = 10_000;
-/** Bu süreden sonra claimTimeout/forfeitDisconnect çağrılabilir (karar sunucuda). */
-const GONE_AFTER_MS = 30_000;
+/** Bu süreden sonra rakip "gitti" sayılır; sunucu heartbeat-reap eşiğiyle (15 sn)
+ *  hizalı. opponentGone true olunca istemci hızlandırıcı heartbeat atar → sunucu
+ *  reap'i hemen tetiklenir (karar yine sunucuda, _reap_if_opponent_stale). */
+const GONE_AFTER_MS = 15_000;
 /** Yeniden bağlanma backoff üst sınırı. */
 const MAX_RECONNECT_DELAY_MS = 10_000;
 
@@ -51,11 +53,12 @@ export type UseMatchResult = {
   error: string | null;
   /** Tüm durumu sunucudan yeniden çeker (ör. ekrana dönünce). */
   refresh: () => Promise<void>;
-  /** Maç kanalına efemeral emoji yayınlar (realtime broadcast; DB'ye YAZMAZ). */
-  sendEmoji: (emoji: string) => void;
-  /** Rakipten gelen son emoji (kendi yayınların filtrelenir). nonce her gelişte
-   *  artar; tüketici aynı emoji tekrarında bile pop animasyonunu yenileyebilir. */
-  incomingEmoji: { emoji: string; nonce: number } | null;
+  /** Maç kanalına efemeral SİNYAL id'si yayınlar (maç sonu reaksiyonu; realtime
+   *  broadcast; DB'ye YAZMAZ). Kullanılabilir set oyuncunun sinyal destesidir. */
+  sendSignal: (signalId: string) => void;
+  /** Rakipten gelen son sinyal id'si (kendi yayınların filtrelenir). nonce her
+   *  gelişte artar; tüketici aynı sinyal tekrarında bile pop'u yenileyebilir. */
+  incomingSignal: { id: string; nonce: number } | null;
   /** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez),
    *  realtime güncel. Şerit "kullanıldı" durumu buradan türetilir. */
   protocolUses: ProtocolUse[];
@@ -88,9 +91,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const [loading, setLoading] = useState(matchId != null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  // Rakipten gelen efemeral emoji (broadcast); nonce ile her geliş ayrışır.
-  const [incomingEmoji, setIncomingEmoji] = useState<{ emoji: string; nonce: number } | null>(null);
-  const emojiNonceRef = useRef(0);
+  // Rakipten gelen efemeral sinyal (broadcast); nonce ile her geliş ayrışır.
+  const [incomingSignal, setIncomingSignal] = useState<{ id: string; nonce: number } | null>(null);
+  const signalNonceRef = useRef(0);
   // Protokol kullanım kayıtları (realtime + refresh) ve canlı olay sinyali.
   const [protocolUses, setProtocolUses] = useState<ProtocolUse[]>([]);
   const [incomingProtocolUse, setIncomingProtocolUse] = useState<{
@@ -179,6 +182,22 @@ export function useMatch(matchId: string | null): UseMatchResult {
       if (mountedRef.current) setLoading(false);
     }
   }, [matchId]);
+
+  // Realtime kaçaklarına karşı EMNİYET AĞI: ön-oyun fazlarında (waiting /
+  // protocol_select / setup) maç durumunu periyodik tazele. Bir matches UPDATE'i
+  // realtime'da düşse bile (ör. eşleşme → protocol_select, seçim → setup, belirleme
+  // → active) faz geçişi yine de yakalanır; oyuncu "rakip aranıyor"da ya da
+  // belirleme/seçim ekranında takılı kalmaz. Aktif/bitmiş fazda kapalı (gereksiz yük).
+  useEffect(() => {
+    if (!matchId) return;
+    const s = match?.status ?? null;
+    const pregame = s === null || s === 'waiting' || s === 'protocol_select' || s === 'setup';
+    if (!pregame) return;
+    const iv = setInterval(() => {
+      void refresh();
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [matchId, match?.status, refresh]);
 
   // Realtime abonelik + kopunca yeniden bağlanma.
   useEffect(() => {
@@ -297,12 +316,12 @@ export function useMatch(matchId: string | null): UseMatchResult {
             }
           },
         )
-        .on('broadcast', { event: 'emoji' }, ({ payload }) => {
-          // Efemeral emoji: yalnızca rakibinkini göster (kendi yayınını filtrele).
-          const p = payload as { emoji?: string; from?: string } | undefined;
-          if (!p?.emoji || p.from === myIdRef.current) return;
-          emojiNonceRef.current += 1;
-          setIncomingEmoji({ emoji: p.emoji, nonce: emojiNonceRef.current });
+        .on('broadcast', { event: 'signal' }, ({ payload }) => {
+          // Efemeral sinyal: yalnızca rakibinkini göster (kendi yayınını filtrele).
+          const p = payload as { signal?: string; from?: string } | undefined;
+          if (!p?.signal || p.from === myIdRef.current) return;
+          signalNonceRef.current += 1;
+          setIncomingSignal({ id: p.signal, nonce: signalNonceRef.current });
         })
         .subscribe((status) => {
           if (disposed) return;
@@ -336,6 +355,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
 
   const phase = match?.status ?? null;
   const inPlay = phase === 'setup' || phase === 'active';
+  // Heartbeat TÜM canlı maç fazlarını kapsar (seçim dahil) → sunucu reap'i her
+  // fazda çalışır. (Tur arası status='setup' zaten dahil.)
+  const inMatch = phase === 'protocol_select' || phase === 'setup' || phase === 'active';
 
   // Görsel saat + presence yaşı için yerel tik.
   useEffect(() => {
@@ -344,9 +366,13 @@ export function useMatch(matchId: string | null): UseMatchResult {
     return () => clearInterval(timer);
   }, [inPlay]);
 
-  // Heartbeat: maç setup/active iken ve uygulama öndeyken periyodik gönder.
+  // Heartbeat: maç CANLI (protocol_select/setup/active) iken ve uygulama öndeyken
+  // periyodik gönder. Heartbeat aynı zamanda sunucu reap'ini tetikler (hayatta
+  // olan, 15 sn+ sessiz rakibi kapatır). Arka plana geçerken SON bir heartbeat
+  // atılır → backgrounded oyuncuya ~15 sn tolerans (kısa bildirim/uygulama
+  // değişiminde haksız forfeit olmaz).
   useEffect(() => {
-    if (!matchId || !inPlay) return;
+    if (!matchId || !inMatch) return;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const start = () => {
@@ -369,6 +395,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
         start();
         void refresh(); // arkadayken kaçan state'i yakala
       } else {
+        void heartbeat(matchId).catch(() => {}); // arka plana geçerken son sinyal (tolerans)
         stop();
       }
     });
@@ -376,7 +403,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       stop();
       sub.remove();
     };
-  }, [matchId, inPlay, refresh]);
+  }, [matchId, inMatch, refresh]);
 
   // Otomatik zaman aşımı: sıradaki oyuncunun görsel saati 0'a inince HER iki
   // istemci de claim eder. Karar sunucuda (now() ile doğrular); kaybeden =
@@ -422,11 +449,22 @@ export function useMatch(matchId: string | null): UseMatchResult {
     }
   }
 
-  // Efemeral emoji yayını: kanal üzerinden broadcast (DB'ye yazmaz).
-  const sendEmoji = useCallback((emoji: string) => {
+  // Hızlandırıcı: rakip "gitti" eşiğine (15 sn) ulaşınca hemen bir heartbeat at →
+  // sunucu reap'i (hayatta olan lehine forfeit) periyodik 5 sn tikini beklemeden
+  // tetiklenir. Karar yine sunucuda (_reap_if_opponent_stale); idempotent.
+  useEffect(() => {
+    if (opponentGone && matchId) void heartbeat(matchId).catch(() => {});
+  }, [opponentGone, matchId]);
+
+  // Efemeral sinyal yayını: kanal üzerinden broadcast (DB'ye yazmaz).
+  const sendSignal = useCallback((signalId: string) => {
     const ch = channelRef.current;
     if (!ch) return;
-    void ch.send({ type: 'broadcast', event: 'emoji', payload: { emoji, from: myIdRef.current } });
+    void ch.send({
+      type: 'broadcast',
+      event: 'signal',
+      payload: { signal: signalId, from: myIdRef.current },
+    });
   }, []);
 
   return {
@@ -438,8 +476,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
     loading,
     error,
     refresh,
-    sendEmoji,
-    incomingEmoji,
+    sendSignal,
+    incomingSignal,
     protocolUses,
     incomingProtocolUse,
   };

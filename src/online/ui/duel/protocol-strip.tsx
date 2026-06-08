@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getProtocol, PILLAR_LABELS } from '@/protocols/catalog';
@@ -142,6 +142,19 @@ export function ProtocolStrip({
   silenced?: boolean;
 }) {
   const [infoId, setInfoId] = useState<string | null>(null);
+  // Parmak kalkınca balon hemen değil, 3 sn sonra kapanır.
+  const infoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openInfo = useCallback((id: string) => {
+    if (infoTimer.current) clearTimeout(infoTimer.current); // basılı tutarken açık kalsın
+    setInfoId(id);
+  }, []);
+  const scheduleInfoClose = useCallback(() => {
+    if (infoTimer.current) clearTimeout(infoTimer.current);
+    infoTimer.current = setTimeout(() => setInfoId(null), 3000);
+  }, []);
+  useEffect(() => () => {
+    if (infoTimer.current) clearTimeout(infoTimer.current);
+  }, []);
   if (tiles.length === 0) return null;
   const infoIndex = infoId ? tiles.findIndex((t) => t.id === infoId) : -1;
   return (
@@ -161,8 +174,8 @@ export function ProtocolStrip({
             key={t.id}
             tile={t}
             onUse={onUse}
-            onInfoOpen={setInfoId}
-            onInfoClose={() => setInfoId(null)}
+            onInfoOpen={openInfo}
+            onInfoClose={scheduleInfoClose}
           />
         ))}
       </View>

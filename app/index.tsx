@@ -1,13 +1,24 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
 import { getMyRank } from '@/online';
 import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
-import { getLastMode, getLastSeenLevel, setLastMode, setLastSeenLevel, type GameMode } from '@/storage';
+import {
+  getLastMode,
+  getLastSeenLevel,
+  getSeen,
+  markSeen,
+  setLastMode,
+  setLastSeenLevel,
+  type GameMode,
+} from '@/storage';
+import { InfoModal } from '@/ui/info-modal';
+import { InfoTipBubble, TIPS, type TipId } from '@/ui/info-tip';
+import { WELCOME_INTRO } from '@/ui/welcome-intro';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
@@ -27,10 +38,44 @@ export default function MenuScreen() {
   const [statsOpen, setStatsOpen] = useState(false);
   // Seviye atladıysa kutlanacak seviye (null = kutlama yok).
   const [levelUp, setLevelUp] = useState<number | null>(null);
+  // Basılı-tut bilgi balonu (rozetler); null = kapalı. Normal dokunuş davranışı
+  // (kupa → lider tablosu) korunur; uzun basış yalnız tooltip gösterir. Parmak
+  // kalkınca hemen değil, 3 sn sonra kapanır.
+  const [tip, setTip] = useState<TipId | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTip = useCallback((id: TipId) => {
+    if (tipTimer.current) clearTimeout(tipTimer.current); // basılı tutarken açık kalsın
+    setTip(id);
+  }, []);
+  const scheduleTipClose = useCallback(() => {
+    if (tipTimer.current) clearTimeout(tipTimer.current);
+    tipTimer.current = setTimeout(() => setTip(null), 3000);
+  }, []);
+  useEffect(() => () => {
+    if (tipTimer.current) clearTimeout(tipTimer.current);
+  }, []);
 
   // Son seçilen modu hatırla (yereldir, profil verisi değil).
   useEffect(() => {
     getLastMode().then(setMode);
+  }, []);
+
+  // Karşılama modalı (flicker-safe): bayrak yüklenene kadar AÇILMAZ; ilk açılışsa
+  // (görülmediyse) açılır. İlk ekran olduğundan yarış/yanıp sönme kritik.
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const seen = await getSeen('welcome');
+      if (alive && !seen) setWelcomeVisible(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const closeWelcome = useCallback(() => {
+    setWelcomeVisible(false);
+    void markSeen('welcome');
   }, []);
 
   const selectMode = (next: GameMode) => {
@@ -110,34 +155,85 @@ export default function MenuScreen() {
             {session ? (
               <View style={styles.badges}>
                 {rating != null ? (
-                  <Pressable onPress={() => setBoardOpen(true)} hitSlop={6} style={styles.trophy}>
+                  // Dokunuş = lider tablosu (korunur); basılı tut = bilgi balonu.
+                  <Pressable
+                    onPress={() => setBoardOpen(true)}
+                    onLongPress={() => openTip('rating')}
+                    onPressOut={scheduleTipClose}
+                    delayLongPress={300}
+                    hitSlop={6}
+                    accessibilityLabel="Kupa puanı"
+                    style={styles.trophy}>
                     <Feather name="award" size={13} color={colors.amber} />
                     <Text style={styles.trophyText}>{rating}</Text>
                   </Pressable>
                 ) : null}
                 {veri != null ? (
-                  <View style={styles.veriBadge}>
+                  // Veri rozeti artık modal AÇMAZ (dokunuş yutulur); basılı tut =
+                  // bilgi balonu. Pressable olması, dokunuşun profil modalını açan
+                  // dış Pressable'a sızmasını engeller.
+                  <Pressable
+                    onPress={() => {}}
+                    onLongPress={() => openTip('veri')}
+                    onPressOut={scheduleTipClose}
+                    delayLongPress={300}
+                    hitSlop={6}
+                    accessibilityLabel="Veri"
+                    style={styles.veriBadge}>
                     <Feather name="database" size={13} color={colors.cyan} />
                     <Text style={styles.veriBadgeText}>{veri}</Text>
+                  </Pressable>
+                ) : null}
+                {tip ? (
+                  <View style={styles.tipLayer} pointerEvents="none">
+                    <InfoTipBubble
+                      title={TIPS[tip].title}
+                      body={TIPS[tip].body}
+                      accent={TIPS[tip].accent}
+                    />
                   </View>
                 ) : null}
               </View>
             ) : null}
           </View>
         </Pressable>
-        <View style={styles.rightControls}>
-          <Pressable
-            onPress={() => router.push('/protocols')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Protokoller"
-            style={styles.headerBtn}>
-            <Feather name="cpu" size={20} color={colors.cyan} />
-          </Pressable>
-          <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={styles.headerBtn}>
-            <Ionicons name="settings-outline" size={22} color={colors.cyan} />
-          </Pressable>
-        </View>
+        {/* Ayarlar tek başına sağ üstte (değişmedi). */}
+        <Pressable
+          onPress={() => router.push('/settings')}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Ayarlar"
+          style={[styles.headerBtn, styles.settingsBtn]}>
+          <Ionicons name="settings-outline" size={22} color={colors.cyan} />
+        </Pressable>
+      </View>
+
+      {/* Profil isminin altında dikey ikon sütunu: Mağaza → Protokoller → Emoji destesi */}
+      <View style={styles.sideIcons}>
+        <Pressable
+          onPress={() => router.push('/store')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Mağaza"
+          style={styles.headerBtn}>
+          <Feather name="shopping-bag" size={20} color={colors.cyan} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/protocols')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Protokoller"
+          style={styles.headerBtn}>
+          <Feather name="cpu" size={20} color={colors.cyan} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/signal-deck')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Emoji destesi"
+          style={styles.headerBtn}>
+          <Feather name="smile" size={20} color={colors.cyan} />
+        </Pressable>
       </View>
 
       {/* Orta blok: istatistik kartları kalkınca logo + menü dikeyde ortalanır */}
@@ -186,6 +282,7 @@ export default function MenuScreen() {
         level={levelUp ?? 1}
         onClose={() => setLevelUp(null)}
       />
+      <InfoModal visible={welcomeVisible} onClose={closeWelcome} {...WELCOME_INTRO} />
     </Screen>
   );
 }
@@ -193,7 +290,9 @@ export default function MenuScreen() {
 const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // Sağ kontroller dikey sütun olduğundan üstten hizala: profil sol-üstte,
+    // ikon sütunu sağ-üstten aşağı iner (çakışma olmaz).
+    alignItems: 'flex-start',
     gap: 12,
     paddingVertical: 12,
   },
@@ -242,6 +341,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  // Bilgi balonu rozetlerin hemen altında, sol kenara hizalı → ekran dışına
+  // taşmaz (rozetler ekranın sol tarafında).
+  tipLayer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: 8,
+    zIndex: 50,
+  },
   trophy: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,11 +384,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: mono,
   },
-  rightControls: {
+  // Ayarlar tek başına sağ üstte (profil satırının sağına yaslı).
+  settingsBtn: {
     marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  },
+  // Profil altında dikey ikon sütunu (sola yaslı; çakışma yok).
+  sideIcons: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 4,
   },
   headerBtn: {
     width: 40,

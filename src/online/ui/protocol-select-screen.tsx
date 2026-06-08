@@ -1,16 +1,17 @@
 import { Feather } from '@expo/vector-icons';
-import { useNavigation, useRouter } from 'expo-router';
+import { Redirect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   cancelSetupTimeout,
   getMyHand,
-  leaveMatch,
+  markReady,
   OnlineError,
   resolveProtocolSelect,
   setProtocolSelection,
   useMatch,
+  useMatchSession,
   type ProtocolHand,
 } from '@/online';
 import { getProtocol, PILLAR_LABELS } from '@/protocols/catalog';
@@ -25,13 +26,14 @@ const LOW_MS = 5_000;
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
 
-/** Destiny's Hand — maç başı protokol seçimi (Protokol Maçı, belirleme öncesi).
+/** Kader Eli — maç başı protokol seçimi (Protokol Maçı, belirleme öncesi).
  *  El SUNUCUDA dağıtılır (get_my_hand); seçim set_protocol_selection'a yazılır.
  *  Süre dolunca/eksik seçimde sunucu rastgele tamamlar. Rakibin eli gizli.
  *  Sayaç ancak iki taraf da present olunca (select_deadline) başlar. */
 export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
+  const session = useMatchSession();
   const { match, loading, error } = useMatch(matchId);
 
   const [hand, setHand] = useState<ProtocolHand | null>(null);
@@ -63,6 +65,19 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
       ? match.player2Ready
       : match.player1Ready
     : false;
+
+  // EL SIKIŞMASI GARANTİSİ: bu ekrana gelen oyuncu "present" işaretini KESİN
+  // gönderir (idempotent). Eşleşme ekranındaki otomatik mark_ready kaçsa/gecikse
+  // bile, seçim ekranındayken present kurulur → iki taraf hazır olunca seçim
+  // sayacı başlar ve "Kilitle" etkinleşir. (Faz dışıysa sunucu no-op döner.)
+  useEffect(() => {
+    void markReady(matchId).catch(() => {});
+  }, [matchId]);
+
+  // Merkezi maç sahibine kaydol: çıkış temizliği tek yerden (provider izleyici).
+  useEffect(() => {
+    session.claim(matchId, 'match');
+  }, [matchId, session]);
 
   // Eli sunucudan çek. El, eşleşme anında dağıtılır; nadiren realtime durum
   // güncellemesi el satırından önce gelebilir (yarış) → boş elde birkaç kez
@@ -158,6 +173,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     if (status === 'cancelled' || status === 'finished' || status === 'abandoned') {
       endedRef.current = true;
       leavingRef.current = true;
+      session.release(); // maç zaten kapandı → izleyici gereksiz leave atmasın
       // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama).
       const reason =
         status === 'cancelled' && !pastDeadline && !pastPresentDeadline
@@ -167,28 +183,11 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
             : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
+  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router, session]);
 
-  // Çıkış onayı: seçim fazında çıkış = maç iptal.
-  useEffect(() => {
-    const sub = navigation.addListener('beforeRemove', (e) => {
-      if (leavingRef.current || match?.status !== 'protocol_select') return;
-      e.preventDefault();
-      Alert.alert('Maçtan çık', 'Çıkarsan maç iptal olur. Çıkmak istiyor musun?', [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Çık',
-          style: 'destructive',
-          onPress: () => {
-            leavingRef.current = true;
-            void leaveMatch(matchId).catch(() => {});
-            navigation.dispatch(e.data.action);
-          },
-        },
-      ]);
-    });
-    return sub;
-  }, [navigation, match?.status, matchId]);
+  // Çıkış temizliği MERKEZİ: seçim fazında geri/swipe/unmount ile maç-ekran kümesi
+  // dışına çıkıldığında provider izleyicisi leave_match çağırır (per-ekran net'leri
+  // kaldırıldı). Geçiş (protocol_select→setup /match-setup) küme içi → leave yok.
 
   const full = selected.length >= slots;
   const toggle = useCallback(
@@ -232,13 +231,21 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   );
 
   if (!match) {
+    // Yükleme bitti + maç YOK + hata da yok = gerçekten bulunamadı / oyuncu değil
+    // → güvenli yönlendirme (<Redirect>). Ağ hatasında mesaj + "Ana Menü" butonu.
+    if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen>
         <View style={styles.centered}>
           {loading ? (
             <ActivityIndicator color={colors.cyan} />
           ) : (
-            <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>
+            <>
+              <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>
+              <Pressable onPress={() => router.replace('/')} hitSlop={8} style={styles.noteExit}>
+                <Text style={styles.noteExitText}>Ana Menü</Text>
+              </Pressable>
+            </>
           )}
         </View>
       </Screen>
@@ -270,7 +277,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
         {/* Maç bağlamı */}
         <View style={styles.context}>
           <View style={styles.ctxDot} />
-          <Text style={styles.ctxText}>Protokol Maçı · Best of 3</Text>
+          <Text style={styles.ctxText}>Protokol Maçı · 3 tur</Text>
         </View>
 
         {!bothPresent ? (
@@ -292,7 +299,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
               <Text style={{ color: colors.dim }}> / {slots} seçildi</Text>
             </Text>
             <Text style={[styles.counterHint, { color: full ? colors.cyan : colors.dim }]}>
-              {full ? 'Limit dolu — hazır olabilirsin' : `${slots - selected.length} slot daha seçilebilir`}
+              {full ? 'Limit dolu — hazır olabilirsin' : `${slots - selected.length} yuva daha seçilebilir`}
             </Text>
           </View>
         </View>
@@ -608,11 +615,13 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    // Çift satırlar kenara yaslanır; tek kalan son kart SOLDA normal genişlikte
+    // durur (flexGrow yok → esnemez). Dikey boşluk rowGap ile.
+    justifyContent: 'space-between',
+    rowGap: 10,
   },
   card: {
-    width: '47.5%',
-    flexGrow: 1,
+    width: '48%',
     backgroundColor: colors.glass,
     borderWidth: 1.5,
     borderColor: colors.glassBorder,
@@ -770,6 +779,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: mono,
     textAlign: 'center',
+  },
+  noteExit: {
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: cyanAlpha(0.4),
+    backgroundColor: cyanAlpha(0.12),
+  },
+  noteExitText: {
+    color: colors.cyan,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: mono,
+    letterSpacing: 1,
   },
   overlay: {
     position: 'absolute',

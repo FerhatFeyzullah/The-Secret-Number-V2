@@ -1,16 +1,17 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useRouter } from 'expo-router';
+import { Redirect, useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { parseGuess } from '@/game';
 import {
   cancelSetupTimeout,
-  leaveMatch,
+  markReady,
   OnlineError,
   setSecret,
   useMatch,
+  useMatchSession,
 } from '@/online';
 import { useSfx, type SfxName } from '@/sfx';
 import { getToggle } from '@/storage';
@@ -34,6 +35,7 @@ const errMsg = (e: unknown) =>
 export function SecretSetupScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
+  const session = useMatchSession();
   const { match, loading, error } = useMatch(matchId);
 
   const [dials, setDials] = useState<number[]>([1, 2, 3]);
@@ -82,6 +84,20 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
       : match.player1Ready
     : false;
 
+  // EL SIKIŞMASI GARANTİSİ: belirleme ekranına gelen oyuncu "present" işaretini
+  // KESİN gönderir (idempotent). Eşleşme ekranındaki otomatik mark_ready kaçsa/
+  // gecikse bile, belirlemede present kurulur → iki taraf hazır olunca 30 sn'lik
+  // sayaç başlar ve "Kilitle" etkinleşir. (Faz dışıysa sunucu no-op döner.)
+  useEffect(() => {
+    void markReady(matchId).catch(() => {});
+  }, [matchId]);
+
+  // Merkezi maç sahibine kaydol: çıkış (geri/swipe/unmount) tek yerden — provider
+  // navigasyon izleyicisi — leave_match çağırır. Per-ekran leave net'i YOK.
+  useEffect(() => {
+    session.claim(matchId, 'match');
+  }, [matchId, session]);
+
   // Görsel geri sayım tiki (yalnız setup fazında).
   useEffect(() => {
     if (status !== 'setup') return;
@@ -123,6 +139,7 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     if (status === 'cancelled' || status === 'finished' || status === 'abandoned') {
       endedRef.current = true;
       leavingRef.current = true;
+      session.release(); // maç zaten kapandı → izleyici gereksiz leave atmasın
       // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama);
       // aksi halde idle ("katılmadı") ya da belirleme süresi dolmuştur.
       const reason =
@@ -133,28 +150,12 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
             : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
+  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router, session]);
 
-  // Çıkış onayı: belirleme fazında çıkış = maç iptal.
-  useEffect(() => {
-    const sub = navigation.addListener('beforeRemove', (e) => {
-      if (leavingRef.current || match?.status !== 'setup') return;
-      e.preventDefault();
-      Alert.alert('Maçtan çık', 'Çıkarsan maç iptal olur. Çıkmak istiyor musun?', [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Çık',
-          style: 'destructive',
-          onPress: () => {
-            leavingRef.current = true;
-            void leaveMatch(matchId).catch(() => {});
-            navigation.dispatch(e.data.action);
-          },
-        },
-      ]);
-    });
-    return sub;
-  }, [navigation, match?.status, matchId]);
+  // Çıkış temizliği artık MERKEZİ: belirleme fazında geri/swipe/unmount ile maç
+  // ekran kümesi dışına çıkıldığında provider'ın navigasyon izleyicisi leave_match
+  // çağırır (per-ekran beforeRemove/unmount net'leri kaldırıldı). Geçiş
+  // (setup→active /match/[id]) küme içi olduğundan leave tetiklenmez.
 
   const setDial = useCallback(
     (i: number, v: number) => {
@@ -202,13 +203,22 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   );
 
   if (!match) {
+    // Yükleme bitti + maç YOK + hata da yok = gerçekten bulunamadı / oyuncu değil
+    // → güvenli yönlendirme (<Redirect> mount/timing'i yönetir). Geçici ağ hatasında
+    // (error) yönlendirme YOK; mesaj + "Ana Menü" butonu gösterilir.
+    if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen>
         <View style={styles.centered}>
           {loading ? (
             <ActivityIndicator color={colors.cyan} />
           ) : (
-            <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>
+            <>
+              <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>
+              <Pressable onPress={() => router.replace('/')} hitSlop={8} style={styles.noteExit}>
+                <Text style={styles.noteExitText}>Ana Menü</Text>
+              </Pressable>
+            </>
           )}
         </View>
       </Screen>
@@ -506,5 +516,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: mono,
     textAlign: 'center',
+  },
+  noteExit: {
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: cyanAlpha(0.4),
+    backgroundColor: cyanAlpha(0.12),
+  },
+  noteExitText: {
+    color: colors.cyan,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: mono,
+    letterSpacing: 1,
   },
 });
