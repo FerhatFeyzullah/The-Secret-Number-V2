@@ -72,7 +72,8 @@ export type SeenKey =
   | 'progression' // Grup 2
   | 'welcome'
   | 'privateRoom' // Grup 3
-  | 'offlineIntro';
+  | 'offlineIntro'
+  | 'storeIntro'; // Sinyal mağazası
 
 /** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
 const SEEN_KEYS: readonly SeenKey[] = [
@@ -83,6 +84,7 @@ const SEEN_KEYS: readonly SeenKey[] = [
   'welcome',
   'privateRoom',
   'offlineIntro',
+  'storeIntro',
 ];
 
 /** Bayrak okundu mu? AsyncStorage'dan gelene kadar çağıran beklemeli

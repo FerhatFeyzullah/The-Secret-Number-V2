@@ -47,7 +47,9 @@ export {
   resolveProtocolSelect,
   setProtocolSelection,
   setSecret,
+  setSignalDeck,
   unlockProtocol,
+  unlockSignal,
 } from './matchService';
 export { useMatch, type UseMatchResult } from './useMatch';
 export { MatchSessionProvider, useMatchSession } from './match-session';
