@@ -37,7 +37,7 @@ export function Screen({ children }: { children: ReactNode }) {
 }
 
 /** Alt ekranlarda geri ok + başlık satırı. */
-export function ScreenHeader({ title }: { title: string }) {
+export function ScreenHeader({ title, onInfo }: { title: string; onInfo?: () => void }) {
   const router = useRouter();
   return (
     <View style={styles.header}>
@@ -45,7 +45,13 @@ export function ScreenHeader({ title }: { title: string }) {
         <Ionicons name="arrow-back" size={24} color={colors.cyan} />
       </Pressable>
       <Text style={styles.headerTitle}>{title}</Text>
-      <View style={styles.back} />
+      {onInfo ? (
+        <Pressable onPress={onInfo} hitSlop={12} style={styles.back}>
+          <Ionicons name="help-circle-outline" size={24} color={colors.cyan} />
+        </Pressable>
+      ) : (
+        <View style={styles.back} />
+      )}
     </View>
   );
 }

@@ -9,7 +9,16 @@ export type FeatherName = keyof typeof Feather.glyphMap;
 /** Lobi alt-ekran başlığı: geri ok callback ile (durum makinesinde faz-geri
  *  ya da route'tan çıkış için). ScreenHeader router.back() yaptığından burada
  *  ayrı bir başlık kullanıyoruz. */
-export function LobbyHeader({ title, onBack }: { title: string; onBack?: () => void }) {
+export function LobbyHeader({
+  title,
+  onBack,
+  onInfo,
+}: {
+  title: string;
+  onBack?: () => void;
+  /** Verilirse sağda "?" çıkar; bilgilendirme modalını açar. */
+  onInfo?: () => void;
+}) {
   return (
     <View style={styles.header}>
       {onBack ? (
@@ -20,7 +29,13 @@ export function LobbyHeader({ title, onBack }: { title: string; onBack?: () => v
         <View style={styles.headerSide} />
       )}
       <Text style={styles.headerTitle}>{title}</Text>
-      <View style={styles.headerSide} />
+      {onInfo ? (
+        <Pressable onPress={onInfo} hitSlop={12} style={styles.headerBack}>
+          <Feather name="help-circle" size={18} color={colors.cyan} />
+        </Pressable>
+      ) : (
+        <View style={styles.headerSide} />
+      )}
     </View>
   );
 }
