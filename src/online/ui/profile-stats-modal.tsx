@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LeagueBadge } from '@/leagues/badge';
 import { getMyRank, isEliteLevel, levelTitle, OnlineError, type MyRank } from '@/online';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
@@ -198,6 +199,12 @@ export function ProfileStatsModal({
                 )}
               </View>
             ) : null}
+            {/* Lig rozeti (Kupa'dan türetilir) — kademe + ad. */}
+            {signedIn && !loading && data ? (
+              <View style={styles.leagueRow}>
+                <LeagueBadge rating={data.rating} size={22} />
+              </View>
+            ) : null}
           </View>
 
           {/* Seviye (XP ilerlemesi) + unvan + Veri — yalnızca sunucudan gelir.
@@ -386,6 +393,10 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(colors.amber, 0.12),
     borderWidth: 1,
     borderColor: withAlpha(colors.amber, 0.32),
+  },
+  leagueRow: {
+    marginTop: 8,
+    alignItems: 'center',
   },
   trophyText: {
     color: colors.amber,
