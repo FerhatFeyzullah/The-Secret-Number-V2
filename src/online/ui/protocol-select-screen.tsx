@@ -6,12 +6,12 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import {
   cancelSetupTimeout,
   getMyHand,
-  leaveMatch,
   markReady,
   OnlineError,
   resolveProtocolSelect,
   setProtocolSelection,
   useMatch,
+  useMatchSession,
   type ProtocolHand,
 } from '@/online';
 import { getProtocol, PILLAR_LABELS } from '@/protocols/catalog';
@@ -33,6 +33,7 @@ const errMsg = (e: unknown) =>
 export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
+  const session = useMatchSession();
   const { match, loading, error } = useMatch(matchId);
 
   const [hand, setHand] = useState<ProtocolHand | null>(null);
@@ -72,6 +73,11 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     void markReady(matchId).catch(() => {});
   }, [matchId]);
+
+  // Merkezi maç sahibine kaydol: çıkış temizliği tek yerden (provider izleyici).
+  useEffect(() => {
+    session.claim(matchId, 'match');
+  }, [matchId, session]);
 
   // Eli sunucudan çek. El, eşleşme anında dağıtılır; nadiren realtime durum
   // güncellemesi el satırından önce gelebilir (yarış) → boş elde birkaç kez
@@ -167,6 +173,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     if (status === 'cancelled' || status === 'finished' || status === 'abandoned') {
       endedRef.current = true;
       leavingRef.current = true;
+      session.release(); // maç zaten kapandı → izleyici gereksiz leave atmasın
       // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama).
       const reason =
         status === 'cancelled' && !pastDeadline && !pastPresentDeadline
@@ -176,44 +183,11 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
             : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router]);
+  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router, session]);
 
-  // Çıkış onayı: seçim fazında çıkış = maç iptal. ÖNEMLİ: maç hâlâ canlıyken
-  // (yalnız 'protocol_select' DEĞİL — yüklenmemiş/null ya da kısa süreli farklı
-  // statüde de) çıkış yakalanır; aksi halde maç sunucuda ASILI kalırdı (hayalet).
-  // Kasıtlı geçiş (navedRef) / zaten çıkış (leavingRef/endedRef) / ölü maç → serbest.
-  useEffect(() => {
-    const sub = navigation.addListener('beforeRemove', (e) => {
-      const s = match?.status;
-      const dead = s === 'finished' || s === 'cancelled' || s === 'abandoned';
-      if (leavingRef.current || navedRef.current || endedRef.current || dead) return;
-      e.preventDefault();
-      Alert.alert('Maçtan çık', 'Çıkarsan maç iptal olur. Çıkmak istiyor musun?', [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Çık',
-          style: 'destructive',
-          onPress: () => {
-            leavingRef.current = true;
-            void leaveMatch(matchId).catch(() => {});
-            navigation.dispatch(e.data.action);
-          },
-        },
-      ]);
-    });
-    return sub;
-  }, [navigation, match?.status, matchId]);
-
-  // EMNİYET AĞI: ekran beklenmedik biçimde kapanırsa (beforeRemove dışı bir yol)
-  // ve kasıtlı geçiş/çıkış değilse, canlı maçı sunucuda kapat (hayalet bırakma).
-  // leave_match idempotent: ölü/bitmiş maçta no-op; pre-oyun fazını cancelled yapar.
-  useEffect(
-    () => () => {
-      if (leavingRef.current || navedRef.current) return;
-      void leaveMatch(matchId).catch(() => {});
-    },
-    [matchId],
-  );
+  // Çıkış temizliği MERKEZİ: seçim fazında geri/swipe/unmount ile maç-ekran kümesi
+  // dışına çıkıldığında provider izleyicisi leave_match çağırır (per-ekran net'leri
+  // kaldırıldı). Geçiş (protocol_select→setup /match-setup) küme içi → leave yok.
 
   const full = selected.length >= slots;
   const toggle = useCallback(

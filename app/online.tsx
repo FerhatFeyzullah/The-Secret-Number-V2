@@ -13,6 +13,7 @@ import {
   markReady,
   OnlineError,
   useMatch,
+  useMatchSession,
   type FirstTurnMode,
   type MatchMode,
 } from '@/online';
@@ -70,27 +71,13 @@ export default function OnlineScreen() {
   // Canlı maç durumu: rakip katılınca status 'waiting' → 'setup' olur.
   const { match } = useMatch(matchId);
 
-  // Lobi akışında sahiplenilen CANLI (waiting/setup) maçı izle: ekran
-  // beklenmedik şekilde terk edilirse (cihaz geri tuşu vb.) kapatılır.
-  // leave_match her fazı doğru kapattığı için setup'a geçmiş maç da sızmaz.
-  const liveMatchRef = useRef<string | null>(null);
+  // Merkezi maç sahibi: lobi maçı (arama/VS) 'lobby' olarak claim edilir. Çıkış
+  // temizliğini (geri/swipe/unmount → /online dışına çıkış) provider'ın navigasyon
+  // izleyicisi yapar; kendi optimistik iptallerimiz session.leave()'i çağırır.
+  // (Eski liveMatchRef unmount net'i merkezi sahibe devredildi.)
+  const session = useMatchSession();
   // Kendi çıkışımız: realtime'dan gelen cancelled'ı "rakip ayrıldı" sanma.
   const leavingRef = useRef(false);
-  useEffect(() => {
-    const inFlow = phase === 'searching' || phase === 'create-room' || phase === 'match-found';
-    const dead =
-      match &&
-      (match.status === 'finished' ||
-        match.status === 'cancelled' ||
-        match.status === 'abandoned');
-    liveMatchRef.current = inFlow && !dead ? matchId : null;
-  }, [phase, match, matchId]);
-
-  useEffect(() => {
-    return () => {
-      if (liveMatchRef.current) void leaveMatch(liveMatchRef.current).catch(() => {});
-    };
-  }, []);
 
   const resetToLobby = useCallback(() => {
     setPhase('lobby');
@@ -123,9 +110,10 @@ export default function OnlineScreen() {
       match.status === 'abandoned'
     ) {
       if (!leavingRef.current) setNotice('Rakip ayrıldı, maç iptal edildi.');
+      session.release(); // maç zaten kapandı → izleyici gereksiz leave atmasın
       resetToLobby();
     }
-  }, [match, phase, resetToLobby]);
+  }, [match, phase, resetToLobby, session]);
 
   // Arama: gerçek geçen süre + 60 sn'de rakip yoksa "bulunamadı".
   const matchIdRef = useRef<string | null>(null);
@@ -144,14 +132,13 @@ export default function OnlineScreen() {
       if (sec >= SEARCH_TIMEOUT_SEC) {
         clearInterval(iv);
         searchSeqRef.current += 1; // uçuşta kalmış istek varsa eskit
-        const id = matchIdRef.current;
-        if (id) void leaveMatch(id).catch(() => {});
+        session.leave(); // bekleyen lobi maçını kapat (idempotent)
         setMatchId(null);
         setPhase('no-opponent');
       }
     }, 500);
     return () => clearInterval(iv);
-  }, [phase]);
+  }, [phase, session]);
 
   // ── Aksiyonlar ────────────────────────────────────────────────
   // Hızlı Maç (quick, tek tur) ve Protokol Maçı (protocol, Best of 3) aynı arama
@@ -176,12 +163,13 @@ export default function OnlineScreen() {
         return;
       }
       setMatchId(ticket.matchId);
+      session.claim(ticket.matchId, 'lobby'); // merkezi sahibe kaydet
       // Bekleyen bir maça katıldıysak zaten eşleştik.
       if (ticket.status !== 'waiting') setPhase('match-found');
     } catch (e) {
       if (seq === searchSeqRef.current) setError(errMsg(e));
     }
-  }, []);
+  }, [session]);
   const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
   const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
   const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
@@ -202,10 +190,9 @@ export default function OnlineScreen() {
     if (leavingRef.current) return; // tek atış
     leavingRef.current = true;
     searchSeqRef.current += 1; // uçuştaki isteği eskit
-    const id = matchIdRef.current;
     resetToLobby();
-    if (id) void leaveMatch(id).catch(() => {});
-  }, [resetToLobby]);
+    session.leave(); // /online'da kalıyoruz → leave'i açıkça çağır (izleyici tetiklenmez)
+  }, [resetToLobby, session]);
 
   const createRoom = useCallback(async (clockMs: number, firstTurnMode: FirstTurnMode) => {
     const seq = ++searchSeqRef.current;
@@ -223,23 +210,23 @@ export default function OnlineScreen() {
         return;
       }
       setMatchId(ticket.matchId);
+      session.claim(ticket.matchId, 'lobby');
       setRoomCode(ticket.roomCode ?? null);
     } catch (e) {
       if (seq === searchSeqRef.current) setError(errMsg(e));
     }
-  }, []);
+  }, [session]);
 
   const cancelRoom = useCallback(() => {
     if (leavingRef.current) return; // tek atış
     leavingRef.current = true;
     searchSeqRef.current += 1;
-    const id = matchIdRef.current;
     setPhase('private-choice');
     setMatchId(null);
     setRoomCode(null);
     setError(null);
-    if (id) void leaveMatch(id).catch(() => {});
-  }, []);
+    session.leave();
+  }, [session]);
 
   // Eşleşme (VS) ekranı: el sıkışması OTOMATİK — ekrana girer girmez mark_ready
   // gönderilir (idempotent boolean; sayı içermez) ve 7 sn'lik hazırlık penceresi
@@ -271,13 +258,14 @@ export default function OnlineScreen() {
         return;
       }
       setMatchId(ticket.matchId);
+      session.claim(ticket.matchId, 'lobby');
       setPhase('match-found');
     } catch (e) {
       if (seq === searchSeqRef.current) setJoinError(errMsg(e));
     } finally {
       setJoinBusy(false);
     }
-  }, []);
+  }, [session]);
 
   const backFromJoin = useCallback(() => {
     searchSeqRef.current += 1; // uçuştaki katılım isteğini eskit
@@ -303,8 +291,8 @@ export default function OnlineScreen() {
     if (phase !== 'match-found' || !vsHoldDone || !matchId || !match) return;
     if (match.status !== 'protocol_select' && match.status !== 'setup') return;
     const toSelect = match.status === 'protocol_select';
-    // Maçın sahipliği bir sonraki ekrana geçiyor; unmount temizliği yapma.
-    liveMatchRef.current = null;
+    // Sahiplik bir sonraki maç ekranına geçiyor (o ekran 'match' olarak claim eder);
+    // route maç kümesi içinde kaldığından izleyici leave TETİKLEMEZ.
     resetToLobby();
     router.push(
       toSelect
