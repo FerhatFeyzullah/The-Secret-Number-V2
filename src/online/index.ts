@@ -50,4 +50,5 @@ export {
   unlockProtocol,
 } from './matchService';
 export { useMatch, type UseMatchResult } from './useMatch';
+export { MatchSessionProvider, useMatchSession } from './match-session';
 export { levelTitle, isEliteLevel, MAX_LEVEL, ELITE_LEVEL } from './progression';

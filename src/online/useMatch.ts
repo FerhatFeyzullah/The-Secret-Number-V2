@@ -31,8 +31,10 @@ const HEARTBEAT_MS = 5_000;
 const TICK_MS = 250;
 /** Rakipten bu kadar süre sinyal yoksa "bağlantısı koptu" göstergesi. */
 const UNSTABLE_AFTER_MS = 10_000;
-/** Bu süreden sonra claimTimeout/forfeitDisconnect çağrılabilir (karar sunucuda). */
-const GONE_AFTER_MS = 30_000;
+/** Bu süreden sonra rakip "gitti" sayılır; sunucu heartbeat-reap eşiğiyle (15 sn)
+ *  hizalı. opponentGone true olunca istemci hızlandırıcı heartbeat atar → sunucu
+ *  reap'i hemen tetiklenir (karar yine sunucuda, _reap_if_opponent_stale). */
+const GONE_AFTER_MS = 15_000;
 /** Yeniden bağlanma backoff üst sınırı. */
 const MAX_RECONNECT_DELAY_MS = 10_000;
 
@@ -352,6 +354,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
 
   const phase = match?.status ?? null;
   const inPlay = phase === 'setup' || phase === 'active';
+  // Heartbeat TÜM canlı maç fazlarını kapsar (seçim dahil) → sunucu reap'i her
+  // fazda çalışır. (Tur arası status='setup' zaten dahil.)
+  const inMatch = phase === 'protocol_select' || phase === 'setup' || phase === 'active';
 
   // Görsel saat + presence yaşı için yerel tik.
   useEffect(() => {
@@ -360,9 +365,13 @@ export function useMatch(matchId: string | null): UseMatchResult {
     return () => clearInterval(timer);
   }, [inPlay]);
 
-  // Heartbeat: maç setup/active iken ve uygulama öndeyken periyodik gönder.
+  // Heartbeat: maç CANLI (protocol_select/setup/active) iken ve uygulama öndeyken
+  // periyodik gönder. Heartbeat aynı zamanda sunucu reap'ini tetikler (hayatta
+  // olan, 15 sn+ sessiz rakibi kapatır). Arka plana geçerken SON bir heartbeat
+  // atılır → backgrounded oyuncuya ~15 sn tolerans (kısa bildirim/uygulama
+  // değişiminde haksız forfeit olmaz).
   useEffect(() => {
-    if (!matchId || !inPlay) return;
+    if (!matchId || !inMatch) return;
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const start = () => {
@@ -385,6 +394,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
         start();
         void refresh(); // arkadayken kaçan state'i yakala
       } else {
+        void heartbeat(matchId).catch(() => {}); // arka plana geçerken son sinyal (tolerans)
         stop();
       }
     });
@@ -392,7 +402,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       stop();
       sub.remove();
     };
-  }, [matchId, inPlay, refresh]);
+  }, [matchId, inMatch, refresh]);
 
   // Otomatik zaman aşımı: sıradaki oyuncunun görsel saati 0'a inince HER iki
   // istemci de claim eder. Karar sunucuda (now() ile doğrular); kaybeden =
@@ -437,6 +447,13 @@ export function useMatch(matchId: string | null): UseMatchResult {
       opponentGone = goneSinceMs >= GONE_AFTER_MS;
     }
   }
+
+  // Hızlandırıcı: rakip "gitti" eşiğine (15 sn) ulaşınca hemen bir heartbeat at →
+  // sunucu reap'i (hayatta olan lehine forfeit) periyodik 5 sn tikini beklemeden
+  // tetiklenir. Karar yine sunucuda (_reap_if_opponent_stale); idempotent.
+  useEffect(() => {
+    if (opponentGone && matchId) void heartbeat(matchId).catch(() => {});
+  }, [opponentGone, matchId]);
 
   // Efemeral emoji yayını: kanal üzerinden broadcast (DB'ye yazmaz).
   const sendEmoji = useCallback((emoji: string) => {

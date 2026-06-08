@@ -10,10 +10,10 @@ import {
   activateProtocol,
   getMatchReveal,
   getMyHand,
-  leaveMatch,
   makeGuess,
   OnlineError,
   useMatch,
+  useMatchSession,
   type MatchReveal,
   type ProtocolHint,
 } from '@/online';
@@ -46,6 +46,7 @@ const errMsg = (e: unknown) =>
 export function DuelScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
+  const session = useMatchSession();
   const { name } = useProfile();
   const {
     match,
@@ -121,6 +122,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!isMine) setEntry([]);
   }, [isMine]);
+
+  // Merkezi maç sahibine kaydol: çıkış temizliği tek yerden (provider izleyici).
+  useEffect(() => {
+    session.claim(matchId, 'match');
+  }, [matchId, session]);
 
 
   // Bir tur bitip yeni tur belirlemesine geçince, biten turun sonucunu sapta:
@@ -481,17 +487,21 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const leavingRef = useRef(false);
   const goMenu = useCallback(() => {
     leavingRef.current = true;
+    session.release(); // maç bitti (sonuç ekranından) → izleyici leave atmasın
     router.dismissTo('/');
-  }, [router]);
+  }, [router, session]);
 
   // Tekrar Oyna: doğrudan Hızlı Maç arama akışına (lobiye değil). Bu maçın
   // aboneliği/kanalı unmount'ta temizlenir; online ekranı quick paramıyla
   // aramayı otomatik başlatır.
   const goRematch = useCallback(() => {
     leavingRef.current = true;
+    session.release(); // biten maç → leave gerekmez
     router.replace({ pathname: '/online', params: { quick: '1' } });
-  }, [router]);
+  }, [router, session]);
 
+  // Çıkış onayı (UX): aktif maçta geri = hükmen kayıp uyarısı. Onaylanınca asıl
+  // leave_match'i MERKEZİ sahip yapar (session.leave → forfeit), tek yerden.
   useEffect(() => {
     const sub = navigation.addListener('beforeRemove', (e) => {
       // Maç bitti ya da çıkışı zaten onayladıysak engelleme.
@@ -507,7 +517,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
             style: 'destructive',
             onPress: () => {
               leavingRef.current = true;
-              void leaveMatch(matchId).catch(() => {});
+              session.leave(); // forfeit (idempotent, yarışsız) — tek leave noktası
               navigation.dispatch(e.data.action);
             },
           },
@@ -515,18 +525,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       );
     });
     return sub;
-  }, [navigation, match?.status, matchId]);
-
-  // EMNİYET AĞI: ekran beklenmedik biçimde kapanırsa (onaylı çıkış/tekrar-oyna/
-  // menü DEĞİL) maçı sunucuda kapat. leave_match idempotent: aktif/turlar-arası →
-  // hükmen kayıp (forfeit), bitmiş/iptal → no-op. Rakip realtime/polling ile temizlenir.
-  useEffect(
-    () => () => {
-      if (leavingRef.current) return;
-      void leaveMatch(matchId).catch(() => {});
-    },
-    [matchId],
-  );
+  }, [navigation, match?.status, session]);
 
   // ── Giriş aksiyonları ─────────────────────────────────────────
   const addDigit = useCallback(
