@@ -432,6 +432,7 @@ export async function getMyRank(): Promise<MyRank> {
     owned_protocols?: string[] | null;
     owned_signals?: string[] | null;
     signal_deck?: string[] | null;
+    season_id?: number | string | null;
   }>('get_my_rank');
   return {
     rank: Number(p.rank),
@@ -452,6 +453,8 @@ export async function getMyRank(): Promise<MyRank> {
     // Migration 20260607000014 (sinyaller) öncesi güvenli varsayılanlar.
     ownedSignals: p.owned_signals ?? [],
     signalDeck: p.signal_deck ?? [],
+    // Migration 20260607000015 (lig/sezon) öncesi güvenli varsayılan.
+    seasonId: p.season_id == null ? null : Number(p.season_id),
   };
 }
 

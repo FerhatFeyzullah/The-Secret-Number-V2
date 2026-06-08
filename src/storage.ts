@@ -8,6 +8,7 @@ const KEYS = {
   haptics: 'settings.haptics',
   lastMode: 'menu.lastMode', // ana ekranda son seçilen mod (profil verisi değil)
   lastLevel: 'progress.lastLevel', // seviye atlama kutlamasını tek sefer göstermek için
+  lastSeason: 'league.lastSeason', // sezon sıfırlama modalını tek sefer göstermek için
 } as const;
 
 export type GameMode = 'solo' | 'online';
@@ -50,6 +51,20 @@ export async function getLastSeenLevel(): Promise<number | null> {
 
 export async function setLastSeenLevel(level: number) {
   await AsyncStorage.setItem(KEYS.lastLevel, String(level));
+}
+
+/** Son görülen sezon kimliği (haftalık sezon sıfırlama modalını tek sefer
+ *  göstermek için). Hiç kaydedilmemişse null → ilk açılışta modal gösterilmez,
+ *  yalnız mevcut sezona ilklenir (yeni kullanıcıya "kupan çekildi" denmez). */
+export async function getLastSeenSeason(): Promise<number | null> {
+  const v = await AsyncStorage.getItem(KEYS.lastSeason);
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function setLastSeenSeason(seasonId: number) {
+  await AsyncStorage.setItem(KEYS.lastSeason, String(seasonId));
 }
 
 export async function getToggle(key: 'sound' | 'haptics') {

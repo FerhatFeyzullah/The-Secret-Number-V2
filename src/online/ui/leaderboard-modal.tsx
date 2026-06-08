@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LeagueBadge } from '@/leagues/badge';
 import {
   getLeaderboard,
   getMyRank,
@@ -61,6 +62,7 @@ function Pod({ entry, place }: { entry: LeaderboardEntry | undefined; place: 1 |
       <Text style={styles.podName} numberOfLines={1}>
         {displayName(entry.username)}
       </Text>
+      <LeagueBadge rating={entry.rating} size={16} showName={false} />
       <Rating value={entry.rating} />
       <View style={[styles.podBase, { height: baseH }, place === 1 && styles.podBaseFirst]}>
         <Text style={[styles.podBaseNum, place === 1 && { color: colors.gold }]}>{place}</Text>
@@ -176,6 +178,7 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
                     <Text style={styles.rowName} numberOfLines={1}>
                       {displayName(item.username)}
                     </Text>
+                    <LeagueBadge rating={item.rating} size={16} showName={false} />
                     <Rating value={item.rating} />
                   </View>
                 )}
@@ -196,6 +199,7 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
                     <Text style={styles.rowName} numberOfLines={1}>
                       {displayName(me.username)} <Text style={styles.meTag}>· SEN</Text>
                     </Text>
+                    <LeagueBadge rating={me.rating} size={16} showName={false} />
                     <Rating value={me.rating} />
                   </View>
                 </View>
