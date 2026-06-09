@@ -22,6 +22,7 @@ import {
   type GameMode,
 } from '@/storage';
 import { InfoModal } from '@/ui/info-modal';
+import { useIntroDone } from '@/ui/intro-context';
 import { InfoTipBubble, TIPS, type TipId } from '@/ui/info-tip';
 import { WELCOME_INTRO } from '@/ui/welcome-intro';
 import { ModeSegment } from '@/ui/mode-segment';
@@ -70,9 +71,13 @@ export default function MenuScreen() {
   }, []);
 
   // Karşılama modalı (flicker-safe): bayrak yüklenene kadar AÇILMAZ; ilk açılışsa
-  // (görülmediyse) açılır. İlk ekran olduğundan yarış/yanıp sönme kritik.
+  // (görülmediyse) açılır. ÖNEMLİ: yalnız Vavizof intro'su BİTİNCE (introDone)
+  // tetiklenir — yoksa native <Modal>, hâlâ ekranda olan JS-overlay intro'nun
+  // ÜSTÜNE çizilip önüne geçer. Sıra: splash → intro → menü → welcome.
+  const introDone = useIntroDone();
   const [welcomeVisible, setWelcomeVisible] = useState(false);
   useEffect(() => {
+    if (!introDone) return;
     let alive = true;
     void (async () => {
       const seen = await getSeen('welcome');
@@ -81,7 +86,7 @@ export default function MenuScreen() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [introDone]);
   const closeWelcome = useCallback(() => {
     setWelcomeVisible(false);
     void markSeen('welcome');
