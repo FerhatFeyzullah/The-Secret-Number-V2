@@ -46,6 +46,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
+    "build:android:local": "JAVA_HOME=${JAVA_HOME_17:-/usr/lib/jvm/temurin-17-jdk} eas build -p android --profile preview --local",
     "postinstall": "node scripts/generate-sfx.js"
   },
   "jest": {
