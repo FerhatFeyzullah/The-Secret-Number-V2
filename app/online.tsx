@@ -174,6 +174,26 @@ export default function OnlineScreen() {
   const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
   const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
 
+  // Eşzamanlı yeniden-kuyruk uzlaştırması: iki taraf aynı anda "Tekrar Oyna"
+  // yapınca ikisi de 'waiting' açıp birbirini kaçırabilir (find_or_create yalnız
+  // ÖNCEDEN var olan waiting'e katılır, iki yeni waiting'i uzlaştırmaz). Bekleyen
+  // kalırsak ~4 sn (jitter ile, lockstep kırılır) sonra BİR KEZ yeniden ara:
+  // kendi waiting'imiz iptal edilip karşının waiting'ine katılırız.
+  const requeuedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== 'searching') {
+      requeuedRef.current = false;
+      return;
+    }
+    if (match?.status !== 'waiting' || requeuedRef.current) return;
+    const delay = 4000 + Math.floor(Math.random() * 1500);
+    const t = setTimeout(() => {
+      requeuedRef.current = true;
+      void startSearch(lastModeRef.current);
+    }, delay);
+    return () => clearTimeout(t);
+  }, [phase, match?.status, startSearch]);
+
   // "Tekrar Oyna" ile gelindiğinde (quick=1) aramayı bir kez otomatik başlat.
   const { quick } = useLocalSearchParams<{ quick?: string }>();
   const autoStartedRef = useRef(false);

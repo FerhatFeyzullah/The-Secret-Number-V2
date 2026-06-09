@@ -183,19 +183,24 @@ export function useMatch(matchId: string | null): UseMatchResult {
     }
   }, [matchId]);
 
-  // Realtime kaçaklarına karşı EMNİYET AĞI: ön-oyun fazlarında (waiting /
-  // protocol_select / setup) maç durumunu periyodik tazele. Bir matches UPDATE'i
-  // realtime'da düşse bile (ör. eşleşme → protocol_select, seçim → setup, belirleme
-  // → active) faz geçişi yine de yakalanır; oyuncu "rakip aranıyor"da ya da
-  // belirleme/seçim ekranında takılı kalmaz. Aktif/bitmiş fazda kapalı (gereksiz yük).
+  // Realtime kaçaklarına karşı EMNİYET AĞI (poll). Gerçek cihazda postgres_changes
+  // gecikebilir/düşebilir (hücresel ağ, arka plan throttle, sessiz websocket ölümü);
+  // poll faz geçişlerini ve aktif maç güncellemelerini yine de yakalar.
+  //  • Ön-oyun (waiting / protocol_select / setup): HIZLI (~1.5 sn) → belirleme→active
+  //    geçişinde "rakip belirliyor"da takılma ve eşleşme→setup gecikmesi (yeni maça
+  //    geç girme hissi) ~1.5 sn'ye iner.
+  //  • Aktif: DÜŞÜK frekanslı (~5 sn) emniyet → realtime sessizce düşse bile rakibin
+  //    tahmini/sıra/kazanması gelir, maç ortada DONMAZ.
+  //  • Bitmiş/iptal: kapalı (gereksiz yük yok).
   useEffect(() => {
     if (!matchId) return;
     const s = match?.status ?? null;
     const pregame = s === null || s === 'waiting' || s === 'protocol_select' || s === 'setup';
-    if (!pregame) return;
+    const active = s === 'active';
+    if (!pregame && !active) return;
     const iv = setInterval(() => {
       void refresh();
-    }, 3000);
+    }, pregame ? 1500 : 5000);
     return () => clearInterval(iv);
   }, [matchId, match?.status, refresh]);
 
