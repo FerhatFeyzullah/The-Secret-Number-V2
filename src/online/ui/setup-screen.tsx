@@ -36,7 +36,7 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
   const session = useMatchSession();
-  const { match, loading, error } = useMatch(matchId);
+  const { match, loading, error, refresh } = useMatch(matchId);
 
   const [dials, setDials] = useState<number[]>([1, 2, 3]);
   const [locked, setLocked] = useState(false);
@@ -83,6 +83,14 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
       ? match.player2Ready
       : match.player1Ready
     : false;
+
+  // HIZ: ikimiz de kilitlediyse (locked + oppReady) sunucu ikinci set_secret'te
+  // zaten status='active' yapmıştır. İlk-giren oyuncuda active UPDATE'i realtime'da
+  // gecikse bile, bu anda HEMEN tazele → "rakip belirliyor"da takılmadan maça geç
+  // (1.5 sn poll'u beklemeye gerek kalmaz).
+  useEffect(() => {
+    if (status === 'setup' && locked && oppReady) void refresh();
+  }, [status, locked, oppReady, refresh]);
 
   // EL SIKIŞMASI GARANTİSİ: belirleme ekranına gelen oyuncu "present" işaretini
   // KESİN gönderir (idempotent). Eşleşme ekranındaki otomatik mark_ready kaçsa/
