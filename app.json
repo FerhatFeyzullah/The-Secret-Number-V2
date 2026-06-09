@@ -45,7 +45,8 @@
         }
       ],
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "./plugins/with-local-java-home.js"
     ],
     "experiments": {
       "typedRoutes": true,
