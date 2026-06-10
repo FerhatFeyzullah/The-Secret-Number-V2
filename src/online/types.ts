@@ -54,9 +54,11 @@ export type MatchState = {
   id: string;
   status: MatchStatus;
   mode: MatchMode;
-  /** Gizli içeriğin tipi (şimdilik yalnız 'number'; kelime Faz 2'de).
-   *  DB kolonu Adım 1B'de gelir; o zamana dek mapping hep 'number' üretir. */
+  /** Gizli içeriğin tipi ('number' | 'word'). */
   contentType: ContentTypeId;
+  /** Kelime maçında harf uzunluğu (4-6, maç başına random; iki oyuncuya aynı).
+   *  Number maçlarda null. */
+  wordLength: number | null;
   roomCode: string | null;
   player1: MatchPlayer;
   player2: MatchPlayer | null;

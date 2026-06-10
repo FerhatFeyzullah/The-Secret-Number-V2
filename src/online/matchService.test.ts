@@ -45,6 +45,18 @@ describe('findOrCreateQuickMatch', () => {
     });
     expect(rpcMock).toHaveBeenCalledWith('find_or_create_quick_match', undefined);
   });
+
+  it("word kuyruğu için p_content_type parametresi gönderir", async () => {
+    rpcResolves({ match_id: 'm2', role: 'player1', status: 'waiting' });
+    await expect(findOrCreateQuickMatch('word')).resolves.toEqual({
+      matchId: 'm2',
+      role: 'player1',
+      status: 'waiting',
+    });
+    expect(rpcMock).toHaveBeenCalledWith('find_or_create_quick_match', {
+      p_content_type: 'word',
+    });
+  });
 });
 
 describe('hata eşleme', () => {
