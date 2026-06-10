@@ -1,3 +1,5 @@
+import type { ContentTypeId } from '../game';
+
 /** Sunucudaki matches.status değerleri. */
 export type MatchStatus =
   | 'waiting'
@@ -52,6 +54,9 @@ export type MatchState = {
   id: string;
   status: MatchStatus;
   mode: MatchMode;
+  /** Gizli içeriğin tipi (şimdilik yalnız 'number'; kelime Faz 2'de).
+   *  DB kolonu Adım 1B'de gelir; o zamana dek mapping hep 'number' üretir. */
+  contentType: ContentTypeId;
   roomCode: string | null;
   player1: MatchPlayer;
   player2: MatchPlayer | null;

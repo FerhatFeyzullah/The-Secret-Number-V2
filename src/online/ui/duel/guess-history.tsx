@@ -10,8 +10,9 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 const FOG_MS = 4000;
 
 /** Sunucu feedback'ini çip etiketi + rengine çevirir.
- *  Pozisyon bilgisi YOK — yalnızca doğru rakam sayısı / sıra bilgisi. */
-function describe(feedback: GuessFeedback): { label: string; color: string } {
+ *  Pozisyon bilgisi YOK — yalnızca doğru rakam sayısı / sıra bilgisi.
+ *  (İçerik tipi kayıt defteri content-ui.tsx de bunu kullanır.) */
+export function describe(feedback: GuessFeedback): { label: string; color: string } {
   switch (feedback) {
     case 'win':
       return { label: 'doğru sayı!', color: colors.success };

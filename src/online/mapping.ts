@@ -1,4 +1,4 @@
-import type { GuessResult } from '../game';
+import type { ContentTypeId, GuessResult } from '../game';
 import type {
   FirstTurnMode,
   GuessFeedback,
@@ -16,6 +16,8 @@ export type MatchRow = {
   id: string;
   status: MatchStatus;
   mode: MatchMode;
+  /** Gizli içerik tipi; DB kolonu Adım 1B'de eklenir, eski satırlarda yoktur. */
+  content_type?: ContentTypeId;
   room_code: string | null;
   player1: string;
   player2: string | null;
@@ -103,6 +105,7 @@ export function matchRowToState(
     id: row.id,
     status: row.status,
     mode: row.mode,
+    contentType: row.content_type ?? 'number',
     roomCode: row.room_code,
     player1: { id: row.player1, username: usernames[row.player1] ?? null },
     player2: row.player2
