@@ -1,7 +1,7 @@
 import type { GuessResult, InvalidReason } from './types';
 
-/** Desteklenen gizli içerik tipleri. Şimdilik yalnız sayı; kelime Faz 2'de eklenir. */
-export type ContentTypeId = 'number';
+/** Desteklenen gizli içerik tipleri. */
+export type ContentTypeId = 'number' | 'word';
 
 /** İçerik tipinden bağımsız ayrıştırma sonucu. Sınır tipi string'dir;
  *  tipin iç temsili (örn. rakam tuple'ı) dışarı sızmaz. */
@@ -17,8 +17,8 @@ export type ParseResult =
  */
 export type ContentTypeDef = {
   id: ContentTypeId;
-  /** Gizli içeriğin sabit uzunluğu (sayıda 3 hane). */
-  secretLength: number;
+  /** Geçerli gizli içerik uzunlukları (sayıda [3]; kelimede [4,5,6]). */
+  allowedLengths: readonly number[];
   /** Kurala uygun rastgele gizli içerik üretir (string sınır formatında). */
   generate(rng?: () => number): string;
   /** Ham girdiyi doğrular; geçerliyse kanonik string değerini döndürür. */

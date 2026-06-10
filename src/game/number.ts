@@ -72,7 +72,7 @@ export function evaluateGuess(secret: Secret, guess: string): GuessResult {
  */
 export const numberContent: ContentTypeDef = {
   id: 'number',
-  secretLength: 3,
+  allowedLengths: [3],
   generate(rng = Math.random) {
     return generateSecret(rng).join('');
   },
