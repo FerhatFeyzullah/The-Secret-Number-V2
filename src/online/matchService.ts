@@ -1,4 +1,4 @@
-import { parseGuess } from '../game';
+import { parseGuess, type ContentTypeId } from '../game';
 import { supabase } from '../supabase';
 import {
   guessRowToGuess,
@@ -172,9 +172,18 @@ function toOutcome(p: OutcomePayload): GuessOutcome {
   };
 }
 
-/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç (tek tur). */
-export async function findOrCreateQuickMatch(): Promise<MatchTicket> {
-  return toTicket(await callRpc<TicketPayload>('find_or_create_quick_match'));
+/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç (tek tur).
+ *  contentType 'word' ise ayrı kelime kuyruğuna girer; sunucu maça random
+ *  uzunluk (4-6) atar. 'number' default'ta parametre gönderilmez (geriye uyumlu). */
+export async function findOrCreateQuickMatch(
+  contentType: ContentTypeId = 'number',
+): Promise<MatchTicket> {
+  return toTicket(
+    await callRpc<TicketPayload>(
+      'find_or_create_quick_match',
+      contentType === 'number' ? undefined : { p_content_type: contentType },
+    ),
+  );
 }
 
 /** Protokol maçı: ayrı kuyruk, Best of 3 (win_target=2). Quick'ten ayrı eşleşir. */
