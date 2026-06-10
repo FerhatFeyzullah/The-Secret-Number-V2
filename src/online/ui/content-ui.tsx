@@ -24,7 +24,7 @@ export type ContentUIDef = {
   describe: (feedback: GuessFeedback) => { label: string; color: string };
 };
 
-export const contentUI: Record<ContentTypeId, ContentUIDef> = {
+export const contentUI: Partial<Record<ContentTypeId, ContentUIDef>> = {
   number: {
     SetupInput: VaultDials,
     GuessPad: DigitPad,
@@ -32,8 +32,10 @@ export const contentUI: Record<ContentTypeId, ContentUIDef> = {
     formatValue: (value) => (value ? value.split('').join(' ') : '—'),
     describe: describeNumberFeedback,
   },
+  // TODO(Faz 2C): word girişi/klavyesi buraya eklenir; o zamana dek
+  // getContentUI number'a düşer (word maçı UI'dan henüz açılamaz).
 };
 
 export function getContentUI(id: ContentTypeId): ContentUIDef {
-  return contentUI[id];
+  return contentUI[id] ?? contentUI.number!;
 }

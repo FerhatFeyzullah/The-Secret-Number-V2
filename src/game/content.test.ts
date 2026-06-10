@@ -3,11 +3,11 @@ import { evaluateGuess, parseGuess } from './number';
 import type { Secret } from './types';
 
 describe('içerik tipi kayıt defteri', () => {
-  it("tek üye 'number' ve numberContent'in kendisidir", () => {
-    expect(Object.keys(contentTypes)).toEqual(['number']);
+  it("üyeler 'number' ve 'word'; number numberContent'in kendisidir", () => {
+    expect(Object.keys(contentTypes).sort()).toEqual(['number', 'word']);
     expect(getContentType('number')).toBe(numberContent);
     expect(numberContent.id).toBe('number');
-    expect(numberContent.secretLength).toBe(3);
+    expect(numberContent.allowedLengths).toEqual([3]);
   });
 });
 
