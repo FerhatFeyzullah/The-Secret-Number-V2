@@ -70,7 +70,41 @@ const PROTOCOL_SECTIONS: InfoSection[] = [
   },
 ];
 
-type Intro = { kind: 'quick' | 'protocol'; proceed: boolean };
+/** Kelime Modu tanıtımı — kelime düellosu mekaniği (Bo3 + protokoller + random uzunluk). */
+const WORD_SECTIONS: InfoSection[] = [
+  {
+    icon: 'type',
+    accent: colors.success,
+    title: 'Gizli Kelime',
+    body: 'Her tur 4, 5 ya da 6 harf RASTGELE belirlenir (ikinize de aynı). Yaygın Türkçe kelimelerden gizli kelimeni seçersin.',
+  },
+  {
+    icon: 'target',
+    accent: colors.cyan,
+    title: 'Sırayla Tahmin',
+    body: 'Sırayla rakibin kelimesini tahmin edersin. Tahminin geçerli bir Türkçe kelime olmalı.',
+  },
+  {
+    icon: 'eye',
+    accent: colors.teal,
+    title: 'Geri Bildirim',
+    body: 'Kaç HARFİN doğru olduğu söylenir; ama YERİ söylenmez. Harfler doğru olup sırası yanlışsa ayrıca belirtilir.',
+  },
+  {
+    icon: 'layers',
+    accent: colors.violet,
+    title: 'İki Tur Kazanan Alır',
+    body: 'En çok 3 tur oynanır; önce 2 turu kazanan maçı alır. Maç başında Kader Eli protokol dağıtır.',
+  },
+  {
+    icon: 'award',
+    accent: colors.amber,
+    title: 'Kazanım',
+    body: 'Kazanınca Kupa, XP ve Veri kazanırsın (kaybedince daha azı). Sayı moduyla aynı lig/sezon.',
+  },
+];
+
+type Intro = { kind: 'quick' | 'protocol' | 'word'; proceed: boolean };
 
 /** Online lobi ana ekranı: Hızlı Maç (hero) + Protokol Maçı + Özel Oyun.
  *  İlk dokunuşta ilgili tanıtım modalı araya girer (sonra şeffaf); "?" rozeti
@@ -79,6 +113,7 @@ export function LobbyHub({
   notice,
   onQuick,
   onProtocol,
+  onWord,
   onPrivate,
   onHowTo,
   onBack,
@@ -87,6 +122,7 @@ export function LobbyHub({
   notice?: string | null;
   onQuick: () => void;
   onProtocol: () => void;
+  onWord: () => void;
   onPrivate: () => void;
   onHowTo: () => void;
   onBack: () => void;
@@ -103,17 +139,24 @@ export function LobbyHub({
     if (await getSeen('protocolIntro')) onProtocol();
     else setIntro({ kind: 'protocol', proceed: true });
   };
+  const tapWord = async () => {
+    if (await getSeen('wordIntro')) onWord();
+    else setIntro({ kind: 'word', proceed: true });
+  };
 
   // "?" rozeti: seen'den bağımsız her zaman açar, aramayı BAŞLATMAZ.
   const infoQuick = () => setIntro({ kind: 'quick', proceed: false });
   const infoProtocol = () => setIntro({ kind: 'protocol', proceed: false });
+  const infoWord = () => setIntro({ kind: 'word', proceed: false });
 
   const closeIntro = () => {
     const cur = intro;
     setIntro(null);
     if (!cur) return;
-    void markSeen(cur.kind === 'quick' ? 'quickIntro' : 'protocolIntro');
-    if (cur.proceed) (cur.kind === 'quick' ? onQuick : onProtocol)();
+    void markSeen(
+      cur.kind === 'quick' ? 'quickIntro' : cur.kind === 'protocol' ? 'protocolIntro' : 'wordIntro',
+    );
+    if (cur.proceed) (cur.kind === 'quick' ? onQuick : cur.kind === 'protocol' ? onProtocol : onWord)();
   };
 
   return (
@@ -160,6 +203,18 @@ export function LobbyHub({
         </ChoiceCard>
 
         <ChoiceCard
+          icon="type"
+          accent={colors.success}
+          title="Kelime Modu"
+          subtitle="Kelime düellosu · 3 tur"
+          onPress={tapWord}
+          onInfo={infoWord}>
+          <View style={styles.tags}>
+            <Text style={styles.tag}>🔤 4-6 harf · her tur rastgele</Text>
+          </View>
+        </ChoiceCard>
+
+        <ChoiceCard
           icon="lock"
           accent={colors.amber}
           title="Özel Oyun"
@@ -184,6 +239,15 @@ export function LobbyHub({
         icon="layers"
         accent={colors.violet}
         sections={PROTOCOL_SECTIONS}
+        ctaLabel={intro?.proceed ? 'Anladım, Başla' : 'Anladım'}
+      />
+      <InfoModal
+        visible={intro?.kind === 'word'}
+        onClose={closeIntro}
+        title="KELİME MODU"
+        icon="type"
+        accent={colors.success}
+        sections={WORD_SECTIONS}
         ctaLabel={intro?.proceed ? 'Anladım, Başla' : 'Anladım'}
       />
 

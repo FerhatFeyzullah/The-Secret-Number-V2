@@ -15,6 +15,7 @@ export function MatchFoundScreen({
   myName,
   opponentName,
   mode,
+  word = false,
   clockMs,
   firstTurnMode,
   iAmCreator,
@@ -24,6 +25,8 @@ export function MatchFoundScreen({
    *  (ad geldiğinde tek geçiş — titreşim yok). */
   opponentName: string | null;
   mode: MatchMode;
+  /** Kelime maçı mı (mode='protocol' + content_type='word') — etiket farklı. */
+  word?: boolean;
   /** Konfig: kişi başı süre (ms). */
   clockMs: number;
   /** Konfig: ilk sıra modu. */
@@ -53,8 +56,13 @@ export function MatchFoundScreen({
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
   };
 
-  const modeLabel =
-    mode === 'quick' ? 'Hızlı Maç' : mode === 'protocol' ? 'Protokol Maçı' : 'Özel Oyun';
+  const modeLabel = word
+    ? 'Kelime Modu'
+    : mode === 'quick'
+      ? 'Hızlı Maç'
+      : mode === 'protocol'
+        ? 'Protokol Maçı'
+        : 'Özel Oyun';
   const turnPhrase =
     firstTurnMode === 'random' ? 'Rastgele' : iAmCreator ? 'Sen başlıyorsun' : 'Rakip başlıyor';
 

@@ -89,7 +89,8 @@ export type SeenKey =
   | 'privateRoom' // Grup 3
   | 'offlineIntro'
   | 'storeIntro' // Sinyal mağazası
-  | 'signalDeck'; // Sinyal destesi (Sinyallerim)
+  | 'signalDeck' // Sinyal destesi (Sinyallerim)
+  | 'wordIntro'; // Kelime Modu tanıtımı
 
 /** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
 const SEEN_KEYS: readonly SeenKey[] = [
@@ -102,6 +103,7 @@ const SEEN_KEYS: readonly SeenKey[] = [
   'offlineIntro',
   'storeIntro',
   'signalDeck',
+  'wordIntro',
 ];
 
 /** Bayrak okundu mu? AsyncStorage'dan gelene kadar çağıran beklemeli

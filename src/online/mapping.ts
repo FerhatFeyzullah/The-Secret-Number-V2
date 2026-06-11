@@ -226,6 +226,12 @@ export function feedbackToGuessResult(feedback: GuessFeedback): GuessResult {
       return { status: 'partial', correctCount: 1 };
     case 'partial:2':
       return { status: 'partial', correctCount: 2 };
+    case 'partial:3': // kelime modu (sayıda üretilmez)
+      return { status: 'partial', correctCount: 3 };
+    case 'partial:4':
+      return { status: 'partial', correctCount: 4 };
+    case 'partial:5':
+      return { status: 'partial', correctCount: 5 };
     case 'digits_correct_wrong_order':
       return { status: 'digitsCorrectWrongOrder' };
     case 'win':

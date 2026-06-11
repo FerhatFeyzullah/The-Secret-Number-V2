@@ -20,6 +20,13 @@ function shortFeedback(fb: GuessFeedback): string {
       return '1 doğru';
     case 'partial:0':
       return '0 doğru';
+    // Kelime moduna ait değerler (sayı maçında üretilmez; tip bütünlüğü).
+    case 'partial:3':
+      return '3 doğru';
+    case 'partial:4':
+      return '4 doğru';
+    case 'partial:5':
+      return '5 doğru';
   }
 }
 

@@ -30,6 +30,9 @@ export type GuessFeedback =
   | 'partial:0'
   | 'partial:1'
   | 'partial:2'
+  | 'partial:3' // kelime modunda (4-6 harf) mümkün; sayıda üretilmez
+  | 'partial:4'
+  | 'partial:5'
   | 'digits_correct_wrong_order'
   | 'win';
 

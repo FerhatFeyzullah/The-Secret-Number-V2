@@ -141,22 +141,29 @@ export default function OnlineScreen() {
   }, [phase, session]);
 
   // ── Aksiyonlar ────────────────────────────────────────────────
-  // Hızlı Maç (quick, tek tur) ve Protokol Maçı (protocol, Best of 3) aynı arama
-  // akışını paylaşır; yalnızca eşleşme RPC'si değişir.
-  const lastModeRef = useRef<'quick' | 'protocol'>('quick');
-  const startSearch = useCallback(async (m: 'quick' | 'protocol') => {
+  // Hızlı Maç (quick, tek tur), Protokol Maçı (protocol, Best of 3) ve Kelime
+  // Modu (word kuyruğu; sunucuda Bo3+protokol akışı) aynı arama akışını paylaşır;
+  // yalnızca eşleşme RPC'si/parametresi değişir.
+  const lastModeRef = useRef<'quick' | 'protocol' | 'word'>('quick');
+  // Kelime maçı mı (ekran seçimi + VS etiketi için; maç satırı gelmeden de doğru).
+  const [pendingWord, setPendingWord] = useState(false);
+  const startSearch = useCallback(async (m: 'quick' | 'protocol' | 'word') => {
     lastModeRef.current = m;
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
     setMatchId(null);
-    setPendingMode(m);
+    // Kelime maçları sunucuda mode='protocol' doğar (Bo3 + Kader Eli).
+    setPendingMode(m === 'quick' ? 'quick' : 'protocol');
+    setPendingWord(m === 'word');
     setPhase('searching');
     try {
       const ticket = await (m === 'protocol'
         ? findOrCreateProtocolMatch()
-        : findOrCreateQuickMatch());
+        : m === 'word'
+          ? findOrCreateQuickMatch('word')
+          : findOrCreateQuickMatch());
       if (seq !== searchSeqRef.current) {
         // Bu arama iptal edildi/yenilendi: dönen maçı sessizce kapat.
         void leaveMatch(ticket.matchId).catch(() => {});
@@ -172,6 +179,7 @@ export default function OnlineScreen() {
   }, [session]);
   const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
   const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
+  const startWord = useCallback(() => startSearch('word'), [startSearch]);
   const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
 
   // Eşzamanlı yeniden-kuyruk uzlaştırması: iki taraf aynı anda "Tekrar Oyna"
@@ -194,15 +202,15 @@ export default function OnlineScreen() {
     return () => clearTimeout(t);
   }, [phase, match?.status, startSearch]);
 
-  // "Tekrar Oyna" ile gelindiğinde (quick=1) aramayı bir kez otomatik başlat.
-  const { quick } = useLocalSearchParams<{ quick?: string }>();
+  // "Tekrar Oyna" ile gelindiğinde (quick=1 / word=1) aramayı bir kez otomatik başlat.
+  const { quick, word } = useLocalSearchParams<{ quick?: string; word?: string }>();
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (quick === '1' && !autoStartedRef.current) {
+    if ((quick === '1' || word === '1') && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      void startQuick();
+      void (word === '1' ? startWord() : startQuick());
     }
-  }, [quick, startQuick]);
+  }, [quick, word, startQuick, startWord]);
 
   // Optimistik çıkış: UI ANINDA döner, leave_match arka planda koşar (ağ
   // gecikmesi donma hissi vermez); leavingRef ikinci basışı no-op yapar.
@@ -311,13 +319,14 @@ export default function OnlineScreen() {
     if (phase !== 'match-found' || !vsHoldDone || !matchId || !match) return;
     if (match.status !== 'protocol_select' && match.status !== 'setup') return;
     const toSelect = match.status === 'protocol_select';
+    const content = match.contentType; // kelime maçında setup ekranı kelime olur
     // Sahiplik bir sonraki maç ekranına geçiyor (o ekran 'match' olarak claim eder);
     // route maç kümesi içinde kaldığından izleyici leave TETİKLEMEZ.
     resetToLobby();
     router.push(
       toSelect
         ? { pathname: '/protocol-select', params: { matchId } }
-        : { pathname: '/match-setup', params: { matchId } },
+        : { pathname: '/match-setup', params: { matchId, content } },
     );
   }, [phase, vsHoldDone, matchId, match, resetToLobby, router]);
 
@@ -393,6 +402,7 @@ export default function OnlineScreen() {
           myName={name}
           opponentName={opponentName}
           mode={mode}
+          word={match ? match.contentType === 'word' : pendingWord}
           clockMs={match?.clockMs ?? 60000}
           firstTurnMode={match?.firstTurnMode ?? 'random'}
           iAmCreator={match?.myRole === 'player1'}
@@ -406,6 +416,7 @@ export default function OnlineScreen() {
           notice={notice}
           onQuick={startQuick}
           onProtocol={startProtocol}
+          onWord={startWord}
           onPrivate={() => setPhase('private-choice')}
           onHowTo={() => router.push('/how-to-play')}
           onBack={() => router.back()}
