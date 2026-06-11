@@ -41,6 +41,7 @@ import { PILLAR_COLOR, OPPONENT_VISIBLE_PROTOCOLS, protocolIcon } from '../proto
 import { WordOrbs } from './orbs';
 import { recallMySecret } from './secret-memory';
 import { TrKeyboard } from './tr-keyboard';
+import { WordConfirmButton } from './word-parts';
 import { WordSetupPanel } from './word-setup-panel';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -543,7 +544,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     setSubmitting(true);
     setActionError(null);
     try {
-      const outcome = await makeGuess(matchId, parsed.word);
+      const outcome = await makeGuess(matchId, parsed.word, 'word');
       setEntry([]);
       if (outcome.feedback === 'win') {
         play('win');
@@ -569,7 +570,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   if (!match) {
     if (!loading && !error) return <Redirect href="/" />;
     return (
-      <Screen>
+      <Screen float="letters">
         <View style={styles.centered}>
           {loading ? <ActivityIndicator color={colors.cyan} /> : <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>}
           <Pressable onPress={goMenu} hitSlop={8} style={styles.noteExit}>
@@ -583,7 +584,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   // Turlar arası belirleme (Best of 3): kelime paneli düello ekranı içinde.
   if (status === 'setup') {
     return (
-      <Screen>
+      <Screen float="letters">
         <WordOrbs />
         <View style={styles.content}>
           <View style={styles.headerRow}>{exitButton}</View>
@@ -595,7 +596,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
 
   if (status !== 'active' && status !== 'finished') {
     return (
-      <Screen>
+      <Screen float="letters">
         <View style={styles.headerRow}>{exitButton}</View>
         <View style={styles.centered}>
           <ActivityIndicator color={colors.cyan} />
@@ -615,7 +616,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const entryTileW = Math.min(44, Math.floor((width - 60 - (wordLength - 1) * 6) / wordLength));
 
   return (
-    <Screen>
+    <Screen float="letters">
       <WordOrbs amberBottom={200} />
       <View style={styles.content}>
         {/* ÜST: rozet + Bo3 tur noktaları */}
@@ -782,8 +783,14 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           </View>
         ) : null}
 
-        {/* KLAVYE (büyük) */}
+        {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen) */}
         <View style={styles.kbWrap}>
+          <WordConfirmButton
+            label="tahmin et"
+            enabled={entry.length === wordLength && !locked && !submitting}
+            busy={submitting}
+            onPress={submit}
+          />
           <TrKeyboard
             large
             onKey={addLetter}
@@ -791,6 +798,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             onSubmit={submit}
             locked={locked || submitting}
             submitEnabled={entry.length === wordLength}
+            hideSubmit
           />
         </View>
 
@@ -799,6 +807,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
 
       {finished ? (
         <ResultOverlay
+          contentType="word"
           win={win}
           result={match?.result ?? null}
           bestOf
@@ -1131,13 +1140,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   kbWrap: {
-    marginHorizontal: -8,
-    paddingHorizontal: 2,
+    // Screen yatay padding'i 20 — backdrop kenarlara KADAR uzanır (tam genişlik).
+    marginHorizontal: -20,
+    paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 6,
     backgroundColor: 'rgba(6,12,26,0.7)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.07)',
+    gap: 10,
   },
   centered: {
     flex: 1,

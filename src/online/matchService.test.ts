@@ -93,6 +93,23 @@ describe('setSecret istemci ön-doğrulaması', () => {
       p_digits: '297',
     });
   });
+
+  // Regresyon (cihaz hatası): kelime, sayı parser'ına takılıp RPC'ye hiç
+  // gitmeden reddediliyordu — contentType='word' ile kelime parser'ı kullanılır.
+  it("kelime maçında geçerli Türkçe kelimeyi RPC'ye GÖNDERİR", async () => {
+    rpcResolves({ match_id: 'm1', status: 'setup' });
+    await expect(setSecret('m1', 'kalem', 'word')).resolves.toEqual({ status: 'setup' });
+    expect(rpcMock).toHaveBeenCalledWith('set_secret', {
+      p_match_id: 'm1',
+      p_digits: 'kalem',
+    });
+  });
+
+  it("kelime maçında format-bozuk girdiyi RPC'siz reddeder", async () => {
+    const err = await setSecret('m1', 'ka1em', 'word').catch((e: unknown) => e);
+    expect((err as OnlineError).code).toBe('invalid_digits');
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('makeGuess', () => {

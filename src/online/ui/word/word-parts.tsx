@@ -7,10 +7,12 @@ export function WordConfirmButton({
   enabled,
   busy,
   onPress,
+  label = 'kelimeyi onayla',
 }: {
   enabled: boolean;
   busy: boolean;
   onPress: () => void;
+  label?: string;
 }) {
   return (
     <Pressable
@@ -26,7 +28,7 @@ export function WordConfirmButton({
       ) : (
         <Feather name="check" size={16} color={enabled ? '#fff' : '#3A6080'} />
       )}
-      <Text style={[styles.text, { color: enabled ? '#fff' : '#3A6080' }]}>kelimeyi onayla</Text>
+      <Text style={[styles.text, { color: enabled ? '#fff' : '#3A6080' }]}>{label}</Text>
     </Pressable>
   );
 }

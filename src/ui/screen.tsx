@@ -8,8 +8,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FloatingDigits } from './floating-digits';
 import { colors } from './theme';
 
-/** Tüm ekranlar için ortak zemin: gradyan + süzülen rakamlar + safe area. */
-export function Screen({ children }: { children: ReactNode }) {
+/** Tüm ekranlar için ortak zemin: gradyan + süzülen glifler + safe area.
+ *  float='letters' → kelime modunda süzülen TR harfler (varsayılan: rakam;
+ *  sayı modu ekranları hiç etkilenmez). */
+export function Screen({
+  children,
+  float = 'digits',
+}: {
+  children: ReactNode;
+  float?: 'digits' | 'letters';
+}) {
   return (
     <LinearGradient
       colors={[colors.bgTop, colors.bgMid, colors.bgBottom]}
@@ -30,7 +38,7 @@ export function Screen({ children }: { children: ReactNode }) {
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-      <FloatingDigits />
+      <FloatingDigits key={float} letters={float === 'letters'} />
       <SafeAreaView style={styles.content}>{children}</SafeAreaView>
     </LinearGradient>
   );

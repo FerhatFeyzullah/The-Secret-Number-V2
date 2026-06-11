@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { mono } from '@/ui/theme';
 
@@ -19,6 +19,7 @@ export function TrKeyboard({
   locked = false,
   submitEnabled = true,
   large = false,
+  hideSubmit = false,
 }: {
   onKey: (letter: string) => void;
   onDelete: () => void;
@@ -27,11 +28,16 @@ export function TrKeyboard({
   /** ✓ tuşunun basılabilirliği (kelime tamamlanmadan sönük). */
   submitEnabled?: boolean;
   large?: boolean;
+  /** true → ✓ tuşu gizlenir; yerine denge spacer'ı konur (düello onay butonu var). */
+  hideSubmit?: boolean;
 }) {
-  const keyW = large ? 30 : 26;
-  const keyH = large ? 46 : 40;
-  const actW = large ? 46 : 42;
-  const fontSize = large ? 15 : 13;
+  // Tuş genişliği EKRANA göre: en geniş satır 12 sütun + 11 boşluk; dar
+  // cihazda taşmaz, geniş cihazda büyür (parmak dostu üst sınır 34).
+  const { width } = useWindowDimensions();
+  const keyW = Math.min(34, Math.floor((width - 12 - 11 * 5) / 12));
+  const keyH = large ? 50 : 46;
+  const actW = Math.round(keyW * 1.5);
+  const fontSize = large ? 16 : 15;
 
   const letterKey = (k: string) => {
     const dim = DIMMED.has(k);
@@ -75,18 +81,22 @@ export function TrKeyboard({
           <Feather name="delete" size={large ? 16 : 14} color="#FBBF24" />
         </Pressable>
         {ROW3.map(letterKey)}
-        <Pressable
-          disabled={locked || !submitEnabled}
-          onPress={onSubmit}
-          style={({ pressed }) => [
-            styles.key,
-            styles.keyEnter,
-            { width: actW, height: keyH },
-            !submitEnabled && styles.keyEnterDisabled,
-            pressed && styles.keyPressed,
-          ]}>
-          <Feather name="check" size={large ? 16 : 14} color={submitEnabled ? '#4ADE80' : 'rgba(74,222,128,0.35)'} />
-        </Pressable>
+        {hideSubmit ? (
+          <View style={{ width: actW, height: keyH }} />
+        ) : (
+          <Pressable
+            disabled={locked || !submitEnabled}
+            onPress={onSubmit}
+            style={({ pressed }) => [
+              styles.key,
+              styles.keyEnter,
+              { width: actW, height: keyH },
+              !submitEnabled && styles.keyEnterDisabled,
+              pressed && styles.keyPressed,
+            ]}>
+            <Feather name="check" size={large ? 16 : 14} color={submitEnabled ? '#4ADE80' : 'rgba(74,222,128,0.35)'} />
+          </Pressable>
+        )}
       </View>
     </View>
   );

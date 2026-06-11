@@ -101,7 +101,7 @@ export function WordSetupPanel({
     setBusy(true);
     setError(null);
     try {
-      await setSecret(matchId, parsed.word);
+      await setSecret(matchId, parsed.word, 'word');
       rememberMySecret(matchId, match.currentRound, parsed.word);
       setLocked(true);
     } catch (e) {
@@ -421,8 +421,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   kbWrap: {
-    marginHorizontal: -8,
-    paddingHorizontal: 8,
+    // Screen yatay padding'i 20 — backdrop kenarlara KADAR uzanır (tam genişlik).
+    marginHorizontal: -20,
+    paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 6,
     backgroundColor: 'rgba(6,12,26,0.7)',
@@ -431,7 +432,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   confirmedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    // Screen'in 20px yatay padding'ini aş — kbWrap'in marginHorizontal: -20 deseniyle aynı.
+    left: -20,
+    right: -20,
     zIndex: 50,
     alignItems: 'center',
     justifyContent: 'center',

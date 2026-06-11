@@ -424,5 +424,7 @@ export default function OnlineScreen() {
       );
   }
 
-  return <Screen>{content}</Screen>;
+  // Kelime akışında (arama/VS) süzülen zemin glifleri harf olur.
+  const wordFlow = match ? match.contentType === 'word' : pendingWord;
+  return <Screen float={wordFlow ? 'letters' : 'digits'}>{content}</Screen>;
 }
