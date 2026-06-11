@@ -41,6 +41,7 @@ import { PILLAR_COLOR, OPPONENT_VISIBLE_PROTOCOLS, protocolIcon } from '../proto
 import { WordOrbs } from './orbs';
 import { recallMySecret } from './secret-memory';
 import { TrKeyboard } from './tr-keyboard';
+import { WordConfirmButton } from './word-parts';
 import { WordSetupPanel } from './word-setup-panel';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -782,8 +783,14 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           </View>
         ) : null}
 
-        {/* KLAVYE (büyük) */}
+        {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen) */}
         <View style={styles.kbWrap}>
+          <WordConfirmButton
+            label="tahmin et"
+            enabled={entry.length === wordLength && !locked && !submitting}
+            busy={submitting}
+            onPress={submit}
+          />
           <TrKeyboard
             large
             onKey={addLetter}
@@ -791,6 +798,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             onSubmit={submit}
             locked={locked || submitting}
             submitEnabled={entry.length === wordLength}
+            hideSubmit
           />
         </View>
 
@@ -799,6 +807,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
 
       {finished ? (
         <ResultOverlay
+          contentType="word"
           win={win}
           result={match?.result ?? null}
           bestOf
@@ -1133,12 +1142,13 @@ const styles = StyleSheet.create({
   kbWrap: {
     // Screen yatay padding'i 20 — backdrop kenarlara KADAR uzanır (tam genişlik).
     marginHorizontal: -20,
-    paddingHorizontal: 6,
+    paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 6,
     backgroundColor: 'rgba(6,12,26,0.7)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.07)',
+    gap: 10,
   },
   centered: {
     flex: 1,

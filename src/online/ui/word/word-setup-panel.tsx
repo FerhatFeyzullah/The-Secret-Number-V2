@@ -432,7 +432,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   confirmedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    // Screen'in 20px yatay padding'ini aş — kbWrap'in marginHorizontal: -20 deseniyle aynı.
+    left: -20,
+    right: -20,
     zIndex: 50,
     alignItems: 'center',
     justifyContent: 'center',

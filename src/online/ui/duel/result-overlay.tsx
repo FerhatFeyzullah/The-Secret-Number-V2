@@ -12,10 +12,12 @@ export type MatchReward = { rating: number; xp: number; veri: number };
 
 /** Bitiş sebebi etiketi — oyuncunun perspektifinden (madde 8). result yoksa
  *  güvenli varsayılan. forfeit'te kaybeden ayrılan taraftır. */
-function reasonText(win: boolean, result: MatchResult | null): string {
+function reasonText(win: boolean, result: MatchResult | null, isWord: boolean): string {
   switch (result) {
     case 'win':
-      return win ? 'Rakibin sayısını buldun!' : 'Rakip senin sayını buldu';
+      return win
+        ? isWord ? 'Rakibin kelimesini buldun!' : 'Rakibin sayısını buldun!'
+        : isWord ? 'Rakip senin kelimeni buldu' : 'Rakip senin sayını buldu';
     case 'timeout':
       return win ? 'Rakibin süresi doldu' : 'Süren doldu';
     case 'forfeit':
@@ -47,6 +49,7 @@ export function ResultOverlay({
   theirSecret,
   opponentName,
   opponentInitial,
+  contentType = 'number' as const,
   deck,
   incomingSignal,
   onSendSignal,
@@ -66,6 +69,8 @@ export function ResultOverlay({
   theirSecret: string | null;
   opponentName: string;
   opponentInitial: string;
+  /** 'word' → kelime modu etiketleri ve reveal düzeni; varsayılan 'number'. */
+  contentType?: 'number' | 'word';
   /** Oyuncunun sinyal destesi (≤6 id) — maç sonu reaksiyon seti. */
   deck: string[];
   incomingSignal: { id: string; nonce: number } | null;
@@ -123,6 +128,7 @@ export function ResultOverlay({
     sentTimer.current = setTimeout(() => setSent(null), 1400);
   };
 
+  const isWord = contentType === 'word';
   const accent = win ? colors.cyan : colors.danger;
   const enter = { opacity: v };
   const pop = {
@@ -147,7 +153,7 @@ export function ResultOverlay({
         style={[styles.verdict, { color: win ? colors.ice : '#fca5a5', textShadowColor: accent }, pop]}>
         {win ? 'KAZANDIN!' : 'KAYBETTİN'}
       </Animated.Text>
-      <Text style={styles.subtitle}>{reasonText(win, result)}</Text>
+      <Text style={styles.subtitle}>{reasonText(win, result, isWord)}</Text>
       {bestOf ? (
         <Text style={styles.score}>
           Maç skoru <Text style={{ color: colors.cyan }}>{myWins}</Text>
@@ -192,16 +198,26 @@ export function ResultOverlay({
 
       <View style={styles.reveal}>
         <View style={styles.revealCol}>
-          <Text style={styles.revealLabel}>SENİN SAYIN</Text>
-          <Text style={[styles.revealNum, { color: colors.cyan, textShadowColor: colors.cyan }]}>
-            {spaced(mySecret)}
+          <Text style={styles.revealLabel}>{isWord ? 'SENİN KELİMEN' : 'SENİN SAYIN'}</Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              isWord ? styles.revealWord : styles.revealNum,
+              { color: colors.cyan, textShadowColor: colors.cyan },
+            ]}>
+            {isWord ? (mySecret?.toUpperCase() ?? '—') : spaced(mySecret)}
           </Text>
         </View>
         <View style={styles.revealDivider} />
         <View style={styles.revealCol}>
-          <Text style={styles.revealLabel}>RAKİBİN SAYISI</Text>
-          <Text style={[styles.revealNum, { color: colors.amber, textShadowColor: colors.amber }]}>
-            {spaced(theirSecret)}
+          <Text style={styles.revealLabel}>{isWord ? 'RAKİBİN KELİMESİ' : 'RAKİBİN SAYISI'}</Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              isWord ? styles.revealWord : styles.revealNum,
+              { color: colors.amber, textShadowColor: colors.amber },
+            ]}>
+            {isWord ? (theirSecret?.toUpperCase() ?? '—') : spaced(theirSecret)}
           </Text>
         </View>
       </View>
@@ -374,6 +390,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: mono,
     letterSpacing: 3,
+    textShadowRadius: 14,
+  },
+  revealWord: {
+    fontSize: 26,
+    fontWeight: '800',
+    fontFamily: mono,
+    letterSpacing: 2,
     textShadowRadius: 14,
   },
   revealDivider: {

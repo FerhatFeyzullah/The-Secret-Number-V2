@@ -19,6 +19,7 @@ export function TrKeyboard({
   locked = false,
   submitEnabled = true,
   large = false,
+  hideSubmit = false,
 }: {
   onKey: (letter: string) => void;
   onDelete: () => void;
@@ -27,6 +28,8 @@ export function TrKeyboard({
   /** ✓ tuşunun basılabilirliği (kelime tamamlanmadan sönük). */
   submitEnabled?: boolean;
   large?: boolean;
+  /** true → ✓ tuşu gizlenir; yerine denge spacer'ı konur (düello onay butonu var). */
+  hideSubmit?: boolean;
 }) {
   // Tuş genişliği EKRANA göre: en geniş satır 12 sütun + 11 boşluk; dar
   // cihazda taşmaz, geniş cihazda büyür (parmak dostu üst sınır 34).
@@ -78,18 +81,22 @@ export function TrKeyboard({
           <Feather name="delete" size={large ? 16 : 14} color="#FBBF24" />
         </Pressable>
         {ROW3.map(letterKey)}
-        <Pressable
-          disabled={locked || !submitEnabled}
-          onPress={onSubmit}
-          style={({ pressed }) => [
-            styles.key,
-            styles.keyEnter,
-            { width: actW, height: keyH },
-            !submitEnabled && styles.keyEnterDisabled,
-            pressed && styles.keyPressed,
-          ]}>
-          <Feather name="check" size={large ? 16 : 14} color={submitEnabled ? '#4ADE80' : 'rgba(74,222,128,0.35)'} />
-        </Pressable>
+        {hideSubmit ? (
+          <View style={{ width: actW, height: keyH }} />
+        ) : (
+          <Pressable
+            disabled={locked || !submitEnabled}
+            onPress={onSubmit}
+            style={({ pressed }) => [
+              styles.key,
+              styles.keyEnter,
+              { width: actW, height: keyH },
+              !submitEnabled && styles.keyEnterDisabled,
+              pressed && styles.keyPressed,
+            ]}>
+            <Feather name="check" size={large ? 16 : 14} color={submitEnabled ? '#4ADE80' : 'rgba(74,222,128,0.35)'} />
+          </Pressable>
+        )}
       </View>
     </View>
   );
