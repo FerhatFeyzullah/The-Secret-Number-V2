@@ -24,6 +24,13 @@ export function describe(feedback: GuessFeedback): { label: string; color: strin
       return { label: '1 rakam doğru', color: colors.dim };
     case 'partial:0':
       return { label: 'hiç doğru rakam yok', color: withAlpha(colors.dim, 0.6) };
+    // Kelime moduna ait değerler (sayı maçında üretilmez; tip bütünlüğü için).
+    case 'partial:3':
+      return { label: '3 harf doğru', color: colors.cyan };
+    case 'partial:4':
+      return { label: '4 harf doğru', color: colors.cyan };
+    case 'partial:5':
+      return { label: '5 harf doğru', color: colors.cyan };
   }
 }
 

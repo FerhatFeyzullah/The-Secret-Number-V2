@@ -152,7 +152,8 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     }
   }, [status, bothPresent, pastDeadline, pastPresentDeadline, matchId]);
 
-  // status → setup: belirleme ekranına geç.
+  // status → setup: belirleme ekranına geç (içerik tipine göre sayı/kelime).
+  const contentType = match?.contentType ?? 'number';
   const leavingRef = useRef(false);
   const navedRef = useRef(false);
   useEffect(() => {
@@ -160,11 +161,12 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     navedRef.current = true;
     leavingRef.current = true;
     const t = setTimeout(
-      () => router.replace({ pathname: '/match-setup', params: { matchId } }),
+      () =>
+        router.replace({ pathname: '/match-setup', params: { matchId, content: contentType } }),
       500,
     );
     return () => clearTimeout(t);
-  }, [status, matchId, router]);
+  }, [status, matchId, contentType, router]);
 
   // İptal/terk → mesaj + geri (kendi çıkışımız değilse).
   const endedRef = useRef(false);
