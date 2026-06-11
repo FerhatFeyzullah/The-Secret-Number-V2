@@ -1,4 +1,4 @@
-import { parseGuess, type ContentTypeId } from '../game';
+import { parseGuess, parseWord, type ContentTypeId } from '../game';
 import { supabase } from '../supabase';
 import {
   guessRowToGuess,
@@ -122,9 +122,12 @@ async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T
   return data as T;
 }
 
-/** Tahmin/gizli sayıyı istemcide ön-doğrular; nihai otorite yine sunucudur. */
-function assertValidDigits(digits: string): void {
-  if (!parseGuess(digits).ok) {
+/** Tahmin/gizli içeriği istemcide ön-doğrular; nihai otorite yine sunucudur.
+ *  İçerik tipine göre DOĞRU parser kullanılır: sayı → parseGuess (3 rakam),
+ *  kelime → parseWord (4-6 TR harf; havuz üyeliği yalnız sunucuda). */
+function assertValidDigits(digits: string, contentType: ContentTypeId = 'number'): void {
+  const ok = contentType === 'word' ? parseWord(digits).ok : parseGuess(digits).ok;
+  if (!ok) {
     throw new OnlineError('invalid_digits', ERROR_MESSAGES.invalid_digits);
   }
 }
@@ -334,12 +337,15 @@ export async function markReady(matchId: string): Promise<void> {
   await callRpc('mark_ready', { p_match_id: matchId });
 }
 
-/** Gizli sayını belirler; iki oyuncu da yazınca sunucu maçı başlatır. */
+/** Gizli içeriğini belirler; iki oyuncu da yazınca sunucu maçı başlatır.
+ *  contentType='word' kelime maçında ZORUNLU — aksi halde sayı parser'ı
+ *  kelimeyi daha RPC'ye gitmeden reddeder. */
 export async function setSecret(
   matchId: string,
   digits: string,
+  contentType: ContentTypeId = 'number',
 ): Promise<{ status: MatchStatus }> {
-  assertValidDigits(digits);
+  assertValidDigits(digits, contentType);
   const payload = await callRpc<{ status: MatchStatus }>('set_secret', {
     p_match_id: matchId,
     p_digits: digits,
@@ -348,8 +354,12 @@ export async function setSecret(
 }
 
 /** Tahmin yapar; yalnızca çağırana ait güvenli sonucu döndürür. */
-export async function makeGuess(matchId: string, digits: string): Promise<GuessOutcome> {
-  assertValidDigits(digits);
+export async function makeGuess(
+  matchId: string,
+  digits: string,
+  contentType: ContentTypeId = 'number',
+): Promise<GuessOutcome> {
+  assertValidDigits(digits, contentType);
   return toOutcome(
     await callRpc<OutcomePayload>('make_guess', {
       p_match_id: matchId,

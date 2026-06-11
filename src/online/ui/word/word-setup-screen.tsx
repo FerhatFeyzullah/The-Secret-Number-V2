@@ -73,17 +73,19 @@ export function WordSecretSetupScreen({ matchId }: { matchId: string }) {
   }, [status, bothPresent, deadline, presentDeadline, matchId]);
 
   // active → düello ekranına geç (kelime düellosu).
+  // ÖNEMLİ: one-shot bayrağı zamanlayıcının İÇİNDE kurulur — efekt pencere
+  // içinde yeniden koşarsa navigasyon kaybolmaz (protokol seçim ekranındaki
+  // takılmanın aynı sınıfı; bkz. protocol-select-screen).
   const leavingRef = useRef(false);
   const navedRef = useRef(false);
   useEffect(() => {
     if (status !== 'active' || navedRef.current) return;
-    navedRef.current = true;
-    leavingRef.current = true;
-    const t = setTimeout(
-      () =>
-        router.replace({ pathname: '/match/[id]', params: { id: matchId, content: 'word' } }),
-      700,
-    );
+    const t = setTimeout(() => {
+      if (navedRef.current) return;
+      navedRef.current = true;
+      leavingRef.current = true;
+      router.replace({ pathname: '/match/[id]', params: { id: matchId, content: 'word' } });
+    }, 700);
     return () => clearTimeout(t);
   }, [status, matchId, router]);
 
@@ -111,7 +113,7 @@ export function WordSecretSetupScreen({ matchId }: { matchId: string }) {
   if (!match) {
     if (!loading && !error) return <Redirect href="/" />;
     return (
-      <Screen>
+      <Screen float="letters">
         <View style={styles.centered}>
           {loading ? (
             <ActivityIndicator color={colors.cyan} />
@@ -129,7 +131,7 @@ export function WordSecretSetupScreen({ matchId }: { matchId: string }) {
   }
 
   return (
-    <Screen>
+    <Screen float="letters">
       <WordOrbs />
       <View style={styles.content}>
         <View style={styles.topRow}>

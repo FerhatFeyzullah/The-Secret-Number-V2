@@ -543,7 +543,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     setSubmitting(true);
     setActionError(null);
     try {
-      const outcome = await makeGuess(matchId, parsed.word);
+      const outcome = await makeGuess(matchId, parsed.word, 'word');
       setEntry([]);
       if (outcome.feedback === 'win') {
         play('win');
@@ -569,7 +569,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   if (!match) {
     if (!loading && !error) return <Redirect href="/" />;
     return (
-      <Screen>
+      <Screen float="letters">
         <View style={styles.centered}>
           {loading ? <ActivityIndicator color={colors.cyan} /> : <Text style={styles.note}>{error ?? 'Maç bulunamadı.'}</Text>}
           <Pressable onPress={goMenu} hitSlop={8} style={styles.noteExit}>
@@ -583,7 +583,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   // Turlar arası belirleme (Best of 3): kelime paneli düello ekranı içinde.
   if (status === 'setup') {
     return (
-      <Screen>
+      <Screen float="letters">
         <WordOrbs />
         <View style={styles.content}>
           <View style={styles.headerRow}>{exitButton}</View>
@@ -595,7 +595,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
 
   if (status !== 'active' && status !== 'finished') {
     return (
-      <Screen>
+      <Screen float="letters">
         <View style={styles.headerRow}>{exitButton}</View>
         <View style={styles.centered}>
           <ActivityIndicator color={colors.cyan} />
@@ -615,7 +615,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const entryTileW = Math.min(44, Math.floor((width - 60 - (wordLength - 1) * 6) / wordLength));
 
   return (
-    <Screen>
+    <Screen float="letters">
       <WordOrbs amberBottom={200} />
       <View style={styles.content}>
         {/* ÜST: rozet + Bo3 tur noktaları */}
@@ -1131,8 +1131,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   kbWrap: {
-    marginHorizontal: -8,
-    paddingHorizontal: 2,
+    // Screen yatay padding'i 20 — backdrop kenarlara KADAR uzanır (tam genişlik).
+    marginHorizontal: -20,
+    paddingHorizontal: 6,
     paddingTop: 10,
     paddingBottom: 6,
     backgroundColor: 'rgba(6,12,26,0.7)',

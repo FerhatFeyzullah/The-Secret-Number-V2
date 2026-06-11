@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { mono } from '@/ui/theme';
 
@@ -28,10 +28,13 @@ export function TrKeyboard({
   submitEnabled?: boolean;
   large?: boolean;
 }) {
-  const keyW = large ? 30 : 26;
-  const keyH = large ? 46 : 40;
-  const actW = large ? 46 : 42;
-  const fontSize = large ? 15 : 13;
+  // Tuş genişliği EKRANA göre: en geniş satır 12 sütun + 11 boşluk; dar
+  // cihazda taşmaz, geniş cihazda büyür (parmak dostu üst sınır 34).
+  const { width } = useWindowDimensions();
+  const keyW = Math.min(34, Math.floor((width - 12 - 11 * 5) / 12));
+  const keyH = large ? 50 : 46;
+  const actW = Math.round(keyW * 1.5);
+  const fontSize = large ? 16 : 15;
 
   const letterKey = (k: string) => {
     const dim = DIMMED.has(k);

@@ -34,7 +34,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
   const session = useMatchSession();
-  const { match, loading, error } = useMatch(matchId);
+  const { match, loading, error, refresh } = useMatch(matchId);
 
   const [hand, setHand] = useState<ProtocolHand | null>(null);
   const [handError, setHandError] = useState<string | null>(null);
@@ -152,19 +152,31 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     }
   }, [status, bothPresent, pastDeadline, pastPresentDeadline, matchId]);
 
+  // HIZ + SENKRON: ikimiz de seçimi kilitlediysek sunucu ikinci kilitte zaten
+  // status='setup' yapmıştır; realtime UPDATE gecikse bile HEMEN tazele →
+  // "kilitlendi"de takılmadan belirlemeye geç (sayı setup ekranındaki
+  // hızlandırıcının aynısı; 1.5 sn poll'u beklemeye gerek kalmaz).
+  useEffect(() => {
+    if (status === 'protocol_select' && locked && oppLocked) void refresh();
+  }, [status, locked, oppLocked, refresh]);
+
   // status → setup: belirleme ekranına geç (içerik tipine göre sayı/kelime).
+  // ÖNEMLİ: one-shot bayrağı zamanlayıcının İÇİNDE kurulur — efekt 500 ms'lik
+  // pencere içinde yeniden koşarsa (bağımlılık değişimi/StrictMode) navigasyon
+  // KAYBOLMAZ, yeni zamanlayıcı kurulur. (Eski sıra: bayrak önce → temizlenen
+  // zamanlayıcı navigasyonu kalıcı yutabiliyordu; kelime modunda "protokol
+  // kilitlendi"de takılı kalmanın kökü.)
   const contentType = match?.contentType ?? 'number';
   const leavingRef = useRef(false);
   const navedRef = useRef(false);
   useEffect(() => {
     if (status !== 'setup' || navedRef.current) return;
-    navedRef.current = true;
-    leavingRef.current = true;
-    const t = setTimeout(
-      () =>
-        router.replace({ pathname: '/match-setup', params: { matchId, content: contentType } }),
-      500,
-    );
+    const t = setTimeout(() => {
+      if (navedRef.current) return;
+      navedRef.current = true;
+      leavingRef.current = true;
+      router.replace({ pathname: '/match-setup', params: { matchId, content: contentType } });
+    }, 500);
     return () => clearTimeout(t);
   }, [status, matchId, contentType, router]);
 
@@ -237,7 +249,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     // → güvenli yönlendirme (<Redirect>). Ağ hatasında mesaj + "Ana Menü" butonu.
     if (!loading && !error) return <Redirect href="/" />;
     return (
-      <Screen>
+      <Screen float={contentType === 'word' ? 'letters' : 'digits'}>
         <View style={styles.centered}>
           {loading ? (
             <ActivityIndicator color={colors.cyan} />
@@ -255,7 +267,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   }
 
   return (
-    <Screen>
+    <Screen float={contentType === 'word' ? 'letters' : 'digits'}>
       {/* Üst enerji ışını */}
       <View style={styles.beam} />
 
