@@ -70,7 +70,7 @@ const PROTOCOL_SECTIONS: InfoSection[] = [
   },
 ];
 
-/** Kelime Modu tanıtımı — kelime düellosu mekaniği (Bo3 + protokoller + random uzunluk). */
+/** Kelime Modu tanıtımı — kelime düellosu mekaniği (Bo3 + random uzunluk, protokolsüz). */
 const WORD_SECTIONS: InfoSection[] = [
   {
     icon: 'type',
@@ -94,7 +94,7 @@ const WORD_SECTIONS: InfoSection[] = [
     icon: 'layers',
     accent: colors.violet,
     title: 'İki Tur Kazanan Alır',
-    body: 'En çok 3 tur oynanır; önce 2 turu kazanan maçı alır. Maç başında Kader Eli protokol dağıtır.',
+    body: 'En çok 3 tur oynanır; önce 2 turu kazanan maçı alır. Her tur kelime uzunluğu yeniden belirlenir.',
   },
   {
     icon: 'award',

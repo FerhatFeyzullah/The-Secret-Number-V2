@@ -15,9 +15,7 @@ import {
 
 import { parseWord } from '@/game';
 import {
-  activateProtocol,
   getMatchReveal,
-  getMyHand,
   getMyRank,
   makeGuess,
   OnlineError,
@@ -28,16 +26,12 @@ import {
   type MatchReveal,
   type OnlineGuess,
 } from '@/online';
-import { getProtocol } from '@/protocols/catalog';
 import { useSfx, type SfxName } from '@/sfx';
 import { getToggle } from '@/storage';
 import { Screen } from '@/ui/screen';
 import { colors, mono, withAlpha } from '@/ui/theme';
 
-import { ProtocolNotice, type DuelNotice } from '../duel/protocol-notice';
 import { ResultOverlay } from '../duel/result-overlay';
-import type { FeatherName } from '../parts';
-import { PILLAR_COLOR, OPPONENT_VISIBLE_PROTOCOLS, protocolIcon } from '../protocol-visuals';
 import { WordOrbs } from './orbs';
 import { recallMySecret } from './secret-memory';
 import { TrKeyboard } from './tr-keyboard';
@@ -54,21 +48,6 @@ const errMsg = (e: unknown) => {
     return e.message;
   }
   return 'Bağlantı hatası, lütfen tekrar dene.';
-};
-
-/** Protokol çubuğu kısa etiketleri (tasarım: "+ süre" gibi minik ad).
- *  Kelime elinde yalnız içerik-bağımsız protokoller bulunur (info Faz 4). */
-const SHORT_LABEL: Record<string, string> = {
-  time_add: '+ süre',
-  time_freeze: 'dondur',
-  time_slow: 'yavaşlat',
-  time_steal: 'saat çal',
-  def_shield: 'kalkan',
-  def_reflect: 'yansıt',
-  disrupt_fog: 'sis',
-  disrupt_silence: 'sustur',
-  disrupt_waste: 'harcat',
-  disrupt_deceive: 'yanılt',
 };
 
 const fmtClock = (ms: number) => {
@@ -133,8 +112,9 @@ function FeedbackBadge({ entry, wordLength }: { entry: OnlineGuess; wordLength: 
 
 /** Kelime düello ekranı — duello-ekrani-v2 tasarımı birebir. Mantık katmanı
  *  sayı düellosuyla (duel-screen) aynı desen: useMatch realtime + sunucu RPC,
- *  protokol kullanımı/bildirimi, merkezi sahiplik, çıkış onayı, sonuç overlay'i.
- *  Rakibin TAHMİNLERİ asla gösterilmez; yalnız ilerleme/yakınlık. */
+ *  merkezi sahiplik, çıkış onayı, sonuç overlay'i. Kelime modu PROTOKOLSÜZ
+ *  (protokoller yalnız sayı modunda). Rakibin TAHMİNLERİ asla gösterilmez;
+ *  yalnız ilerleme/yakınlık. */
 export function WordDuelScreen({ matchId }: { matchId: string }) {
   const router = useRouter();
   const navigation = useNavigation();
@@ -148,8 +128,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     error,
     sendSignal,
     incomingSignal,
-    protocolUses,
-    incomingProtocolUse,
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
@@ -249,195 +227,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
       prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
     }
   }, [match, guesses, p1, myId]);
-
-  // ── Protokoller (kelime elinde yalnız içerik-bağımsız olanlar) ──
-  const [myProtocols, setMyProtocols] = useState<string[] | null>(null);
-  const [shieldArmed, setShieldArmed] = useState(false);
-  const [reflectArmed, setReflectArmed] = useState(false);
-  useEffect(() => {
-    if (myProtocols !== null) return;
-    let alive = true;
-    (async () => {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const h = await getMyHand(matchId);
-          if (!alive) return;
-          setMyProtocols(h.selected);
-          setShieldArmed(h.shieldArmed);
-          setReflectArmed(h.reflectArmed);
-          return;
-        } catch {
-          if (!alive) return;
-          await new Promise((r) => setTimeout(r, 700));
-        }
-      }
-      if (alive) setMyProtocols([]);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [matchId, myProtocols]);
-
-  const silencedMe = !!match && (p1 ? match.silencedP1 : match.silencedP2);
-
-  // Bildirimler (sayı modundaki sistemin AYNISI — ProtocolNotice yeniden kullanım).
-  const [notices, setNotices] = useState<DuelNotice[]>([]);
-  const noticeIdRef = useRef(0);
-  const showToast = useCallback(
-    (text: string, opts?: { accent?: string; icon?: FeatherName }) => {
-      noticeIdRef.current += 1;
-      const n: DuelNotice = { id: noticeIdRef.current, text, accent: opts?.accent, icon: opts?.icon };
-      setNotices((q) => [...q, n].slice(-4));
-    },
-    [],
-  );
-  const dismissNotice = useCallback((nid: number) => {
-    setNotices((q) => q.filter((x) => x.id !== nid));
-  }, []);
-
-  const [localUsedIds, setLocalUsedIds] = useState<Set<string>>(() => new Set());
-  const myUsedIds = useMemo(() => {
-    const ids = new Set(localUsedIds);
-    for (const u of protocolUses) if (u.player === myId) ids.add(u.protocolId);
-    return ids;
-  }, [protocolUses, myId, localUsedIds]);
-
-  type TileStatus = 'ready' | 'armed' | 'cooldown' | 'blocked';
-  const protocolTiles = useMemo(
-    () =>
-      (myProtocols ?? []).map((id) => {
-        let st: TileStatus;
-        if ((id === 'def_shield' && shieldArmed) || (id === 'def_reflect' && reflectArmed)) st = 'armed';
-        else if (myUsedIds.has(id)) st = 'cooldown';
-        else if (silencedMe) st = 'blocked';
-        else {
-          const timing = getProtocol(id)?.usageTiming ?? 'own_turn';
-          st = status === 'active' && (timing !== 'own_turn' || isMine) ? 'ready' : 'blocked';
-        }
-        return { id, status: st };
-      }),
-    [myProtocols, myUsedIds, status, isMine, shieldArmed, reflectArmed, silencedMe],
-  );
-
-  // Protokol kullan — sayı düellosundaki akışın içerik-bağımsız alt kümesi.
-  const [protoBusy, setProtoBusy] = useState(false);
-  const runProtocol = useCallback(
-    async (id: string) => {
-      if (protoBusy) return;
-      setProtoBusy(true);
-      buzz('tap');
-      try {
-        const res = await activateProtocol(matchId, id);
-        if (res.consumed !== false) setLocalUsedIds((prev) => new Set(prev).add(id));
-        play('good');
-        buzz('feedback');
-        const protoSelf = getProtocol(id);
-        const meta = protoSelf
-          ? { accent: PILLAR_COLOR[protoSelf.pillar], icon: protocolIcon(id) }
-          : undefined;
-        switch (id) {
-          case 'time_add':
-            showToast('Süre Enjeksiyonu · +12 sn', meta);
-            break;
-          case 'time_steal':
-            showToast(
-              res.stolenMs
-                ? `Saat Çalma · rakipten +${Math.round(res.stolenMs / 1000)} sn`
-                : 'Saat Çalma · rakipte çalınacak süre yok',
-              meta,
-            );
-            break;
-          case 'time_freeze':
-            showToast('Dondur · saatin bu tur işlemiyor', meta);
-            break;
-          case 'time_slow':
-            showToast('Yavaşlat · rakip saati 1.5× akacak', meta);
-            break;
-          case 'def_shield':
-            setShieldArmed(true);
-            showToast('Kalkan kuruldu · gelen ilk engeli bloklar', meta);
-            break;
-          case 'def_reflect':
-            setReflectArmed(true);
-            showToast('Yansıtma kuruldu · ilk engeli sahibine döner', meta);
-            break;
-          case 'disrupt_fog':
-          case 'disrupt_silence':
-          case 'disrupt_waste':
-          case 'disrupt_deceive': {
-            const protoName = getProtocol(id)?.name ?? 'Engel';
-            if (res.blocked) {
-              showToast(`${protoName} bloklandı`, { accent: colors.dim, icon: 'shield' });
-            } else if (res.reflected) {
-              buzz('lose');
-              showToast(`${protoName} yansıdı · etkisi sana döndü`, {
-                accent: colors.danger,
-                icon: 'corner-up-left',
-              });
-            } else if (id === 'disrupt_fog') {
-              showToast('Sis Perdesi · rakibin geri bildirimi gecikecek', meta);
-            } else if (id === 'disrupt_silence') {
-              showToast('Susturma · rakip sıradaki turunda protokol kullanamaz', meta);
-            } else if (id === 'disrupt_deceive') {
-              showToast('Yanıltma · rakibin sonraki geri bildirimi şişecek', meta);
-            } else if (res.noTargetProtocol) {
-              showToast('Rakibin harcanacak protokolü yok — hak harcanmadı', meta);
-            } else {
-              const wastedName = res.wastedProtocol
-                ? getProtocol(res.wastedProtocol)?.name ?? res.wastedProtocol
-                : 'protokol';
-              showToast(`Zorla Harca · rakibin ${wastedName} tüketildi`, meta);
-            }
-            break;
-          }
-          default:
-            showToast('Protokol kullanıldı', meta);
-        }
-      } catch (e) {
-        showToast(errMsg(e), { accent: colors.danger, icon: 'alert-triangle' });
-        if (e instanceof OnlineError && e.code === 'protocol_already_used') {
-          setLocalUsedIds((prev) => new Set(prev).add(id));
-        }
-      } finally {
-        setProtoBusy(false);
-      }
-    },
-    [protoBusy, matchId, play, buzz, showToast],
-  );
-
-  // Canlı protokol olayı bildirimi (sayı düellosuyla aynı kurallar).
-  useEffect(() => {
-    if (!incomingProtocolUse) return;
-    const { player, protocolId, outcome } = incomingProtocolUse;
-    const proto = getProtocol(protocolId);
-    const protoName = proto?.name ?? 'protokol';
-    const meta = proto ? { accent: PILLAR_COLOR[proto.pillar], icon: protocolIcon(protocolId) } : undefined;
-    if (player === myId) {
-      if (outcome === 'wasted') {
-        showToast(`Rakip ${protoName} protokolünü harcattı`, { accent: colors.danger, icon: 'alert-triangle' });
-      }
-    } else if (outcome === 'blocked') {
-      setShieldArmed(false);
-      showToast(`Engel bloklandı · ${protoName} durduruldu`, { accent: colors.success, icon: 'shield' });
-    } else if (outcome === 'reflected') {
-      setReflectArmed(false);
-      showToast(`Engel yansıdı · ${protoName} rakibe döndü`, { accent: colors.success, icon: 'corner-up-left' });
-    } else if (OPPONENT_VISIBLE_PROTOCOLS.has(protocolId)) {
-      if (protocolId === 'disrupt_silence') {
-        showToast('Rakip seni susturdu · bu sıra protokol kullanamazsın', meta);
-      } else if (protocolId === 'disrupt_fog') {
-        showToast('Rakip Sis Perdesi kullandı · geri bildirimin gecikecek', meta);
-      } else if (protocolId === 'time_steal') {
-        showToast('Rakip saatinden süre çaldı', meta);
-      } else {
-        showToast(`Rakip ${protoName} kullandı`, meta);
-      }
-    } else {
-      return;
-    }
-    buzz('feedback');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incomingProtocolUse?.nonce]);
 
   // Maç bitince reveal + sinyal destesi (sayı düellosuyla aynı).
   useEffect(() => {
@@ -743,46 +532,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
         </View>
 
-        {/* PROTOKOL ÇUBUĞU (sayı modundaki kullanım mantığı; tasarım görünümü) */}
-        {protocolTiles.length > 0 ? (
-          <View style={styles.protoRow}>
-            {protocolTiles.map((t) => {
-              const proto = getProtocol(t.id);
-              const accent = proto ? PILLAR_COLOR[proto.pillar] : colors.teal;
-              const usable = t.status === 'ready';
-              const dimmed = t.status === 'cooldown' || t.status === 'blocked';
-              return (
-                <Pressable
-                  key={t.id}
-                  disabled={!usable || protoBusy}
-                  onPress={() => void runProtocol(t.id)}
-                  style={({ pressed }) => [
-                    styles.protoTile,
-                    {
-                      backgroundColor: withAlpha(accent, dimmed ? 0.04 : 0.1),
-                      borderColor: withAlpha(accent, dimmed ? 0.12 : 0.35),
-                    },
-                    dimmed && styles.protoTileDim,
-                    pressed && usable && styles.protoTilePressed,
-                  ]}>
-                  <Feather
-                    name={protocolIcon(t.id)}
-                    size={17}
-                    color={dimmed ? '#5A7898' : accent}
-                  />
-                  <Text style={[styles.protoLabel, { color: dimmed ? '#5A7898' : accent }]}>
-                    {t.status === 'cooldown'
-                      ? 'kullanıldı'
-                      : t.status === 'armed'
-                        ? 'aktif'
-                        : SHORT_LABEL[t.id] ?? proto?.name ?? t.id}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
-
         {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen) */}
         <View style={styles.kbWrap}>
           <WordConfirmButton
@@ -801,8 +550,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             hideSubmit
           />
         </View>
-
-        <ProtocolNotice notice={notices[0] ?? null} onDone={dismissNotice} />
       </View>
 
       {finished ? (
@@ -1114,30 +861,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginTop: 8,
-  },
-  protoRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  protoTile: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 3,
-    paddingVertical: 8,
-    borderRadius: 11,
-    borderWidth: 1,
-  },
-  protoTileDim: {
-    opacity: 0.4,
-  },
-  protoTilePressed: {
-    transform: [{ scale: 0.96 }],
-  },
-  protoLabel: {
-    fontSize: 10,
-    fontWeight: '600',
   },
   kbWrap: {
     // Screen yatay padding'i 20 — backdrop kenarlara KADAR uzanır (tam genişlik).

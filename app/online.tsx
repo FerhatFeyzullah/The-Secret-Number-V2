@@ -142,7 +142,7 @@ export default function OnlineScreen() {
 
   // ── Aksiyonlar ────────────────────────────────────────────────
   // Hızlı Maç (quick, tek tur), Protokol Maçı (protocol, Best of 3) ve Kelime
-  // Modu (word kuyruğu; sunucuda Bo3+protokol akışı) aynı arama akışını paylaşır;
+  // Modu (word kuyruğu; sunucuda PROTOKOLSÜZ Bo3) aynı arama akışını paylaşır;
   // yalnızca eşleşme RPC'si/parametresi değişir.
   const lastModeRef = useRef<'quick' | 'protocol' | 'word'>('quick');
   // Kelime maçı mı (ekran seçimi + VS etiketi için; maç satırı gelmeden de doğru).
@@ -154,8 +154,9 @@ export default function OnlineScreen() {
     setNotice(null);
     leavingRef.current = false;
     setMatchId(null);
-    // Kelime maçları sunucuda mode='protocol' doğar (Bo3 + Kader Eli).
-    setPendingMode(m === 'quick' ? 'quick' : 'protocol');
+    // Kelime maçı sunucuda mode='quick' + win_target=2 doğar (PROTOKOLSÜZ Bo3);
+    // yalnız sayı protokol maçı mode='protocol'. Bo3 rozeti win_target'tan gelir.
+    setPendingMode(m === 'protocol' ? 'protocol' : 'quick');
     setPendingWord(m === 'word');
     setPhase('searching');
     try {
@@ -318,8 +319,10 @@ export default function OnlineScreen() {
   useEffect(() => {
     if (phase !== 'match-found' || !vsHoldDone || !matchId || !match) return;
     if (match.status !== 'protocol_select' && match.status !== 'setup') return;
-    const toSelect = match.status === 'protocol_select';
     const content = match.contentType; // kelime maçında setup ekranı kelime olur
+    // Kelime maçı PROTOKOLSÜZ → asla protocol_select'e gitmez (savunmacı: sunucu
+    // zaten word'ü 'setup' doğurur). Yalnız sayı protokol maçı seçim ekranına gider.
+    const toSelect = match.status === 'protocol_select' && content !== 'word';
     // Sahiplik bir sonraki maç ekranına geçiyor (o ekran 'match' olarak claim eder);
     // route maç kümesi içinde kaldığından izleyici leave TETİKLEMEZ.
     resetToLobby();
@@ -403,6 +406,7 @@ export default function OnlineScreen() {
           opponentName={opponentName}
           mode={mode}
           word={match ? match.contentType === 'word' : pendingWord}
+          winTarget={match?.winTarget ?? (pendingWord || pendingMode === 'protocol' ? 2 : 1)}
           clockMs={match?.clockMs ?? 60000}
           firstTurnMode={match?.firstTurnMode ?? 'random'}
           iAmCreator={match?.myRole === 'player1'}
