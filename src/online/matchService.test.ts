@@ -57,6 +57,23 @@ describe('findOrCreateQuickMatch', () => {
       p_content_type: 'word',
     });
   });
+
+  // Kelime modu PROTOKOLSÜZ: kelime maçı protokol kuyruğundan (find_or_create_
+  // protocol_match) DEĞİL, quick RPC'sinden doğar; eşleşen oyuncu doğrudan
+  // 'setup'a düşer (protocol_select fazı YOK). Bu sözleşme, yönlendirmenin
+  // kelimeyi asla Kader Eli seçim ekranına götürmemesini garanti eder.
+  it('kelime maçına katılım protokol seçimi atlar (status=setup)', async () => {
+    rpcResolves({ match_id: 'm3', role: 'player2', status: 'setup' });
+    const ticket = await findOrCreateQuickMatch('word');
+    expect(ticket.status).toBe('setup');
+    expect(ticket.status).not.toBe('protocol_select');
+    // Yalnız quick RPC çağrılır; protokol-maçı RPC'si ASLA çağrılmaz.
+    expect(rpcMock).toHaveBeenCalledWith('find_or_create_quick_match', {
+      p_content_type: 'word',
+    });
+    expect(rpcMock).not.toHaveBeenCalledWith('find_or_create_protocol_match', expect.anything());
+    expect(rpcMock).not.toHaveBeenCalledWith('find_or_create_protocol_match');
+  });
 });
 
 describe('hata eşleme', () => {
