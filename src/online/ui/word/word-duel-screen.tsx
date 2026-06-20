@@ -534,10 +534,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
         </View>
 
-        {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen) */}
+        {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen): onay tuşu
+            klavyeden çıktı; tek aksiyon butonu klavyenin ÜSTÜNDE. */}
         <View style={styles.kbWrap}>
           <WordConfirmButton
-            label="tahmin et"
+            label="Kelimeyi Onayla"
             enabled={entry.length === wordLength && !locked && !submitting}
             busy={submitting}
             onPress={submit}
@@ -546,10 +547,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             large
             onKey={addLetter}
             onDelete={deleteLetter}
-            onSubmit={submit}
             locked={locked || submitting}
-            submitEnabled={entry.length === wordLength}
-            hideSubmit
             letterStates={keyStates}
           />
         </View>

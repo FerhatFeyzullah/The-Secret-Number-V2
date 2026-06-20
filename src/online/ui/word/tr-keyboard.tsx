@@ -11,27 +11,21 @@ const ROW2 = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'ş', 'i'];
 const ROW3 = ['z', 'x', 'c', 'v', 'b', 'n', 'm', 'ö', 'ç'];
 const DIMMED = new Set(['q', 'w', 'x']);
 
-/** Parmak dostu Türkçe klavye: 3. satır ⌫ (amber) + harfler + ✓ (yeşil).
- *  large: düello ekranı (30×46 tuş); değilse belirleme (26×40, tasarım). */
+/** Parmak dostu Türkçe klavye: 3. satır harfler + ⌫ (amber, SAĞ uçta).
+ *  Onay/✓ tuşu YOK — onaylama klavyenin ÜSTÜNDEKİ aksiyon butonundan yapılır
+ *  (bkz. WordConfirmButton: setup'ta "Kelimeyi Belirle", düelloda "Kelimeyi
+ *  Onayla"). large: düello ekranı (30×46 tuş); değilse belirleme (26×40). */
 export function TrKeyboard({
   onKey,
   onDelete,
-  onSubmit,
   locked = false,
-  submitEnabled = true,
   large = false,
-  hideSubmit = false,
   letterStates,
 }: {
   onKey: (letter: string) => void;
   onDelete: () => void;
-  onSubmit: () => void;
   locked?: boolean;
-  /** ✓ tuşunun basılabilirliği (kelime tamamlanmadan sönük). */
-  submitEnabled?: boolean;
   large?: boolean;
-  /** true → ✓ tuşu gizlenir; yerine denge spacer'ı konur (düello onay butonu var). */
-  hideSubmit?: boolean;
   /** KELİME modu Wordle tuş renkleri: harf → 'G' (yeşil) · 'Y' (sarı) · 'X'
    *  (denenmiş ama yok = GRİ). Verilmezse tüm tuşlar nötr (belirleme ekranı). */
   letterStates?: Record<string, LetterMark>;
@@ -81,6 +75,8 @@ export function TrKeyboard({
       <View style={styles.row}>{ROW1.map(letterKey)}</View>
       <View style={[styles.row, styles.row2]}>{ROW2.map(letterKey)}</View>
       <View style={styles.row}>
+        {ROW3.map(letterKey)}
+        {/* ⌫ artık alt sıranın SAĞ ucunda (eski onay tuşunun yeri); onay tuşu yok. */}
         <Pressable
           disabled={locked}
           onPress={onDelete}
@@ -92,23 +88,6 @@ export function TrKeyboard({
           ]}>
           <Feather name="delete" size={large ? 16 : 14} color="#FBBF24" />
         </Pressable>
-        {ROW3.map(letterKey)}
-        {hideSubmit ? (
-          <View style={{ width: actW, height: keyH }} />
-        ) : (
-          <Pressable
-            disabled={locked || !submitEnabled}
-            onPress={onSubmit}
-            style={({ pressed }) => [
-              styles.key,
-              styles.keyEnter,
-              { width: actW, height: keyH },
-              !submitEnabled && styles.keyEnterDisabled,
-              pressed && styles.keyPressed,
-            ]}>
-            <Feather name="check" size={large ? 16 : 14} color={submitEnabled ? '#4ADE80' : 'rgba(74,222,128,0.35)'} />
-          </Pressable>
-        )}
       </View>
     </View>
   );
@@ -172,13 +151,5 @@ const styles = StyleSheet.create({
   keyBack: {
     backgroundColor: 'rgba(251,191,36,0.15)',
     borderColor: 'rgba(251,191,36,0.3)',
-  },
-  keyEnter: {
-    backgroundColor: 'rgba(74,222,128,0.2)',
-    borderColor: 'rgba(74,222,128,0.35)',
-  },
-  keyEnterDisabled: {
-    backgroundColor: 'rgba(74,222,128,0.08)',
-    borderColor: 'rgba(74,222,128,0.15)',
   },
 });
