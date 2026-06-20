@@ -130,6 +130,11 @@ export type OnlineGuess = {
   /** Sis Perdesi: bu tahminin feedback'i 4 sn maskeyle gösterilir (yalnız
    *  gösterim; değerlendirme sunucuda aynen yapılmıştır). */
   fogged?: boolean;
+  /** KELİME modu: bu tahmindeki YEŞİL (doğru harf+pozisyon) harf sayısı. Rakip
+   *  ilerleme kartı bunu gösterir ("N/uzunluk"). YALNIZ sayı — per-harf dizi
+   *  DEĞİL (rakibe pozisyon sızmaz). SAYI modunda yok. Per-harf renkler ayrı
+   *  kanaldan, yalnız tahmini yapan oyuncuya gelir (bkz. getMyMarks). */
+  greenCount?: number;
 };
 
 /** Bilgi protokollerinin verdiği kalıcı ipuçları (yalnız çağıranın; tur bazlı).
@@ -249,6 +254,13 @@ export type GuessOutcome = {
   clock2Ms: number;
   /** Sis Perdesi: bu tahminin feedback'i gecikmeli gösterilmeli (4 sn). */
   fogged?: boolean;
+  /** KELİME modu: bu (ÇAĞIRANA ait) tahminin per-harf Wordle renkleri 'GYX'
+   *  dizisi. YALNIZ tahmini yapan oyuncuya döner — rakip asla almaz. SAYI'da yok. */
+  marks?: string;
+  /** KELİME modu: bu tahmindeki yeşil sayısı (satıra da yazılır; rakip kartı). */
+  greenCount?: number;
+  /** Eklenen tahmin satırının id'si — istemci kendi tahtasını marks ile eşler. */
+  guessId?: number;
 };
 
 /** Maç sonu gizli sayı ifşası (get_match_reveal).

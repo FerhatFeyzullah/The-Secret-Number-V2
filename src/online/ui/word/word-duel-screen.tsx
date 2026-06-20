@@ -13,23 +13,21 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { parseWord } from '@/game';
+import { parseWord, type LetterMark } from '@/game';
 import {
   getMatchReveal,
+  getMyMarks,
   getMyRank,
   makeGuess,
   OnlineError,
-  feedbackToGuessResult,
   useMatch,
   useMatchSession,
-  type GuessFeedback,
   type MatchReveal,
-  type OnlineGuess,
 } from '@/online';
 import { useSfx, type SfxName } from '@/sfx';
 import { getToggle } from '@/storage';
 import { Screen } from '@/ui/screen';
-import { colors, mono, withAlpha } from '@/ui/theme';
+import { colors, mono } from '@/ui/theme';
 
 import { ResultOverlay } from '../duel/result-overlay';
 import { WordOrbs } from './orbs';
@@ -39,8 +37,6 @@ import { WordConfirmButton } from './word-parts';
 import { WordSetupPanel } from './word-setup-panel';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
-/** Sis Perdesi: işaretli tahminin feedback'i bu kadar geç gösterilir. */
-const FOG_MS = 4000;
 
 const errMsg = (e: unknown) => {
   if (e instanceof OnlineError) {
@@ -54,61 +50,6 @@ const fmtClock = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-
-/** Feedback → "kaç harf doğru" sayısı (yakınlık/rozet için). */
-function correctOf(feedback: GuessFeedback, wordLength: number): number {
-  const r = feedbackToGuessResult(feedback);
-  if (r.status === 'partial') return r.correctCount;
-  return wordLength; // dcwo/win: tüm harfler doğru
-}
-
-/** Tahmin satırı feedback çipi: "N doğru" / "yer yanlış" / "buldu!".
- *  HARF RENKLENDİRME YOK — pozisyon sızmaz; sisli tahmin kısa süre maskelenir. */
-function FeedbackBadge({ entry, wordLength }: { entry: OnlineGuess; wordLength: number }) {
-  const [, force] = useState(0);
-  const age = Date.now() - Date.parse(entry.createdAt);
-  const masked = !!entry.fogged && age < FOG_MS;
-  useEffect(() => {
-    if (!masked) return;
-    const t = setTimeout(() => force((x) => x + 1), FOG_MS - age + 60);
-    return () => clearTimeout(t);
-  }, [masked, age]);
-
-  let label: string;
-  let bg: string;
-  let color: string;
-  if (masked) {
-    label = '···';
-    bg = 'rgba(255,255,255,0.06)';
-    color = '#8FA9C4';
-  } else if (entry.feedback === 'win') {
-    label = 'buldu!';
-    bg = withAlpha(colors.success, 0.18);
-    color = colors.success;
-  } else if (entry.feedback === 'digits_correct_wrong_order') {
-    label = 'yer yanlış';
-    bg = 'rgba(251,191,36,0.18)';
-    color = '#FBBF24';
-  } else {
-    const n = correctOf(entry.feedback, wordLength);
-    label = `${n} doğru`;
-    if (n >= wordLength - 1) {
-      bg = 'rgba(251,191,36,0.18)';
-      color = '#FBBF24';
-    } else if (n >= wordLength - 2) {
-      bg = 'rgba(251,191,36,0.12)';
-      color = '#FBBF24';
-    } else {
-      bg = 'rgba(255,255,255,0.06)';
-      color = '#8FA9C4';
-    }
-  }
-  return (
-    <View style={[styles.fbChip, { backgroundColor: bg }]}>
-      <Text style={[styles.fbChipText, { color }]}>{label}</Text>
-    </View>
-  );
-}
 
 /** Kelime düello ekranı — duello-ekrani-v2 tasarımı birebir. Mantık katmanı
  *  sayı düellosuyla (duel-screen) aynı desen: useMatch realtime + sunucu RPC,
@@ -131,6 +72,9 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
+  // KENDİ tahminlerimin per-harf renkleri (tahmin id → 'GYX'). Sunucudan
+  // YALNIZ çağırana gelir (make_guess dönüşü + getMyMarks); rakibinki ASLA.
+  const [myMarks, setMyMarks] = useState<Record<number, string>>({});
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
   const [signalDeck, setSignalDeck] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -186,12 +130,52 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const win = finished && !!match?.winner && match.winner === myId;
   const mySecret = recallMySecret(matchId, round);
 
-  // Rakip ilerlemesi: tahmin sayısı + en iyi yakınlık (tahminleri GÖSTERME).
-  const oppBest = useMemo(
-    () => oppGuesses.reduce((b, g) => Math.max(b, correctOf(g.feedback, wordLength)), 0),
-    [oppGuesses, wordLength],
-  );
-  const closeness = wordLength > 0 ? oppBest / wordLength : 0;
+  // Rakip ilerlemesi (Wordle): rakibin EN SON tahminindeki YEŞİL harf sayısı.
+  // Sunucu YALNIZ green_count gönderir — rakibin per-harf dizisi (pozisyon)
+  // istemciye HİÇ gelmez. Yeşiller yakınlığa girer; sarılar GİRMEZ.
+  const oppLast = oppGuesses.length > 0 ? oppGuesses[oppGuesses.length - 1] : null;
+  const oppGreen = oppLast?.greenCount ?? 0;
+  const closeness = wordLength > 0 ? oppGreen / wordLength : 0;
+
+  // Klavye harf renkleri: KENDİ tahminlerimin (myMarks) per-harf renklerinden.
+  // Öncelik G > Y > X; bir kez yeşil olan yeşil kalır. Denenmemiş harf nötr.
+  const keyStates = useMemo(() => {
+    const rank: Record<LetterMark, number> = { X: 0, Y: 1, G: 2 };
+    const map: Record<string, LetterMark> = {};
+    for (const g of myGuesses) {
+      const ms = myMarks[g.id];
+      if (!ms) continue;
+      const letters = Array.from(g.digits);
+      const marks = Array.from(ms) as LetterMark[];
+      for (let i = 0; i < letters.length; i++) {
+        const mk = marks[i];
+        const ch = letters[i];
+        if (!mk) continue;
+        const cur = map[ch];
+        if (cur === undefined || rank[mk] > rank[cur]) map[ch] = mk;
+      }
+    }
+    return map;
+  }, [myGuesses, myMarks]);
+
+  // Yeniden bağlanma/ekrana giriş: eksik kalan KENDİ tahminlerimin renklerini
+  // sunucudan çek (get_my_marks guesser=auth.uid() ile filtreli → rakibinki
+  // ASLA gelmez). myGuessKey değişince (yeni kendi tahminim) eksik varsa çağrılır.
+  const myGuessKey = myGuesses.map((g) => g.id).join(',');
+  useEffect(() => {
+    if (match?.contentType !== 'word' || !myGuessKey) return;
+    const ids = myGuessKey.split(',').map(Number);
+    if (!ids.some((id) => myMarks[id] === undefined)) return;
+    let alive = true;
+    getMyMarks(matchId)
+      .then((m) => alive && setMyMarks((prev) => ({ ...prev, ...m })))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // myMarks kasıtlı dep değil (functional update); tetikleyici myGuessKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myGuessKey, matchId, match?.contentType]);
 
   useEffect(() => {
     if (!isMine) setEntry([]);
@@ -335,6 +319,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     try {
       const outcome = await makeGuess(matchId, parsed.word, 'word');
       setEntry([]);
+      // Per-harf renkler ANINDA (kendi tahtam): make_guess dönüşünden id+marks.
+      if (outcome.guessId != null && outcome.marks) {
+        const { guessId, marks } = outcome;
+        setMyMarks((prev) => ({ ...prev, [guessId]: marks }));
+      }
       if (outcome.feedback === 'win') {
         play('win');
         buzz('win');
@@ -440,7 +429,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           <Text style={styles.secretWord}>{mySecret ?? '—'}</Text>
         </View>
 
-        {/* Rakip ilerleme kartı (Model 2): tahmin sayısı + yakınlık çubuğu */}
+        {/* Rakip ilerleme kartı: tahmin sayısı + EN SON tahmindeki yeşil sayısı.
+            Sunucu yalnız yeşil SAYISI gönderir (rakibin per-harf dizisi gelmez). */}
         <View style={styles.oppCard}>
           <View style={styles.oppLeft}>
             <View style={styles.oppAvatar}>
@@ -448,24 +438,21 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             </View>
             <View>
               <Text style={styles.oppName}>{opponentName}</Text>
-              <Text style={styles.oppStat}>
-                {oppGuesses.length} tahmin{oppBest > 0 ? ` · en iyi ${oppBest}` : ''}
-              </Text>
+              <Text style={styles.oppStat}>{oppGuesses.length} tahmin</Text>
             </View>
           </View>
           <View style={styles.closeWrap}>
-            <Text style={styles.closeLabel}>yakınlık</Text>
+            <Text style={styles.closeLabel}>
+              {oppLast ? `son tahmin · ${oppGreen}/${wordLength} yeşil` : 'henüz tahmin yok'}
+            </Text>
             <View style={styles.closeTrack}>
               <View
                 style={[
                   styles.closeFill,
                   {
                     width: `${Math.round(closeness * 100)}%` as `${number}%`,
-                    backgroundColor: closeness >= 0.75 ? '#F87171' : '#FBBF24',
-                    boxShadow:
-                      closeness >= 0.75
-                        ? '0 0 8px rgba(248,113,113,0.5)'
-                        : '0 0 8px rgba(251,191,36,0.4)',
+                    backgroundColor: '#22C55E',
+                    boxShadow: '0 0 8px rgba(34,197,94,0.5)',
                   },
                 ]}
               />
@@ -491,18 +478,33 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
         <View style={styles.middle}>
           <Text style={styles.sectionLabel}>tahminlerin</Text>
           <View style={styles.history}>
-            {visibleHistory.map((g, i) => (
+            {visibleHistory.map((g, i) => {
+              // KENDİ tahminimin per-harf renkleri (sunucudan, yalnız bana).
+              const rowMarks = myMarks[g.id];
+              return (
               <View key={g.id} style={[styles.histRow, { opacity: historyOpacity(i, visibleHistory.length) }]}>
                 <View style={styles.histTiles}>
-                  {Array.from(g.digits).map((ch, ci) => (
-                    <View key={ci} style={[styles.histTile, { width: histTileW }]}>
-                      <Text style={styles.histTileText}>{ch}</Text>
-                    </View>
-                  ))}
+                  {Array.from(g.digits).map((ch, ci) => {
+                    // 'X'/yok ya da renk henüz gelmedi → şeffaf (varsayılan hücre).
+                    const mk = rowMarks?.[ci] as LetterMark | undefined;
+                    const colored = mk === 'G' || mk === 'Y';
+                    return (
+                      <View
+                        key={ci}
+                        style={[
+                          styles.histTile,
+                          { width: histTileW },
+                          mk === 'G' && styles.histTileGreen,
+                          mk === 'Y' && styles.histTileYellow,
+                        ]}>
+                        <Text style={[styles.histTileText, colored && styles.histTileTextOn]}>{ch}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
-                <FeedbackBadge entry={g} wordLength={wordLength} />
               </View>
-            ))}
+              );
+            })}
             {visibleHistory.length === 0 ? (
               <Text style={styles.histEmpty}>
                 {isMine ? 'İlk tahminini yap' : 'Rakibin sırası…'}
@@ -548,6 +550,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             locked={locked || submitting}
             submitEnabled={entry.length === wordLength}
             hideSubmit
+            letterStates={keyStates}
           />
         </View>
       </View>
@@ -792,6 +795,7 @@ const styles = StyleSheet.create({
   histTiles: {
     flex: 1,
     flexDirection: 'row',
+    justifyContent: 'center',
     gap: 4,
   },
   histTile: {
@@ -803,6 +807,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
+  // Wordle yeşil/sarı — kelime modu pozisyon sızdırır (bilinçli). 'X' = şeffaf
+  // (varsayılan histTile). Klavyedeki "denenmiş ama yok"=gri ondan AYRI.
+  histTileGreen: {
+    backgroundColor: 'rgba(34,197,94,0.9)',
+    borderColor: 'rgba(34,197,94,1)',
+  },
+  histTileYellow: {
+    backgroundColor: 'rgba(234,179,8,0.92)',
+    borderColor: 'rgba(234,179,8,1)',
+  },
   histTileText: {
     color: '#A8C0D8',
     fontSize: 15,
@@ -810,22 +824,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontFamily: mono,
   },
+  histTileTextOn: {
+    color: '#0A1018',
+    fontWeight: '800',
+  },
   histEmpty: {
     color: '#4B6B8A',
     fontSize: 12,
     textAlign: 'center',
     paddingVertical: 10,
-  },
-  fbChip: {
-    minWidth: 58,
-    paddingVertical: 4,
-    paddingHorizontal: 9,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  fbChipText: {
-    fontSize: 12,
-    fontFamily: mono,
   },
   entryRow: {
     flexDirection: 'row',

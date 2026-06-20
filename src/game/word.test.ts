@@ -1,5 +1,5 @@
 import { getContentType } from './index';
-import { evaluateWordGuess, normalizeTr, parseWord, wordContent } from './word';
+import { evaluateWordGuess, normalizeTr, parseWord, wordContent, wordMarks } from './word';
 
 describe('normalizeTr (Türkçe locale)', () => {
   it("İ→i ve I→ı (İngilizce lower'ın aksine)", () => {
@@ -80,6 +80,56 @@ describe('evaluateWordGuess — multiset harf sayımı', () => {
   it('uzunluk uyuşmazlığı / bozuk format invalid', () => {
     expect(evaluateWordGuess('anne', 'güzel')).toEqual({ status: 'invalid', reason: 'length' });
     expect(evaluateWordGuess('anne', 'an1e')).toEqual({ status: 'invalid', reason: 'nonLetter' });
+  });
+});
+
+describe('wordMarks — Wordle iki-geçişli işaretleme (KELİME modu; pozisyon SIZAR)', () => {
+  it('spec örneği: gizli "halı" tahmin "arpa" → soldaki a sarı, sağdaki a yok', () => {
+    expect(wordMarks('halı', 'arpa')).toEqual(['Y', 'X', 'X', 'X']);
+  });
+
+  it('spec örneği: gizli "halı" tahmin "kapı" → a,ı yeşil; k,p yok', () => {
+    expect(wordMarks('halı', 'kapı')).toEqual(['X', 'G', 'X', 'G']);
+  });
+
+  it('tam isabet hepsi yeşil', () => {
+    expect(wordMarks('kalem', 'kalem')).toEqual(['G', 'G', 'G', 'G', 'G']);
+  });
+
+  it('yeşil + sarı karışımı', () => {
+    // gizli "abck" (a,b,c,k) tahmin "back" (b,a,c,k):
+    //  poz: b≠a, a≠b, c=c(G), k=k(G) → remaining={a:1,b:1}
+    //  2.geçiş: b→sarı, a→sarı → [Y,Y,G,G]
+    expect(wordMarks('abck', 'back')).toEqual(['Y', 'Y', 'G', 'G']);
+  });
+
+  it('tekrarlı harf: gizlideki adet kadar sarı/yeşil verilir, fazlası yok', () => {
+    // gizli "anne" (a,n,n,e) tahmin "nana" (n,a,n,a):
+    //  pozisyon: n≠a, a≠n, n=n(G), a≠e → remaining = {a:1, n:1, e:1}
+    //  2.geçiş: n→sarı(n:0), a→sarı(a:0), [G], a→ X (a tükendi) → [Y,Y,G,X]
+    expect(wordMarks('anne', 'nana')).toEqual(['Y', 'Y', 'G', 'X']);
+  });
+
+  it('çoklu yeşil + ayrı sarı', () => {
+    // gizli "kelle" (k,e,l,l,e) tahmin "kelep" (k,e,l,e,p):
+    //  poz: k=k(G), e=e(G), l=l(G), e≠l, p≠e → remaining={l:1,e:1}
+    //  2.geçiş: idx3 e→sarı(e:0), idx4 p→X → [G,G,G,Y,X]
+    expect(wordMarks('kelle', 'kelep')).toEqual(['G', 'G', 'G', 'Y', 'X']);
+  });
+
+  it('ı≠i: "i" tahmini "ı" gizlisine renk vermez', () => {
+    // gizli "kına" (k,ı,n,a) tahmin "kina" (k,i,n,a): k=G, i≠ı→X (ı başka yerde yok),
+    //  n=G, a=G → [G,X,G,G]
+    expect(wordMarks('kına', 'kina')).toEqual(['G', 'X', 'G', 'G']);
+  });
+
+  it('Türkçe locale normalizasyonu: BÜYÜK harf girişi de doğru işaretlenir', () => {
+    expect(wordMarks('IŞIK', 'ışık')).toEqual(['G', 'G', 'G', 'G']);
+    expect(wordMarks('halı', 'KAPI')).toEqual(['X', 'G', 'X', 'G']);
+  });
+
+  it('hiç ortak harf yok → hepsi X', () => {
+    expect(wordMarks('abck', 'demo')).toEqual(['X', 'X', 'X', 'X']);
   });
 });
 
