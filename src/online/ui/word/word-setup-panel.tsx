@@ -213,7 +213,7 @@ export function WordSetupPanel({
             ? 'Klavyeden kelimeni yazmaya başla'
             : !complete
               ? `${wordLength - typed.length} harf daha`
-              : '✓ tuşuna bas ya da aşağıdaki butona dokun'}
+              : 'Klavye üstündeki "Kelimeyi Belirle" butonuna dokun'}
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -228,16 +228,16 @@ export function WordSetupPanel({
 
       <View style={styles.spacer} />
 
-      {/* Klavye bloğu (tasarım: onay butonu + klavye, koyu zemin) */}
+      {/* Klavye bloğu (tasarım: onay butonu klavyenin ÜSTÜNDE, koyu zemin).
+          Onay tuşu klavyeden çıktı; tek aksiyon butonu burada. */}
       <View style={styles.kbWrap}>
-        <WordConfirmButton enabled={complete && active && !locked} busy={busy} onPress={confirm} />
-        <TrKeyboard
-          onKey={handleKey}
-          onDelete={handleDelete}
-          onSubmit={confirm}
-          locked={locked || !active}
-          submitEnabled={complete}
+        <WordConfirmButton
+          label="Kelimeyi Belirle"
+          enabled={complete && active && !locked}
+          busy={busy}
+          onPress={confirm}
         />
+        <TrKeyboard onKey={handleKey} onDelete={handleDelete} locked={locked || !active} />
       </View>
 
       {/* Kilitlendi overlay'i */}
