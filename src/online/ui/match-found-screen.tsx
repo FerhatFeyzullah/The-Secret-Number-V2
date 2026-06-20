@@ -15,6 +15,7 @@ export function MatchFoundScreen({
   myName,
   opponentName,
   mode,
+  isFriendly = false,
   word = false,
   winTarget = 1,
   clockMs,
@@ -26,6 +27,8 @@ export function MatchFoundScreen({
    *  (ad geldiğinde tek geçiş — titreşim yok). */
   opponentName: string | null;
   mode: MatchMode;
+  /** Dostluk maçı mı (özel oda): etikete "· Dostluk" eklenir (skora saymaz). */
+  isFriendly?: boolean;
   /** Kelime maçı mı (content_type='word', mode='quick') — etiket farklı. */
   word?: boolean;
   /** Galibiyet hedefi: >1 ise Bo3 (3 tur) rozeti gösterilir. Bo3'ün gerçek
@@ -60,13 +63,17 @@ export function MatchFoundScreen({
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
   };
 
-  const modeLabel = word
+  const baseLabel = word
     ? 'Kelime Modu'
     : mode === 'quick'
       ? 'Hızlı Maç'
       : mode === 'protocol'
         ? 'Protokol Maçı'
         : 'Özel Oyun';
+  // Dostluk maçında oyun türünü göster + "Dostluk" eki (skora saymaz). Özel
+  // hızlı oda mode='private' → "Özel Oyun"; protokol/kelime oda gerçek türünü
+  // gösterir, ek netleştirir.
+  const modeLabel = isFriendly && mode !== 'private' ? `${baseLabel} · Dostluk` : baseLabel;
   const turnPhrase =
     firstTurnMode === 'random' ? 'Rastgele' : iAmCreator ? 'Sen başlıyorsun' : 'Rakip başlıyor';
 

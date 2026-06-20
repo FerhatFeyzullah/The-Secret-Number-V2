@@ -14,6 +14,7 @@ export type {
   OnlineGuess,
   PlayerRole,
   PresenceInfo,
+  PrivateRoomMode,
   ProtocolHand,
   ProtocolHint,
   ProtocolUse,

@@ -16,6 +16,11 @@ export type MatchMode = 'quick' | 'protocol' | 'private';
 /** Özel odada ilk tahmin sırası: rastgele ya da oda kuran (player1) başlar. */
 export type FirstTurnMode = 'random' | 'creator';
 
+/** Özel oda oyun modu (kamudaki karşılığının kurallarını birebir yansıtır):
+ *  'quick' → Hızlı (sayı, tek tur) · 'protocol' → Protokol (sayı, Bo3) ·
+ *  'word' → Kelime (Bo3 + Wordle). Hepsi dostluk maçıdır (skora saymaz). */
+export type PrivateRoomMode = 'quick' | 'protocol' | 'word';
+
 /** Maç bitiş nedeni. */
 export type MatchResult = 'win' | 'timeout' | 'forfeit' | 'cancelled';
 
@@ -63,6 +68,9 @@ export type MatchState = {
    *  Number maçlarda null. */
   wordLength: number | null;
   roomCode: string | null;
+  /** Dostluk maçı mı (özel oda): true ise hiçbir kalıcı etki yok — ELO/XP/Veri/
+   *  lig/istatistik değişmez (sunucu garantisi). Gösterim/etiket için. */
+  isFriendly: boolean;
   player1: MatchPlayer;
   player2: MatchPlayer | null;
   /** Çağıranın rolü (maçın oyuncusu değilse state hiç üretilmez). */

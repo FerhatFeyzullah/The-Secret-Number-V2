@@ -16,6 +16,7 @@ import {
   useMatchSession,
   type FirstTurnMode,
   type MatchMode,
+  type PrivateRoomMode,
 } from '@/online';
 import {
   CreateRoomScreen,
@@ -65,6 +66,10 @@ export default function OnlineScreen() {
   // Aranan/katılınan mod: maç satırı yüklenmeden önce VS ekranında YANLIŞ
   // ("Hızlı Maç") etiket görünmesin diye akışı başlatan aksiyondan türetilir.
   const [pendingMode, setPendingMode] = useState<MatchMode>('quick');
+  // Dostluk maçı mı (özel oda akışı) — maç satırı yüklenmeden VS etiketinde
+  // doğru "Dostluk" göstergesi için (özellikle protokol özel odası mode=
+  // 'protocol' olduğundan ranked protokolden ayırt edilemezdi).
+  const [pendingFriendly, setPendingFriendly] = useState(false);
   // VS ekranı en az MATCH_FOUND_HOLD_MS gösterildi mi (otomatik geçiş kapısı).
   const [vsHoldDone, setVsHoldDone] = useState(false);
 
@@ -158,6 +163,7 @@ export default function OnlineScreen() {
     // yalnız sayı protokol maçı mode='protocol'. Bo3 rozeti win_target'tan gelir.
     setPendingMode(m === 'protocol' ? 'protocol' : 'quick');
     setPendingWord(m === 'word');
+    setPendingFriendly(false);
     setPhase('searching');
     try {
       const ticket = await (m === 'protocol'
@@ -223,17 +229,22 @@ export default function OnlineScreen() {
     session.leave(); // /online'da kalıyoruz → leave'i açıkça çağır (izleyici tetiklenmez)
   }, [resetToLobby, session]);
 
-  const createRoom = useCallback(async (clockMs: number, firstTurnMode: FirstTurnMode) => {
+  const createRoom = useCallback(
+    async (clockMs: number, firstTurnMode: FirstTurnMode, roomMode: PrivateRoomMode) => {
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
     setRoomCode(null);
     setMatchId(null);
-    setPendingMode('private');
+    // VS/etiket + zemin glifi için: protokol→'protocol', diğerleri 'private';
+    // kelime odasında zemin harf akışı (pendingWord). Maç satırı gelince düzelir.
+    setPendingMode(roomMode === 'protocol' ? 'protocol' : 'private');
+    setPendingWord(roomMode === 'word');
+    setPendingFriendly(true);
     setPhase('create-room');
     try {
-      const ticket = await createPrivateRoom(clockMs, firstTurnMode);
+      const ticket = await createPrivateRoom(clockMs, firstTurnMode, roomMode);
       if (seq !== searchSeqRef.current) {
         void leaveMatch(ticket.matchId).catch(() => {});
         return;
@@ -278,6 +289,7 @@ export default function OnlineScreen() {
     setNotice(null);
     leavingRef.current = false;
     setPendingMode('private');
+    setPendingFriendly(true);
     setJoinBusy(true);
     try {
       const ticket = await joinPrivateRoom(code);
@@ -405,6 +417,7 @@ export default function OnlineScreen() {
           myName={name}
           opponentName={opponentName}
           mode={mode}
+          isFriendly={match?.isFriendly ?? pendingFriendly}
           word={match ? match.contentType === 'word' : pendingWord}
           winTarget={match?.winTarget ?? (pendingWord || pendingMode === 'protocol' ? 2 : 1)}
           clockMs={match?.clockMs ?? 60000}
