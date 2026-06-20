@@ -37,6 +37,7 @@ export {
   getLeaderboard,
   getMatchReveal,
   getMyHand,
+  getMyMarks,
   getMyRank,
   heartbeat,
   joinPrivateRoom,

@@ -83,6 +83,56 @@ export function evaluateWordGuess(secret: string, guess: string): GuessResult {
 }
 
 /**
+ * Per-harf Wordle işareti. KELİME MODUNA ÖZGÜ — sayı modunda KULLANILMAZ.
+ * 'G' (green)  → doğru harf, doğru pozisyon
+ * 'Y' (yellow) → harf kelimede var ama yanlış pozisyon
+ * 'X'          → harf kelimede yok (şeffaf hücre)
+ *
+ * ⚠️ BİLİNÇLİ KURAL DEĞİŞİKLİĞİ: Kelime modu artık POZİSYON SIZDIRIR (Wordle).
+ * Sayı modu eski sözleşmeyi korur: pozisyon asla sızmaz, yalnız "kaç rakam
+ * doğru" (bkz. evaluateWordGuess / evaluate_guess — onlar pozisyonsuz kalır).
+ */
+export type LetterMark = 'G' | 'Y' | 'X';
+
+/**
+ * Standart Wordle iki-geçişli işaretleme (tekrarlı harf doğru sayılır):
+ *  1. Pozisyon birebir tutanları YEŞİL yap, gizlideki o harfi "tüketildi" say.
+ *  2. Kalan harfleri SOLDAN SAĞA gez; harf gizlide kalan sayıda varsa SARI yap
+ *     ve sayacı azalt; yoksa RENKSİZ (X).
+ *
+ * Örn. gizli "halı", tahmin "arpa" → [Y,X,X,X] (soldaki 'a' sarı, sağ 'a' yok).
+ *      gizli "halı", tahmin "kapı" → [X,G,X,G] ('a','ı' yeşil; k,p yok).
+ *
+ * Harf eşitliği normalizeTr ile (ı≠i, ç≠c, …). Sunucudaki _word_marks bu
+ * algoritmanın birebir SQL aynısıdır (otorite sunucu; bu kopya offline/test).
+ */
+export function wordMarks(secret: string, guess: string): LetterMark[] {
+  const s = Array.from(normalizeTr(secret));
+  const g = Array.from(normalizeTr(guess));
+  const n = g.length;
+  const marks: LetterMark[] = new Array(n).fill('X');
+  // 1. geçiş: yeşiller + tüketilmeyen gizli harflerin sayacı.
+  const remaining = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    if (i < s.length && g[i] === s[i]) {
+      marks[i] = 'G';
+    } else if (i < s.length) {
+      remaining.set(s[i], (remaining.get(s[i]) ?? 0) + 1);
+    }
+  }
+  // 2. geçiş: soldan sağa sarılar (yeşil olmayanlar, kalan sayıdan tüketerek).
+  for (let i = 0; i < n; i++) {
+    if (marks[i] === 'G') continue;
+    const left = remaining.get(g[i]) ?? 0;
+    if (left > 0) {
+      marks[i] = 'Y';
+      remaining.set(g[i], left - 1);
+    }
+  }
+  return marks;
+}
+
+/**
  * Offline/test yedeği: gerçek gizli havuz sunucudadır (secret_words) ve
  * oyuncu kendi kelimesini SEÇER — generate yalnız offline mod / test için
  * küçük, yaygın bir örneklemden çeker. (Hepsi secret_words havuzundandır.)

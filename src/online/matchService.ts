@@ -149,6 +149,12 @@ type OutcomePayload = {
   clock1_ms: number;
   clock2_ms: number;
   fogged?: boolean;
+  /** KELİME: çağıranın per-harf renkleri ('GYX'); number dönüşünde null/yok. */
+  marks?: string | null;
+  /** KELİME: yeşil sayısı; number'da null. */
+  green_count?: number | null;
+  /** KELİME: eklenen tahmin satırı id'si; number'da null. */
+  guess_id?: number | null;
 };
 
 function toTicket(p: TicketPayload): MatchTicket {
@@ -172,6 +178,11 @@ function toOutcome(p: OutcomePayload): GuessOutcome {
     clock2Ms: p.clock2_ms,
     // Yalnız işaretliyken eklenir (eski dönüş/teste şekil-uyumlu).
     ...(p.fogged ? { fogged: true } : {}),
+    // Kelime: çağıranın per-harf renkleri + yeşil sayısı + satır id'si;
+    // number dönüşünde hepsi null → eklenmez (eski şekil korunur).
+    ...(p.marks ? { marks: p.marks } : {}),
+    ...(p.green_count != null ? { greenCount: p.green_count } : {}),
+    ...(p.guess_id != null ? { guessId: p.guess_id } : {}),
   };
 }
 
@@ -371,6 +382,18 @@ export async function makeGuess(
 /** Sıradaki oyuncunun süresinin dolduğunu iddia eder; kararı sunucu verir. */
 export async function claimTimeout(matchId: string): Promise<GuessOutcome> {
   return toOutcome(await callRpc<OutcomePayload>('claim_timeout', { p_match_id: matchId }));
+}
+
+/** KELİME modu: ÇAĞIRANIN KENDİ tahminlerinin per-harf renkleri (id → 'GYX').
+ *  Sunucu guesser=auth.uid() ile sert filtreler → rakibin marks'ı ASLA gelmez.
+ *  İstemci yeniden bağlanınca/ekrana girince kendi tahtasını bundan boyar. */
+export async function getMyMarks(matchId: string): Promise<Record<number, string>> {
+  const rows = await callRpc<{ id: number; marks: string }[]>('get_my_marks', {
+    p_match_id: matchId,
+  });
+  const map: Record<number, string> = {};
+  for (const r of rows ?? []) map[r.id] = r.marks;
+  return map;
 }
 
 /** 30 sn'dir kopuk rakibe karşı hükmen galibiyet ister; değilse no-op. */

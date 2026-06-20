@@ -69,6 +69,9 @@ export type GuessRow = {
   created_at: string;
   /** Sis Perdesi işareti (4c); eski satırlarda olmayabilir. */
   fogged?: boolean;
+  /** KELİME modu: yeşil harf sayısı (rakip-güvenli; per-harf dizi DEĞİL).
+   *  number satırlarda null/yok. Per-harf marks satırda SAKLANMAZ (rakibe sızmasın). */
+  green_count?: number | null;
 };
 
 /** presence tablosundan/realtime'dan gelen ham satır. */
@@ -155,6 +158,8 @@ export function guessRowToGuess(row: GuessRow): OnlineGuess {
     createdAt: row.created_at,
     // Yalnız işaretliyken eklenir (eski satır/teste şekil-uyumlu).
     ...(row.fogged ? { fogged: true } : {}),
+    // Kelime yeşil sayısı; number satırlarda null → eklenmez (şekil-uyumlu).
+    ...(row.green_count != null ? { greenCount: row.green_count } : {}),
   };
 }
 

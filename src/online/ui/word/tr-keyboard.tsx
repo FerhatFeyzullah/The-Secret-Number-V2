@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
+import type { LetterMark } from '@/game';
 import { mono } from '@/ui/theme';
 
 /** Türkçe Q-klavye dizilimi (tasarımla birebir): q/w/x sönük + pasif
@@ -20,6 +21,7 @@ export function TrKeyboard({
   submitEnabled = true,
   large = false,
   hideSubmit = false,
+  letterStates,
 }: {
   onKey: (letter: string) => void;
   onDelete: () => void;
@@ -30,6 +32,9 @@ export function TrKeyboard({
   large?: boolean;
   /** true → ✓ tuşu gizlenir; yerine denge spacer'ı konur (düello onay butonu var). */
   hideSubmit?: boolean;
+  /** KELİME modu Wordle tuş renkleri: harf → 'G' (yeşil) · 'Y' (sarı) · 'X'
+   *  (denenmiş ama yok = GRİ). Verilmezse tüm tuşlar nötr (belirleme ekranı). */
+  letterStates?: Record<string, LetterMark>;
 }) {
   // Tuş genişliği EKRANA göre: en geniş satır 12 sütun + 11 boşluk; dar
   // cihazda taşmaz, geniş cihazda büyür (parmak dostu üst sınır 34).
@@ -41,6 +46,9 @@ export function TrKeyboard({
 
   const letterKey = (k: string) => {
     const dim = DIMMED.has(k);
+    // Wordle tuş rengi (yalnız düelloda; belirlemede letterStates yok → nötr).
+    const mark = dim ? undefined : letterStates?.[k];
+    const colored = mark === 'G' || mark === 'Y';
     return (
       <Pressable
         key={k}
@@ -49,6 +57,9 @@ export function TrKeyboard({
         style={({ pressed }) => [
           styles.key,
           { width: keyW, height: keyH },
+          mark === 'G' && styles.keyGreen,
+          mark === 'Y' && styles.keyYellow,
+          mark === 'X' && styles.keyGray,
           pressed && styles.keyPressed,
         ]}>
         <Text
@@ -56,7 +67,8 @@ export function TrKeyboard({
             styles.keyText,
             { fontSize },
             dim && styles.keyTextDim,
-            locked && !dim && styles.keyTextLocked,
+            colored && styles.keyTextOn,
+            locked && !dim && !mark && styles.keyTextLocked,
           ]}>
           {k}
         </Text>
@@ -127,10 +139,29 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(47,168,224,0.45)',
     transform: [{ scale: 0.95 }],
   },
+  // Wordle tuş durumları (kelime düellosu). 'G'/'Y' renkli; 'X' = denenmiş ama
+  // yok → GRİ (nötr/denenmemiş tuştan AYRI: tahmin satırındaki şeffaf 'yok'la
+  // karışmaması bilinçli).
+  keyGreen: {
+    backgroundColor: 'rgba(34,197,94,0.9)',
+    borderColor: 'rgba(34,197,94,1)',
+  },
+  keyYellow: {
+    backgroundColor: 'rgba(234,179,8,0.92)',
+    borderColor: 'rgba(234,179,8,1)',
+  },
+  keyGray: {
+    backgroundColor: 'rgba(40,52,66,0.95)',
+    borderColor: 'rgba(70,86,104,0.9)',
+  },
   keyText: {
     color: '#C8DCF0',
     fontFamily: mono,
     fontWeight: '600',
+  },
+  keyTextOn: {
+    color: '#0A1018',
+    fontWeight: '800',
   },
   keyTextDim: {
     color: 'rgba(255,255,255,0.2)',
