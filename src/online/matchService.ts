@@ -24,6 +24,7 @@ import type {
   OnlineGuess,
   PlayerRole,
   PresenceInfo,
+  PrivateRoomMode,
   ProtocolHand,
   ProtocolHint,
   ProtocolUse,
@@ -322,16 +323,19 @@ export async function resolveProtocolSelect(matchId: string): Promise<{ status: 
   return { status: p.status };
 }
 
-/** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra ayarlarıyla.
- *  Dönen roomCode rakiple paylaşılır. Varsayılanlar Hızlı Maç davranışıyla aynı. */
+/** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra + oyun modu ayarlarıyla.
+ *  roomMode kamudaki karşılığının kurallarını birebir yansıtır (quick/protocol/
+ *  word); hepsi dostluk maçıdır (skora saymaz). Dönen roomCode rakiple paylaşılır. */
 export async function createPrivateRoom(
   clockMs: number = 60000,
   firstTurnMode: FirstTurnMode = 'random',
+  roomMode: PrivateRoomMode = 'quick',
 ): Promise<MatchTicket> {
   return toTicket(
     await callRpc<TicketPayload>('create_private_room', {
       p_clock_ms: clockMs,
       p_first_turn_mode: firstTurnMode,
+      p_room_mode: roomMode,
     }),
   );
 }
