@@ -16,6 +16,7 @@ import {
   useMatchSession,
   type FirstTurnMode,
   type MatchMode,
+  type PrivateRoomMode,
 } from '@/online';
 import {
   CreateRoomScreen,
@@ -65,6 +66,10 @@ export default function OnlineScreen() {
   // Aranan/katılınan mod: maç satırı yüklenmeden önce VS ekranında YANLIŞ
   // ("Hızlı Maç") etiket görünmesin diye akışı başlatan aksiyondan türetilir.
   const [pendingMode, setPendingMode] = useState<MatchMode>('quick');
+  // Dostluk maçı mı (özel oda akışı) — maç satırı yüklenmeden VS etiketinde
+  // doğru "Dostluk" göstergesi için (özellikle protokol özel odası mode=
+  // 'protocol' olduğundan ranked protokolden ayırt edilemezdi).
+  const [pendingFriendly, setPendingFriendly] = useState(false);
   // VS ekranı en az MATCH_FOUND_HOLD_MS gösterildi mi (otomatik geçiş kapısı).
   const [vsHoldDone, setVsHoldDone] = useState(false);
 
@@ -141,22 +146,31 @@ export default function OnlineScreen() {
   }, [phase, session]);
 
   // ── Aksiyonlar ────────────────────────────────────────────────
-  // Hızlı Maç (quick, tek tur) ve Protokol Maçı (protocol, Best of 3) aynı arama
-  // akışını paylaşır; yalnızca eşleşme RPC'si değişir.
-  const lastModeRef = useRef<'quick' | 'protocol'>('quick');
-  const startSearch = useCallback(async (m: 'quick' | 'protocol') => {
+  // Hızlı Maç (quick, tek tur), Protokol Maçı (protocol, Best of 3) ve Kelime
+  // Modu (word kuyruğu; sunucuda PROTOKOLSÜZ Bo3) aynı arama akışını paylaşır;
+  // yalnızca eşleşme RPC'si/parametresi değişir.
+  const lastModeRef = useRef<'quick' | 'protocol' | 'word'>('quick');
+  // Kelime maçı mı (ekran seçimi + VS etiketi için; maç satırı gelmeden de doğru).
+  const [pendingWord, setPendingWord] = useState(false);
+  const startSearch = useCallback(async (m: 'quick' | 'protocol' | 'word') => {
     lastModeRef.current = m;
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
     setMatchId(null);
-    setPendingMode(m);
+    // Kelime maçı sunucuda mode='quick' + win_target=2 doğar (PROTOKOLSÜZ Bo3);
+    // yalnız sayı protokol maçı mode='protocol'. Bo3 rozeti win_target'tan gelir.
+    setPendingMode(m === 'protocol' ? 'protocol' : 'quick');
+    setPendingWord(m === 'word');
+    setPendingFriendly(false);
     setPhase('searching');
     try {
       const ticket = await (m === 'protocol'
         ? findOrCreateProtocolMatch()
-        : findOrCreateQuickMatch());
+        : m === 'word'
+          ? findOrCreateQuickMatch('word')
+          : findOrCreateQuickMatch());
       if (seq !== searchSeqRef.current) {
         // Bu arama iptal edildi/yenilendi: dönen maçı sessizce kapat.
         void leaveMatch(ticket.matchId).catch(() => {});
@@ -172,6 +186,7 @@ export default function OnlineScreen() {
   }, [session]);
   const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
   const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
+  const startWord = useCallback(() => startSearch('word'), [startSearch]);
   const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
 
   // Eşzamanlı yeniden-kuyruk uzlaştırması: iki taraf aynı anda "Tekrar Oyna"
@@ -194,15 +209,15 @@ export default function OnlineScreen() {
     return () => clearTimeout(t);
   }, [phase, match?.status, startSearch]);
 
-  // "Tekrar Oyna" ile gelindiğinde (quick=1) aramayı bir kez otomatik başlat.
-  const { quick } = useLocalSearchParams<{ quick?: string }>();
+  // "Tekrar Oyna" ile gelindiğinde (quick=1 / word=1) aramayı bir kez otomatik başlat.
+  const { quick, word } = useLocalSearchParams<{ quick?: string; word?: string }>();
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (quick === '1' && !autoStartedRef.current) {
+    if ((quick === '1' || word === '1') && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      void startQuick();
+      void (word === '1' ? startWord() : startQuick());
     }
-  }, [quick, startQuick]);
+  }, [quick, word, startQuick, startWord]);
 
   // Optimistik çıkış: UI ANINDA döner, leave_match arka planda koşar (ağ
   // gecikmesi donma hissi vermez); leavingRef ikinci basışı no-op yapar.
@@ -214,17 +229,22 @@ export default function OnlineScreen() {
     session.leave(); // /online'da kalıyoruz → leave'i açıkça çağır (izleyici tetiklenmez)
   }, [resetToLobby, session]);
 
-  const createRoom = useCallback(async (clockMs: number, firstTurnMode: FirstTurnMode) => {
+  const createRoom = useCallback(
+    async (clockMs: number, firstTurnMode: FirstTurnMode, roomMode: PrivateRoomMode) => {
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
     setRoomCode(null);
     setMatchId(null);
-    setPendingMode('private');
+    // VS/etiket + zemin glifi için: protokol→'protocol', diğerleri 'private';
+    // kelime odasında zemin harf akışı (pendingWord). Maç satırı gelince düzelir.
+    setPendingMode(roomMode === 'protocol' ? 'protocol' : 'private');
+    setPendingWord(roomMode === 'word');
+    setPendingFriendly(true);
     setPhase('create-room');
     try {
-      const ticket = await createPrivateRoom(clockMs, firstTurnMode);
+      const ticket = await createPrivateRoom(clockMs, firstTurnMode, roomMode);
       if (seq !== searchSeqRef.current) {
         void leaveMatch(ticket.matchId).catch(() => {});
         return;
@@ -269,6 +289,7 @@ export default function OnlineScreen() {
     setNotice(null);
     leavingRef.current = false;
     setPendingMode('private');
+    setPendingFriendly(true);
     setJoinBusy(true);
     try {
       const ticket = await joinPrivateRoom(code);
@@ -310,14 +331,17 @@ export default function OnlineScreen() {
   useEffect(() => {
     if (phase !== 'match-found' || !vsHoldDone || !matchId || !match) return;
     if (match.status !== 'protocol_select' && match.status !== 'setup') return;
-    const toSelect = match.status === 'protocol_select';
+    const content = match.contentType; // kelime maçında setup ekranı kelime olur
+    // Kelime maçı PROTOKOLSÜZ → asla protocol_select'e gitmez (savunmacı: sunucu
+    // zaten word'ü 'setup' doğurur). Yalnız sayı protokol maçı seçim ekranına gider.
+    const toSelect = match.status === 'protocol_select' && content !== 'word';
     // Sahiplik bir sonraki maç ekranına geçiyor (o ekran 'match' olarak claim eder);
     // route maç kümesi içinde kaldığından izleyici leave TETİKLEMEZ.
     resetToLobby();
     router.push(
       toSelect
         ? { pathname: '/protocol-select', params: { matchId } }
-        : { pathname: '/match-setup', params: { matchId } },
+        : { pathname: '/match-setup', params: { matchId, content } },
     );
   }, [phase, vsHoldDone, matchId, match, resetToLobby, router]);
 
@@ -393,6 +417,9 @@ export default function OnlineScreen() {
           myName={name}
           opponentName={opponentName}
           mode={mode}
+          isFriendly={match?.isFriendly ?? pendingFriendly}
+          word={match ? match.contentType === 'word' : pendingWord}
+          winTarget={match?.winTarget ?? (pendingWord || pendingMode === 'protocol' ? 2 : 1)}
           clockMs={match?.clockMs ?? 60000}
           firstTurnMode={match?.firstTurnMode ?? 'random'}
           iAmCreator={match?.myRole === 'player1'}
@@ -406,6 +433,7 @@ export default function OnlineScreen() {
           notice={notice}
           onQuick={startQuick}
           onProtocol={startProtocol}
+          onWord={startWord}
           onPrivate={() => setPhase('private-choice')}
           onHowTo={() => router.push('/how-to-play')}
           onBack={() => router.back()}
@@ -413,5 +441,7 @@ export default function OnlineScreen() {
       );
   }
 
-  return <Screen>{content}</Screen>;
+  // Kelime akışında (arama/VS) süzülen zemin glifleri harf olur.
+  const wordFlow = match ? match.contentType === 'word' : pendingWord;
+  return <Screen float={wordFlow ? 'letters' : 'digits'}>{content}</Screen>;
 }

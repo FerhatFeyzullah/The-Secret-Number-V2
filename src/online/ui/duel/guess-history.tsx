@@ -10,8 +10,9 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 const FOG_MS = 4000;
 
 /** Sunucu feedback'ini çip etiketi + rengine çevirir.
- *  Pozisyon bilgisi YOK — yalnızca doğru rakam sayısı / sıra bilgisi. */
-function describe(feedback: GuessFeedback): { label: string; color: string } {
+ *  Pozisyon bilgisi YOK — yalnızca doğru rakam sayısı / sıra bilgisi.
+ *  (İçerik tipi kayıt defteri content-ui.tsx de bunu kullanır.) */
+export function describe(feedback: GuessFeedback): { label: string; color: string } {
   switch (feedback) {
     case 'win':
       return { label: 'doğru sayı!', color: colors.success };
@@ -23,6 +24,13 @@ function describe(feedback: GuessFeedback): { label: string; color: string } {
       return { label: '1 rakam doğru', color: colors.dim };
     case 'partial:0':
       return { label: 'hiç doğru rakam yok', color: withAlpha(colors.dim, 0.6) };
+    // Kelime moduna ait değerler (sayı maçında üretilmez; tip bütünlüğü için).
+    case 'partial:3':
+      return { label: '3 harf doğru', color: colors.cyan };
+    case 'partial:4':
+      return { label: '4 harf doğru', color: colors.cyan };
+    case 'partial:5':
+      return { label: '5 harf doğru', color: colors.cyan };
   }
 }
 

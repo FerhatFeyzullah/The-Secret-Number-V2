@@ -45,6 +45,35 @@ describe('findOrCreateQuickMatch', () => {
     });
     expect(rpcMock).toHaveBeenCalledWith('find_or_create_quick_match', undefined);
   });
+
+  it("word kuyruğu için p_content_type parametresi gönderir", async () => {
+    rpcResolves({ match_id: 'm2', role: 'player1', status: 'waiting' });
+    await expect(findOrCreateQuickMatch('word')).resolves.toEqual({
+      matchId: 'm2',
+      role: 'player1',
+      status: 'waiting',
+    });
+    expect(rpcMock).toHaveBeenCalledWith('find_or_create_quick_match', {
+      p_content_type: 'word',
+    });
+  });
+
+  // Kelime modu PROTOKOLSÜZ: kelime maçı protokol kuyruğundan (find_or_create_
+  // protocol_match) DEĞİL, quick RPC'sinden doğar; eşleşen oyuncu doğrudan
+  // 'setup'a düşer (protocol_select fazı YOK). Bu sözleşme, yönlendirmenin
+  // kelimeyi asla Kader Eli seçim ekranına götürmemesini garanti eder.
+  it('kelime maçına katılım protokol seçimi atlar (status=setup)', async () => {
+    rpcResolves({ match_id: 'm3', role: 'player2', status: 'setup' });
+    const ticket = await findOrCreateQuickMatch('word');
+    expect(ticket.status).toBe('setup');
+    expect(ticket.status).not.toBe('protocol_select');
+    // Yalnız quick RPC çağrılır; protokol-maçı RPC'si ASLA çağrılmaz.
+    expect(rpcMock).toHaveBeenCalledWith('find_or_create_quick_match', {
+      p_content_type: 'word',
+    });
+    expect(rpcMock).not.toHaveBeenCalledWith('find_or_create_protocol_match', expect.anything());
+    expect(rpcMock).not.toHaveBeenCalledWith('find_or_create_protocol_match');
+  });
 });
 
 describe('hata eşleme', () => {
@@ -80,6 +109,23 @@ describe('setSecret istemci ön-doğrulaması', () => {
       p_match_id: 'm1',
       p_digits: '297',
     });
+  });
+
+  // Regresyon (cihaz hatası): kelime, sayı parser'ına takılıp RPC'ye hiç
+  // gitmeden reddediliyordu — contentType='word' ile kelime parser'ı kullanılır.
+  it("kelime maçında geçerli Türkçe kelimeyi RPC'ye GÖNDERİR", async () => {
+    rpcResolves({ match_id: 'm1', status: 'setup' });
+    await expect(setSecret('m1', 'kalem', 'word')).resolves.toEqual({ status: 'setup' });
+    expect(rpcMock).toHaveBeenCalledWith('set_secret', {
+      p_match_id: 'm1',
+      p_digits: 'kalem',
+    });
+  });
+
+  it("kelime maçında format-bozuk girdiyi RPC'siz reddeder", async () => {
+    const err = await setSecret('m1', 'ka1em', 'word').catch((e: unknown) => e);
+    expect((err as OnlineError).code).toBe('invalid_digits');
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 });
 

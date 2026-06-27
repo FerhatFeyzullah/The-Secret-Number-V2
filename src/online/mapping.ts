@@ -1,4 +1,4 @@
-import type { GuessResult } from '../game';
+import type { ContentTypeId, GuessResult } from '../game';
 import type {
   FirstTurnMode,
   GuessFeedback,
@@ -16,7 +16,13 @@ export type MatchRow = {
   id: string;
   status: MatchStatus;
   mode: MatchMode;
+  /** Gizli içerik tipi; eski satırlarda yoktur → mapping 'number' varsayar. */
+  content_type?: ContentTypeId;
+  /** Kelime maçının harf uzunluğu (4-6); number maçlarda null/yok. */
+  word_length?: number | null;
   room_code: string | null;
+  /** Dostluk maçı (özel oda) mı; eski satırlarda yok → mapping false varsayar. */
+  is_friendly?: boolean;
   player1: string;
   player2: string | null;
   current_turn: string | null;
@@ -65,6 +71,9 @@ export type GuessRow = {
   created_at: string;
   /** Sis Perdesi işareti (4c); eski satırlarda olmayabilir. */
   fogged?: boolean;
+  /** KELİME modu: yeşil harf sayısı (rakip-güvenli; per-harf dizi DEĞİL).
+   *  number satırlarda null/yok. Per-harf marks satırda SAKLANMAZ (rakibe sızmasın). */
+  green_count?: number | null;
 };
 
 /** presence tablosundan/realtime'dan gelen ham satır. */
@@ -103,7 +112,10 @@ export function matchRowToState(
     id: row.id,
     status: row.status,
     mode: row.mode,
+    contentType: row.content_type ?? 'number',
+    wordLength: row.word_length ?? null,
     roomCode: row.room_code,
+    isFriendly: row.is_friendly ?? false,
     player1: { id: row.player1, username: usernames[row.player1] ?? null },
     player2: row.player2
       ? { id: row.player2, username: usernames[row.player2] ?? null }
@@ -149,6 +161,8 @@ export function guessRowToGuess(row: GuessRow): OnlineGuess {
     createdAt: row.created_at,
     // Yalnız işaretliyken eklenir (eski satır/teste şekil-uyumlu).
     ...(row.fogged ? { fogged: true } : {}),
+    // Kelime yeşil sayısı; number satırlarda null → eklenmez (şekil-uyumlu).
+    ...(row.green_count != null ? { greenCount: row.green_count } : {}),
   };
 }
 
@@ -220,6 +234,12 @@ export function feedbackToGuessResult(feedback: GuessFeedback): GuessResult {
       return { status: 'partial', correctCount: 1 };
     case 'partial:2':
       return { status: 'partial', correctCount: 2 };
+    case 'partial:3': // kelime modu (sayıda üretilmez)
+      return { status: 'partial', correctCount: 3 };
+    case 'partial:4':
+      return { status: 'partial', correctCount: 4 };
+    case 'partial:5':
+      return { status: 'partial', correctCount: 5 };
     case 'digits_correct_wrong_order':
       return { status: 'digitsCorrectWrongOrder' };
     case 'win':

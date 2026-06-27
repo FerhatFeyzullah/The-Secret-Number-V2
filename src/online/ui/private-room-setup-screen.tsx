@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { FirstTurnMode } from '@/online';
+import type { FirstTurnMode, PrivateRoomMode } from '@/online';
 import { GlassButton } from '@/ui/glass';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { LobbyHeader } from './parts';
@@ -19,17 +19,25 @@ const TURNS: { mode: FirstTurnMode; icon: 'grid' | 'user'; nm: string; sub: stri
   { mode: 'creator', icon: 'user', nm: 'Ben başlarım', sub: 'Oda kuran' },
 ];
 
-/** Özel oda ayar ekranı: maç süresi (kişi başı) + ilk tahmin sırası.
- *  "ODA KUR" → onConfirm(clockMs, firstTurnMode). Varsayılan: 1 dk / Rastgele. */
+/** Oyun modu kartları: kamudaki karşılığının kuralları (hepsi dostluk maçı). */
+const MODES: { mode: PrivateRoomMode; icon: 'zap' | 'cpu' | 'type'; nm: string; sub: string }[] = [
+  { mode: 'quick', icon: 'zap', nm: 'Hızlı Maç', sub: 'Sayı · tek tur' },
+  { mode: 'protocol', icon: 'cpu', nm: 'Protokol', sub: 'Sayı · Bo3 + protokol' },
+  { mode: 'word', icon: 'type', nm: 'Kelime', sub: 'Wordle · Bo3' },
+];
+
+/** Özel oda ayar ekranı: oyun modu + maç süresi (kişi başı) + ilk tahmin sırası.
+ *  "ODA KUR" → onConfirm(clockMs, firstTurnMode, roomMode). Varsayılan: Hızlı / 1 dk / Rastgele. */
 export function PrivateRoomSetupScreen({
   busy,
   onConfirm,
   onBack,
 }: {
   busy?: boolean;
-  onConfirm: (clockMs: number, firstTurnMode: FirstTurnMode) => void;
+  onConfirm: (clockMs: number, firstTurnMode: FirstTurnMode, roomMode: PrivateRoomMode) => void;
   onBack: () => void;
 }) {
+  const [roomMode, setRoomMode] = useState<PrivateRoomMode>('quick');
   const [clockMs, setClockMs] = useState(60000);
   const [turn, setTurn] = useState<FirstTurnMode>('random');
 
@@ -38,6 +46,31 @@ export function PrivateRoomSetupScreen({
       <LobbyHeader title="ÖZEL ODA" onBack={onBack} />
 
       <View style={styles.body}>
+        {/* Oyun modu */}
+        <View style={styles.sec}>
+          <View style={styles.lbl}>
+            <Feather name="grid" size={14} color={colors.cyan} />
+            <Text style={styles.lblText}>OYUN MODU</Text>
+          </View>
+          <View style={styles.row}>
+            {MODES.map((mo) => {
+              const on = roomMode === mo.mode;
+              return (
+                <Pressable
+                  key={mo.mode}
+                  onPress={() => setRoomMode(mo.mode)}
+                  style={[styles.turnCard, on && styles.turnCardOn]}>
+                  <View style={[styles.turnEmb, on && styles.turnEmbOn]}>
+                    <Feather name={mo.icon} size={20} color={on ? colors.amber : colors.dim} />
+                  </View>
+                  <Text style={[styles.turnNm, on && styles.turnNmOn]}>{mo.nm}</Text>
+                  <Text style={styles.turnSub}>{mo.sub}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Süre */}
         <View style={styles.sec}>
           <View style={styles.lbl}>
@@ -104,7 +137,7 @@ export function PrivateRoomSetupScreen({
           variant="fill"
           disabled={busy}
           icon={<Feather name="plus" size={16} color={colors.ice} />}
-          onPress={() => onConfirm(clockMs, turn)}
+          onPress={() => onConfirm(clockMs, turn, roomMode)}
         />
       </View>
     </View>

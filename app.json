@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gizemli Sayılar",
     "slug": "gizemli-sayilar",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "gizemlisayilar",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.gizemlisayilar.app",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#0C0F19",
         "foregroundImage": "./assets/images/app-icon-foreground.png"

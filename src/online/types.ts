@@ -1,3 +1,5 @@
+import type { ContentTypeId } from '../game';
+
 /** Sunucudaki matches.status değerleri. */
 export type MatchStatus =
   | 'waiting'
@@ -14,6 +16,11 @@ export type MatchMode = 'quick' | 'protocol' | 'private';
 /** Özel odada ilk tahmin sırası: rastgele ya da oda kuran (player1) başlar. */
 export type FirstTurnMode = 'random' | 'creator';
 
+/** Özel oda oyun modu (kamudaki karşılığının kurallarını birebir yansıtır):
+ *  'quick' → Hızlı (sayı, tek tur) · 'protocol' → Protokol (sayı, Bo3) ·
+ *  'word' → Kelime (Bo3 + Wordle). Hepsi dostluk maçıdır (skora saymaz). */
+export type PrivateRoomMode = 'quick' | 'protocol' | 'word';
+
 /** Maç bitiş nedeni. */
 export type MatchResult = 'win' | 'timeout' | 'forfeit' | 'cancelled';
 
@@ -28,6 +35,9 @@ export type GuessFeedback =
   | 'partial:0'
   | 'partial:1'
   | 'partial:2'
+  | 'partial:3' // kelime modunda (4-6 harf) mümkün; sayıda üretilmez
+  | 'partial:4'
+  | 'partial:5'
   | 'digits_correct_wrong_order'
   | 'win';
 
@@ -52,7 +62,15 @@ export type MatchState = {
   id: string;
   status: MatchStatus;
   mode: MatchMode;
+  /** Gizli içeriğin tipi ('number' | 'word'). */
+  contentType: ContentTypeId;
+  /** Kelime maçında harf uzunluğu (4-6, maç başına random; iki oyuncuya aynı).
+   *  Number maçlarda null. */
+  wordLength: number | null;
   roomCode: string | null;
+  /** Dostluk maçı mı (özel oda): true ise hiçbir kalıcı etki yok — ELO/XP/Veri/
+   *  lig/istatistik değişmez (sunucu garantisi). Gösterim/etiket için. */
+  isFriendly: boolean;
   player1: MatchPlayer;
   player2: MatchPlayer | null;
   /** Çağıranın rolü (maçın oyuncusu değilse state hiç üretilmez). */
@@ -120,6 +138,11 @@ export type OnlineGuess = {
   /** Sis Perdesi: bu tahminin feedback'i 4 sn maskeyle gösterilir (yalnız
    *  gösterim; değerlendirme sunucuda aynen yapılmıştır). */
   fogged?: boolean;
+  /** KELİME modu: bu tahmindeki YEŞİL (doğru harf+pozisyon) harf sayısı. Rakip
+   *  ilerleme kartı bunu gösterir ("N/uzunluk"). YALNIZ sayı — per-harf dizi
+   *  DEĞİL (rakibe pozisyon sızmaz). SAYI modunda yok. Per-harf renkler ayrı
+   *  kanaldan, yalnız tahmini yapan oyuncuya gelir (bkz. getMyMarks). */
+  greenCount?: number;
 };
 
 /** Bilgi protokollerinin verdiği kalıcı ipuçları (yalnız çağıranın; tur bazlı).
@@ -239,6 +262,13 @@ export type GuessOutcome = {
   clock2Ms: number;
   /** Sis Perdesi: bu tahminin feedback'i gecikmeli gösterilmeli (4 sn). */
   fogged?: boolean;
+  /** KELİME modu: bu (ÇAĞIRANA ait) tahminin per-harf Wordle renkleri 'GYX'
+   *  dizisi. YALNIZ tahmini yapan oyuncuya döner — rakip asla almaz. SAYI'da yok. */
+  marks?: string;
+  /** KELİME modu: bu tahmindeki yeşil sayısı (satıra da yazılır; rakip kartı). */
+  greenCount?: number;
+  /** Eklenen tahmin satırının id'si — istemci kendi tahtasını marks ile eşler. */
+  guessId?: number;
 };
 
 /** Maç sonu gizli sayı ifşası (get_match_reveal).

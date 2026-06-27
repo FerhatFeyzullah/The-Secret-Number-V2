@@ -1,4 +1,4 @@
-import { parseGuess } from '../game';
+import { parseGuess, parseWord, type ContentTypeId } from '../game';
 import { supabase } from '../supabase';
 import {
   guessRowToGuess,
@@ -24,6 +24,7 @@ import type {
   OnlineGuess,
   PlayerRole,
   PresenceInfo,
+  PrivateRoomMode,
   ProtocolHand,
   ProtocolHint,
   ProtocolUse,
@@ -122,9 +123,12 @@ async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T
   return data as T;
 }
 
-/** Tahmin/gizli sayıyı istemcide ön-doğrular; nihai otorite yine sunucudur. */
-function assertValidDigits(digits: string): void {
-  if (!parseGuess(digits).ok) {
+/** Tahmin/gizli içeriği istemcide ön-doğrular; nihai otorite yine sunucudur.
+ *  İçerik tipine göre DOĞRU parser kullanılır: sayı → parseGuess (3 rakam),
+ *  kelime → parseWord (4-6 TR harf; havuz üyeliği yalnız sunucuda). */
+function assertValidDigits(digits: string, contentType: ContentTypeId = 'number'): void {
+  const ok = contentType === 'word' ? parseWord(digits).ok : parseGuess(digits).ok;
+  if (!ok) {
     throw new OnlineError('invalid_digits', ERROR_MESSAGES.invalid_digits);
   }
 }
@@ -146,6 +150,12 @@ type OutcomePayload = {
   clock1_ms: number;
   clock2_ms: number;
   fogged?: boolean;
+  /** KELİME: çağıranın per-harf renkleri ('GYX'); number dönüşünde null/yok. */
+  marks?: string | null;
+  /** KELİME: yeşil sayısı; number'da null. */
+  green_count?: number | null;
+  /** KELİME: eklenen tahmin satırı id'si; number'da null. */
+  guess_id?: number | null;
 };
 
 function toTicket(p: TicketPayload): MatchTicket {
@@ -169,12 +179,26 @@ function toOutcome(p: OutcomePayload): GuessOutcome {
     clock2Ms: p.clock2_ms,
     // Yalnız işaretliyken eklenir (eski dönüş/teste şekil-uyumlu).
     ...(p.fogged ? { fogged: true } : {}),
+    // Kelime: çağıranın per-harf renkleri + yeşil sayısı + satır id'si;
+    // number dönüşünde hepsi null → eklenmez (eski şekil korunur).
+    ...(p.marks ? { marks: p.marks } : {}),
+    ...(p.green_count != null ? { greenCount: p.green_count } : {}),
+    ...(p.guess_id != null ? { guessId: p.guess_id } : {}),
   };
 }
 
-/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç (tek tur). */
-export async function findOrCreateQuickMatch(): Promise<MatchTicket> {
-  return toTicket(await callRpc<TicketPayload>('find_or_create_quick_match'));
+/** Hızlı maç: bekleyen maça katıl ya da kuyruğa yeni maç aç (tek tur).
+ *  contentType 'word' ise ayrı kelime kuyruğuna girer; sunucu maça random
+ *  uzunluk (4-6) atar. 'number' default'ta parametre gönderilmez (geriye uyumlu). */
+export async function findOrCreateQuickMatch(
+  contentType: ContentTypeId = 'number',
+): Promise<MatchTicket> {
+  return toTicket(
+    await callRpc<TicketPayload>(
+      'find_or_create_quick_match',
+      contentType === 'number' ? undefined : { p_content_type: contentType },
+    ),
+  );
 }
 
 /** Protokol maçı: ayrı kuyruk, Best of 3 (win_target=2). Quick'ten ayrı eşleşir. */
@@ -299,16 +323,19 @@ export async function resolveProtocolSelect(matchId: string): Promise<{ status: 
   return { status: p.status };
 }
 
-/** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra ayarlarıyla.
- *  Dönen roomCode rakiple paylaşılır. Varsayılanlar Hızlı Maç davranışıyla aynı. */
+/** Yeni özel oda açar; süre (kişi başı ms) + ilk sıra + oyun modu ayarlarıyla.
+ *  roomMode kamudaki karşılığının kurallarını birebir yansıtır (quick/protocol/
+ *  word); hepsi dostluk maçıdır (skora saymaz). Dönen roomCode rakiple paylaşılır. */
 export async function createPrivateRoom(
   clockMs: number = 60000,
   firstTurnMode: FirstTurnMode = 'random',
+  roomMode: PrivateRoomMode = 'quick',
 ): Promise<MatchTicket> {
   return toTicket(
     await callRpc<TicketPayload>('create_private_room', {
       p_clock_ms: clockMs,
       p_first_turn_mode: firstTurnMode,
+      p_room_mode: roomMode,
     }),
   );
 }
@@ -325,12 +352,15 @@ export async function markReady(matchId: string): Promise<void> {
   await callRpc('mark_ready', { p_match_id: matchId });
 }
 
-/** Gizli sayını belirler; iki oyuncu da yazınca sunucu maçı başlatır. */
+/** Gizli içeriğini belirler; iki oyuncu da yazınca sunucu maçı başlatır.
+ *  contentType='word' kelime maçında ZORUNLU — aksi halde sayı parser'ı
+ *  kelimeyi daha RPC'ye gitmeden reddeder. */
 export async function setSecret(
   matchId: string,
   digits: string,
+  contentType: ContentTypeId = 'number',
 ): Promise<{ status: MatchStatus }> {
-  assertValidDigits(digits);
+  assertValidDigits(digits, contentType);
   const payload = await callRpc<{ status: MatchStatus }>('set_secret', {
     p_match_id: matchId,
     p_digits: digits,
@@ -339,8 +369,12 @@ export async function setSecret(
 }
 
 /** Tahmin yapar; yalnızca çağırana ait güvenli sonucu döndürür. */
-export async function makeGuess(matchId: string, digits: string): Promise<GuessOutcome> {
-  assertValidDigits(digits);
+export async function makeGuess(
+  matchId: string,
+  digits: string,
+  contentType: ContentTypeId = 'number',
+): Promise<GuessOutcome> {
+  assertValidDigits(digits, contentType);
   return toOutcome(
     await callRpc<OutcomePayload>('make_guess', {
       p_match_id: matchId,
@@ -352,6 +386,18 @@ export async function makeGuess(matchId: string, digits: string): Promise<GuessO
 /** Sıradaki oyuncunun süresinin dolduğunu iddia eder; kararı sunucu verir. */
 export async function claimTimeout(matchId: string): Promise<GuessOutcome> {
   return toOutcome(await callRpc<OutcomePayload>('claim_timeout', { p_match_id: matchId }));
+}
+
+/** KELİME modu: ÇAĞIRANIN KENDİ tahminlerinin per-harf renkleri (id → 'GYX').
+ *  Sunucu guesser=auth.uid() ile sert filtreler → rakibin marks'ı ASLA gelmez.
+ *  İstemci yeniden bağlanınca/ekrana girince kendi tahtasını bundan boyar. */
+export async function getMyMarks(matchId: string): Promise<Record<number, string>> {
+  const rows = await callRpc<{ id: number; marks: string }[]>('get_my_marks', {
+    p_match_id: matchId,
+  });
+  const map: Record<number, string> = {};
+  for (const r of rows ?? []) map[r.id] = r.marks;
+  return map;
 }
 
 /** 30 sn'dir kopuk rakibe karşı hükmen galibiyet ister; değilse no-op. */

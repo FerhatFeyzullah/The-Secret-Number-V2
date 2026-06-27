@@ -15,6 +15,9 @@ export function MatchFoundScreen({
   myName,
   opponentName,
   mode,
+  isFriendly = false,
+  word = false,
+  winTarget = 1,
   clockMs,
   firstTurnMode,
   iAmCreator,
@@ -24,6 +27,13 @@ export function MatchFoundScreen({
    *  (ad geldiğinde tek geçiş — titreşim yok). */
   opponentName: string | null;
   mode: MatchMode;
+  /** Dostluk maçı mı (özel oda): etikete "· Dostluk" eklenir (skora saymaz). */
+  isFriendly?: boolean;
+  /** Kelime maçı mı (content_type='word', mode='quick') — etiket farklı. */
+  word?: boolean;
+  /** Galibiyet hedefi: >1 ise Bo3 (3 tur) rozeti gösterilir. Bo3'ün gerçek
+   *  kaynağı win_target'tır (mod'dan bağımsız: sayı protokol VE kelime Bo3). */
+  winTarget?: number;
   /** Konfig: kişi başı süre (ms). */
   clockMs: number;
   /** Konfig: ilk sıra modu. */
@@ -53,8 +63,17 @@ export function MatchFoundScreen({
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
   };
 
-  const modeLabel =
-    mode === 'quick' ? 'Hızlı Maç' : mode === 'protocol' ? 'Protokol Maçı' : 'Özel Oyun';
+  const baseLabel = word
+    ? 'Kelime Modu'
+    : mode === 'quick'
+      ? 'Hızlı Maç'
+      : mode === 'protocol'
+        ? 'Protokol Maçı'
+        : 'Özel Oyun';
+  // Dostluk maçında oyun türünü göster + "Dostluk" eki (skora saymaz). Özel
+  // hızlı oda mode='private' → "Özel Oyun"; protokol/kelime oda gerçek türünü
+  // gösterir, ek netleştirir.
+  const modeLabel = isFriendly && mode !== 'private' ? `${baseLabel} · Dostluk` : baseLabel;
   const turnPhrase =
     firstTurnMode === 'random' ? 'Rastgele' : iAmCreator ? 'Sen başlıyorsun' : 'Rakip başlıyor';
 
@@ -110,7 +129,7 @@ export function MatchFoundScreen({
         </Text>
       </Animated.View>
 
-      {mode === 'protocol' ? (
+      {winTarget > 1 ? (
         <Animated.View style={[styles.firstTurn, rise]}>
           <Feather name="layers" size={12} color={colors.violet} />
           <Text style={styles.firstTurnText}>

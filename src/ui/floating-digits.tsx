@@ -4,12 +4,16 @@ import { Animated, Easing, StyleSheet, useWindowDimensions } from 'react-native'
 import { colors, mono } from './theme';
 
 const DIGIT_COUNT = 14;
+/** Kelime modunda süzülen glifler: Türkçe alfabe (TR karakterler dahil). */
+const TR_LETTERS = 'abcçdefgğhıijklmnoöprsştuüvyz';
 
-function FloatingDigit({ index }: { index: number }) {
+function FloatingGlyph({ index, letters }: { index: number; letters: boolean }) {
   const { width, height } = useWindowDimensions();
-  // Her rakam için mount'ta bir kez seçilen sabit rastgele parametreler.
+  // Her glif için mount'ta bir kez seçilen sabit rastgele parametreler.
   const cfg = useRef({
-    digit: 1 + Math.floor(Math.random() * 9),
+    glyph: letters
+      ? TR_LETTERS[Math.floor(Math.random() * TR_LETTERS.length)]
+      : String(1 + Math.floor(Math.random() * 9)),
     x: Math.random() * (width - 40),
     y: Math.random() * height,
     drift: 60 + Math.random() * 90,
@@ -62,17 +66,17 @@ function FloatingDigit({ index }: { index: number }) {
           transform: [{ translateY }],
         },
       ]}>
-      {cfg.digit}
+      {cfg.glyph}
     </Animated.Text>
   );
 }
 
-/** Arka planda hafifçe süzülen soluk rakamlar. */
-export function FloatingDigits() {
+/** Arka planda hafifçe süzülen soluk rakamlar (kelime modunda: TR harfler). */
+export function FloatingDigits({ letters = false }: { letters?: boolean }) {
   return (
     <>
       {Array.from({ length: DIGIT_COUNT }, (_, i) => (
-        <FloatingDigit key={i} index={i} />
+        <FloatingGlyph key={i} index={i} letters={letters} />
       ))}
     </>
   );
