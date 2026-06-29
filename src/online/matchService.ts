@@ -57,6 +57,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_in_setup: 'Maç sayı belirleme fazında değil.',
   setup_expired: 'Sayı belirleme süresi doldu.',
   setup_not_expired: 'Sayı belirleme süresi henüz dolmadı.',
+  not_inter_round: 'Tur arası belirleme fazında değil.',
   match_already_ready: 'İki oyuncu da sayısını belirlemiş.',
   invalid_digits: 'Geçersiz sayı: 1-9 arasından 3 farklı rakam olmalı.',
   match_not_active: 'Maç aktif değil.',
@@ -417,6 +418,21 @@ export async function cancelSetupTimeout(
   matchId: string,
 ): Promise<{ status: MatchStatus; result: MatchResult }> {
   return callRpc('cancel_setup_timeout', { p_match_id: matchId });
+}
+
+/** Tur-arası (Bo3, round ≥ 2) belirleme süresi dolduysa ADİL çözüm: sırrını
+ *  giren oyuncu turu kazanır, iki taraf da girmediyse maç iptal olur. İdempotent
+ *  — her iki istemci de çağırabilir (karar sunucuda now() ile doğrulanır).
+ *  1. tur setup'ında çağrılmaz (orada cancel_setup_timeout geçerli). */
+export async function resolveSetupTimeout(
+  matchId: string,
+): Promise<{ status: MatchStatus; result: MatchResult | null; winner: string | null }> {
+  const p = await callRpc<{
+    status: MatchStatus;
+    result?: MatchResult | null;
+    winner?: string | null;
+  }>('resolve_setup_timeout', { p_match_id: matchId });
+  return { status: p.status, result: p.result ?? null, winner: p.winner ?? null };
 }
 
 /** Kuyruktan/odadan çıkış: bekleyen (waiting) maçı iptal eder.
