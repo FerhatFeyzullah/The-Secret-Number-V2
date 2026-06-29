@@ -47,6 +47,7 @@ export {
   markReady,
   OnlineError,
   resolveProtocolSelect,
+  resolveSetupTimeout,
   setProtocolSelection,
   setSecret,
   setSignalDeck,
