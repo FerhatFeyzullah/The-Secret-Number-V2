@@ -299,7 +299,7 @@ export default function MenuScreen() {
 
       {/* Alt: yalnızca sürüm (istatistik kartları kaldırıldı — online'da modal) */}
       <View style={styles.footer}>
-        <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        <Text style={styles.version}>v{Constants.expoConfig?.version ?? '2.0.0'}</Text>
       </View>
 
       <LeaderboardModal visible={boardOpen} onClose={() => setBoardOpen(false)} />

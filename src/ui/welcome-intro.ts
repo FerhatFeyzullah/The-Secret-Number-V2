@@ -17,7 +17,7 @@ export const WELCOME_INTRO: {
       icon: 'target',
       accent: colors.cyan,
       title: 'Amaç',
-      body: 'Rakibinin 3 haneli gizli sayısını ondan önce çöz. Sırayla tahmin eder, “kaç rakam doğru” ipucuyla yaklaşırsın.',
+      body: 'Rakibinin gizli kodunu ondan önce çöz — sayı modunda 3 haneli sayı, kelime modunda 4-6 harfli kelime. Sırayla tahmin eder, “kaç tanesi doğru” ipucuyla yaklaşırsın.',
     },
     {
       icon: 'wifi',
