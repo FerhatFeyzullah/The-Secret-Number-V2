@@ -86,7 +86,8 @@ export type MatchState = {
   currentTurn: string | null;
   clock1Ms: number;
   clock2Ms: number;
-  /** Konfig: kişi başı başlangıç süresi (ms). Özel oda 60/90/120 sn; quick 60 sn. */
+  /** Konfig: kişi başı TUR başına süre (ms; her tur başında sıfırlanır).
+   *  Özel oda 60/90/120/180 sn; sayı quick 60 sn; kelime quick 180 sn. */
   clockMs: number;
   /** Konfig: ilk tahmin sırası ('random' | 'creator'). */
   firstTurnMode: FirstTurnMode;
