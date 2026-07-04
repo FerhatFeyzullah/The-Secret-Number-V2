@@ -286,6 +286,16 @@ export type MatchReveal = {
   veriDelta: number | null;
 };
 
+/** Tur-bazlı gizli ifşa (get_round_reveal). Yalnızca KARARLAŞMIŞ tur için dolar
+ *  (biten tur veya bitmiş son tur); canlı turda sunucu 'round_not_revealable' fırlatır.
+ *  Tur-arası "break" ekranında iki oyuncunun o turdaki gizlisini göstermek için. */
+export type RoundReveal = {
+  /** Çağıranın o turdaki gizli kelimesi/sayısı; satır yoksa null. */
+  mine: string | null;
+  /** Rakibin o turdaki gizlisi; satır yoksa null (setup-timeout ile biten tur). */
+  opponent: string | null;
+};
+
 /** Lider tablosu satırı (get_leaderboard; yalnızca okuma, puan sunucuda hesaplanır). */
 export type LeaderboardEntry = {
   rank: number;

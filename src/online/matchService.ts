@@ -17,6 +17,7 @@ import type {
   LeaderboardEntry,
   MatchResult,
   MatchReveal,
+  RoundReveal,
   MyRank,
   MatchState,
   MatchStatus,
@@ -567,6 +568,17 @@ export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
     xpDelta: p.xp_delta ?? null,
     veriDelta: p.veri_delta ?? null,
   };
+}
+
+/** Tur-bazlı gizli ifşa (yalnızca KARARLAŞMIŞ tur + çağıran oyuncu). Tur-arası
+ *  break ekranında iki oyuncunun o turdaki gizlisini göstermek için. Canlı tur
+ *  istenirse sunucu 'round_not_revealable' fırlatır (rakip kelimesi sızmaz). */
+export async function getRoundReveal(matchId: string, round: number): Promise<RoundReveal> {
+  const p = await callRpc<{ mine: string | null; opponent: string | null }>('get_round_reveal', {
+    p_match_id: matchId,
+    p_round: round,
+  });
+  return { mine: p.mine ?? null, opponent: p.opponent ?? null };
 }
 
 async function currentUserId(): Promise<string | null> {
