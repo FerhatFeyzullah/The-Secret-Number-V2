@@ -11,8 +11,14 @@ const TIMES: { ms: number; big: string }[] = [
   { ms: 60000, big: '1' },
   { ms: 90000, big: '1.5' },
   { ms: 120000, big: '2' },
+  { ms: 180000, big: '3' },
 ];
-const TIME_TXT: Record<number, string> = { 60000: '1 dakika', 90000: '1.5 dakika', 120000: '2 dakika' };
+const TIME_TXT: Record<number, string> = {
+  60000: '1 dakika',
+  90000: '1.5 dakika',
+  120000: '2 dakika',
+  180000: '3 dakika',
+};
 
 const TURNS: { mode: FirstTurnMode; icon: 'grid' | 'user'; nm: string; sub: string }[] = [
   { mode: 'random', icon: 'grid', nm: 'Rastgele', sub: 'Sistem seçer' },

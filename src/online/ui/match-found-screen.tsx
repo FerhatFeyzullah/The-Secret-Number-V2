@@ -6,7 +6,8 @@ import type { FirstTurnMode, MatchMode } from '@/online/types';
 import { colors, cyanAlpha, mono } from '@/ui/theme';
 import { Avatar } from './parts';
 
-const clockLabel = (ms: number) => (ms === 120000 ? '2 dk' : ms === 90000 ? '1.5 dk' : '1 dk');
+const clockLabel = (ms: number) =>
+  ms === 180000 ? '3 dk' : ms === 120000 ? '2 dk' : ms === 90000 ? '1.5 dk' : '1 dk';
 
 /** Kısa kutlama anı: VS açılışı + gerçek oyuncu adları + maç bilgisi.
  *  El sıkışması OTOMATİK: ekran ~7 sn gösterilir, sonraki ekrana kendiliğinden
