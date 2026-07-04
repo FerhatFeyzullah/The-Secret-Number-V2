@@ -20,11 +20,14 @@ export function RoundSetup({
   matchId,
   match,
   lastRound,
+  reveal,
 }: {
   matchId: string;
   match: MatchState;
   /** Biten turun sonucu (kim + neden); yalnızca bilgi, gizli sayı içermez. */
   lastRound: { winnerIsMe: boolean; reason: 'win' | 'timeout' } | null;
+  /** Biten turun iki gizli sayısı (break ekranında gösterilir); yoksa null. */
+  reveal?: { mine: string | null; opponent: string | null } | null;
 }) {
   const [dials, setDials] = useState<number[]>([1, 2, 3]);
   const [locked, setLocked] = useState(false);
@@ -120,6 +123,24 @@ export function RoundSetup({
           </Text>
         ) : null}
         {score}
+
+        {/* Biten turun İKİ sayısı (result-overlay ifşa düzeni yansıtılır). */}
+        <View style={styles.reveal}>
+          <View style={styles.revealCol}>
+            <Text style={styles.revealLabel}>SENİN SAYIN</Text>
+            <Text numberOfLines={1} style={[styles.revealNum, { color: colors.cyan }]}>
+              {reveal?.mine ? reveal.mine.split('').join(' ') : '—'}
+            </Text>
+          </View>
+          <View style={styles.revealDivider} />
+          <View style={styles.revealCol}>
+            <Text style={styles.revealLabel}>RAKİBİN SAYISI</Text>
+            <Text numberOfLines={1} style={[styles.revealNum, { color: colors.amber }]}>
+              {reveal?.opponent ? reveal.opponent.split('').join(' ') : '—'}
+            </Text>
+          </View>
+        </View>
+
         <Text style={styles.breakTitle}>
           {myWins > oppWins ? 'Öndesin' : myWins < oppWins ? 'Rakip önde' : 'Berabere'}
         </Text>
@@ -212,6 +233,42 @@ const styles = StyleSheet.create({
   },
   resultWin: {
     color: colors.success,
+  },
+  reveal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    alignSelf: 'stretch',
+    marginHorizontal: 20,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  revealCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  revealLabel: {
+    fontSize: 8,
+    color: colors.dim,
+    fontFamily: mono,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  revealNum: {
+    fontSize: 28,
+    fontWeight: '800',
+    fontFamily: mono,
+    letterSpacing: 2,
+    textShadowRadius: 14,
+  },
+  revealDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   breakTitle: {
     fontSize: 18,
