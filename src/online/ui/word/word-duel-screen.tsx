@@ -18,11 +18,13 @@ import {
   getMatchReveal,
   getMyMarks,
   getMyRank,
+  getRoundReveal,
   makeGuess,
   OnlineError,
   useMatch,
   useMatchSession,
   type MatchReveal,
+  type RoundReveal,
 } from '@/online';
 import { useSfx, type SfxName } from '@/sfx';
 import { getToggle } from '@/storage';
@@ -82,6 +84,9 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const [lastRound, setLastRound] = useState<{ winnerIsMe: boolean; reason: 'win' | 'timeout' } | null>(
     null,
   );
+  // Biten turun iki gizli kelimesi (tur-arası break ekranında gösterilir).
+  // round ile eşlenir → bayat turun ifşası gösterilmez.
+  const [roundReveal, setRoundReveal] = useState<({ round: number } & RoundReveal) | null>(null);
 
   // Ses/haptik tercihleri (sayı düellosuyla aynı kaynak).
   const [soundOn, setSoundOn] = useState(true);
@@ -98,10 +103,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     [soundOn, playSfx],
   );
   const buzz = useCallback(
-    (kind: 'tap' | 'feedback' | 'win' | 'lose') => {
+    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn') => {
       if (!hapticsOn || !canHaptics) return;
       if (kind === 'tap') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       else if (kind === 'feedback') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      else if (kind === 'turn') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       else if (kind === 'win') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
@@ -181,6 +187,14 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     if (!isMine) setEntry([]);
   }, [isMine]);
 
+  // Sıra BANA geçince (false→true) haptik "senin sıran" darbesi (ayar açıksa;
+  // buzz zaten hapticsOn+canHaptics kapılı). Rakibe devredince titremez.
+  const prevIsMineRef = useRef(false);
+  useEffect(() => {
+    if (isMine && !prevIsMineRef.current) buzz('turn');
+    prevIsMineRef.current = isMine;
+  }, [isMine, buzz]);
+
   useEffect(() => {
     session.claim(matchId, 'match');
   }, [matchId, session]);
@@ -209,8 +223,14 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
         setLastRound({ winnerIsMe: winnerIsP1 === p1, reason: 'timeout' });
       }
       prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
+      // Biten turun İKİ kelimesini çek (break ekranı için). Kendi kelimem yerelde
+      // varsa anında göster; rakibinki (ve otoriteli kendi) RPC ile gelir.
+      setRoundReveal({ round: prevRound, mine: recallMySecret(matchId, prevRound), opponent: null });
+      getRoundReveal(matchId, prevRound)
+        .then((r) => setRoundReveal({ round: prevRound, ...r }))
+        .catch(() => {});
     }
-  }, [match, guesses, p1, myId]);
+  }, [match, guesses, p1, myId, matchId]);
 
   // Maç bitince reveal + sinyal destesi (sayı düellosuyla aynı).
   useEffect(() => {
@@ -366,7 +386,13 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
         <WordOrbs />
         <View style={styles.content}>
           <View style={styles.headerRow}>{exitButton}</View>
-          <WordSetupPanel matchId={matchId} match={match} active lastRound={lastRound} />
+          <WordSetupPanel
+            matchId={matchId}
+            match={match}
+            active
+            lastRound={lastRound}
+            reveal={roundReveal && roundReveal.round === match.currentRound - 1 ? roundReveal : null}
+          />
         </View>
       </Screen>
     );

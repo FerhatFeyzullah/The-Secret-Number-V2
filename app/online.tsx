@@ -230,7 +230,12 @@ export default function OnlineScreen() {
   }, [resetToLobby, session]);
 
   const createRoom = useCallback(
-    async (clockMs: number, firstTurnMode: FirstTurnMode, roomMode: PrivateRoomMode) => {
+    async (
+      clockMs: number,
+      firstTurnMode: FirstTurnMode,
+      roomMode: PrivateRoomMode,
+      wordLength: number | null = null,
+    ) => {
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
@@ -244,7 +249,7 @@ export default function OnlineScreen() {
     setPendingFriendly(true);
     setPhase('create-room');
     try {
-      const ticket = await createPrivateRoom(clockMs, firstTurnMode, roomMode);
+      const ticket = await createPrivateRoom(clockMs, firstTurnMode, roomMode, wordLength);
       if (seq !== searchSeqRef.current) {
         void leaveMatch(ticket.matchId).catch(() => {});
         return;

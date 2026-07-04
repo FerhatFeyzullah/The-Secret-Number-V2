@@ -17,6 +17,7 @@ import type {
   LeaderboardEntry,
   MatchResult,
   MatchReveal,
+  RoundReveal,
   MyRank,
   MatchState,
   MatchStatus,
@@ -57,6 +58,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_in_setup: 'Maç sayı belirleme fazında değil.',
   setup_expired: 'Sayı belirleme süresi doldu.',
   setup_not_expired: 'Sayı belirleme süresi henüz dolmadı.',
+  not_inter_round: 'Tur arası belirleme fazında değil.',
   match_already_ready: 'İki oyuncu da sayısını belirlemiş.',
   invalid_digits: 'Geçersiz sayı: 1-9 arasından 3 farklı rakam olmalı.',
   match_not_active: 'Maç aktif değil.',
@@ -330,12 +332,15 @@ export async function createPrivateRoom(
   clockMs: number = 60000,
   firstTurnMode: FirstTurnMode = 'random',
   roomMode: PrivateRoomMode = 'quick',
+  /** Kelime odasında sabit harf sayısı (4/5/6); null → her tur rastgele. */
+  wordLength: number | null = null,
 ): Promise<MatchTicket> {
   return toTicket(
     await callRpc<TicketPayload>('create_private_room', {
       p_clock_ms: clockMs,
       p_first_turn_mode: firstTurnMode,
       p_room_mode: roomMode,
+      p_word_length: wordLength,
     }),
   );
 }
@@ -417,6 +422,21 @@ export async function cancelSetupTimeout(
   matchId: string,
 ): Promise<{ status: MatchStatus; result: MatchResult }> {
   return callRpc('cancel_setup_timeout', { p_match_id: matchId });
+}
+
+/** Tur-arası (Bo3, round ≥ 2) belirleme süresi dolduysa ADİL çözüm: sırrını
+ *  giren oyuncu turu kazanır, iki taraf da girmediyse maç iptal olur. İdempotent
+ *  — her iki istemci de çağırabilir (karar sunucuda now() ile doğrulanır).
+ *  1. tur setup'ında çağrılmaz (orada cancel_setup_timeout geçerli). */
+export async function resolveSetupTimeout(
+  matchId: string,
+): Promise<{ status: MatchStatus; result: MatchResult | null; winner: string | null }> {
+  const p = await callRpc<{
+    status: MatchStatus;
+    result?: MatchResult | null;
+    winner?: string | null;
+  }>('resolve_setup_timeout', { p_match_id: matchId });
+  return { status: p.status, result: p.result ?? null, winner: p.winner ?? null };
 }
 
 /** Kuyruktan/odadan çıkış: bekleyen (waiting) maçı iptal eder.
@@ -551,6 +571,17 @@ export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
     xpDelta: p.xp_delta ?? null,
     veriDelta: p.veri_delta ?? null,
   };
+}
+
+/** Tur-bazlı gizli ifşa (yalnızca KARARLAŞMIŞ tur + çağıran oyuncu). Tur-arası
+ *  break ekranında iki oyuncunun o turdaki gizlisini göstermek için. Canlı tur
+ *  istenirse sunucu 'round_not_revealable' fırlatır (rakip kelimesi sızmaz). */
+export async function getRoundReveal(matchId: string, round: number): Promise<RoundReveal> {
+  const p = await callRpc<{ mine: string | null; opponent: string | null }>('get_round_reveal', {
+    p_match_id: matchId,
+    p_round: round,
+  });
+  return { mine: p.mine ?? null, opponent: p.opponent ?? null };
 }
 
 async function currentUserId(): Promise<string | null> {

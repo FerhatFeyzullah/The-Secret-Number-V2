@@ -11,12 +11,14 @@ import {
   getMatchReveal,
   getMyHand,
   getMyRank,
+  getRoundReveal,
   makeGuess,
   OnlineError,
   useMatch,
   useMatchSession,
   type MatchReveal,
   type ProtocolHint,
+  type RoundReveal,
 } from '@/online';
 import { getProtocol } from '@/protocols/catalog';
 import { useSfx, type SfxName } from '@/sfx';
@@ -72,6 +74,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const [lastRound, setLastRound] = useState<{ winnerIsMe: boolean; reason: 'win' | 'timeout' } | null>(
     null,
   );
+  // Biten turun iki gizli sayısı (tur-arası break ekranında gösterilir); round
+  // ile eşlenir → bayat turun ifşası gösterilmez.
+  const [roundReveal, setRoundReveal] = useState<({ round: number } & RoundReveal) | null>(null);
 
   // Ses/haptik tercihleri (offline ekranıyla aynı kaynak).
   const [soundOn, setSoundOn] = useState(true);
@@ -88,10 +93,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     [soundOn, playSfx],
   );
   const buzz = useCallback(
-    (kind: 'tap' | 'feedback' | 'win' | 'lose') => {
+    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn') => {
       if (!hapticsOn || !canHaptics) return;
       if (kind === 'tap') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       else if (kind === 'feedback') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      else if (kind === 'turn') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       else if (kind === 'win') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
@@ -126,6 +132,14 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     if (!isMine) setEntry([]);
   }, [isMine]);
 
+  // Sıra BANA geçince (false→true) haptik "senin sıran" darbesi (ayar açıksa;
+  // buzz zaten hapticsOn+canHaptics kapılı). Rakibe devredince titremez.
+  const prevIsMineRef = useRef(false);
+  useEffect(() => {
+    if (isMine && !prevIsMineRef.current) buzz('turn');
+    prevIsMineRef.current = isMine;
+  }, [isMine, buzz]);
+
   // Merkezi maç sahibine kaydol: çıkış temizliği tek yerden (provider izleyici).
   useEffect(() => {
     session.claim(matchId, 'match');
@@ -158,8 +172,13 @@ export function DuelScreen({ matchId }: { matchId: string }) {
         setLastRound({ winnerIsMe: winnerIsP1 === p1, reason: 'timeout' });
       }
       prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
+      // Biten turun İKİ sayısını çek (break ekranı için). Sayı modunda kendi
+      // sayım yerelde tutulmaz → ikisi de sunucudan (RPC gelene dek "—").
+      getRoundReveal(matchId, prevRound)
+        .then((r) => setRoundReveal({ round: prevRound, ...r }))
+        .catch(() => {});
     }
-  }, [match, guesses, p1, myId]);
+  }, [match, guesses, p1, myId, matchId]);
 
   // Not: süre bitince otomatik zaman aşımı artık useMatch içinde merkezî olarak
   // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
@@ -618,7 +637,12 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       <Screen>
         <View style={styles.content}>
           <View style={styles.topRow}>{exitButton}</View>
-          <RoundSetup matchId={matchId} match={match} lastRound={lastRound} />
+          <RoundSetup
+            matchId={matchId}
+            match={match}
+            lastRound={lastRound}
+            reveal={roundReveal && roundReveal.round === match.currentRound - 1 ? roundReveal : null}
+          />
         </View>
       </Screen>
     );

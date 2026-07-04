@@ -22,6 +22,7 @@ import {
   fetchProtocolUses,
   heartbeat,
   OnlineError,
+  resolveSetupTimeout,
 } from './matchService';
 import type { MatchState, OnlineGuess, PresenceInfo, ProtocolUse } from './types';
 
@@ -428,6 +429,29 @@ export function useMatch(matchId: string | null): UseMatchResult {
       // Drift: sunucu "henüz dolmadı" derse kilidi aç, sonraki tikte tekrar dene.
       if (e instanceof OnlineError && e.code === 'clock_not_expired') {
         claimedTurnRef.current = null;
+      }
+    });
+  }, [matchId, match, now]);
+
+  // Tur-arası (Bo3, round ≥ 2) belirleme zaman aşımı: setup_deadline geçince
+  // HER iki istemci de resolve eder (idempotent, karar sunucuda). Sırrını giren
+  // turu kazanır; iki taraf da girmediyse maç iptal → oyalama ile lider'i
+  // sonsuz beklemeye/forfeit'e zorlama açığı kapanır. 1. tur (current_round=1)
+  // BURADA ELE ALINMAZ: route ekranı cancel_setup_timeout ile iptal eder
+  // (sunucu da round=1'i not_inter_round ile reddeder — çift güvence).
+  const resolvedSetupRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!matchId || !match || match.status !== 'setup') return;
+    if (match.currentRound <= 1 || !match.setupDeadline) return;
+    if (now <= Date.parse(match.setupDeadline)) return;
+    // Tur + deadline başına bir kez (yeni tur taze deadline'la yeniden tetikler).
+    const key = `${match.currentRound}:${match.setupDeadline}`;
+    if (resolvedSetupRef.current === key) return;
+    resolvedSetupRef.current = key;
+    void resolveSetupTimeout(matchId).catch((e) => {
+      // Drift: sunucu "henüz dolmadı" derse kilidi aç, sonraki tikte tekrar dene.
+      if (e instanceof OnlineError && e.code === 'setup_not_expired') {
+        resolvedSetupRef.current = null;
       }
     });
   }, [matchId, match, now]);

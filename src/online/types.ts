@@ -86,7 +86,8 @@ export type MatchState = {
   currentTurn: string | null;
   clock1Ms: number;
   clock2Ms: number;
-  /** Konfig: kişi başı başlangıç süresi (ms). Özel oda 60/90/120 sn; quick 60 sn. */
+  /** Konfig: kişi başı TUR başına süre (ms; her tur başında sıfırlanır).
+   *  Özel oda 60/90/120/180 sn; sayı quick 60 sn; kelime quick 180 sn. */
   clockMs: number;
   /** Konfig: ilk tahmin sırası ('random' | 'creator'). */
   firstTurnMode: FirstTurnMode;
@@ -284,6 +285,16 @@ export type MatchReveal = {
   ratingDelta: number | null;
   xpDelta: number | null;
   veriDelta: number | null;
+};
+
+/** Tur-bazlı gizli ifşa (get_round_reveal). Yalnızca KARARLAŞMIŞ tur için dolar
+ *  (biten tur veya bitmiş son tur); canlı turda sunucu 'round_not_revealable' fırlatır.
+ *  Tur-arası "break" ekranında iki oyuncunun o turdaki gizlisini göstermek için. */
+export type RoundReveal = {
+  /** Çağıranın o turdaki gizli kelimesi/sayısı; satır yoksa null. */
+  mine: string | null;
+  /** Rakibin o turdaki gizlisi; satır yoksa null (setup-timeout ile biten tur). */
+  opponent: string | null;
 };
 
 /** Lider tablosu satırı (get_leaderboard; yalnızca okuma, puan sunucuda hesaplanır). */
