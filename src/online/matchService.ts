@@ -332,12 +332,15 @@ export async function createPrivateRoom(
   clockMs: number = 60000,
   firstTurnMode: FirstTurnMode = 'random',
   roomMode: PrivateRoomMode = 'quick',
+  /** Kelime odasında sabit harf sayısı (4/5/6); null → her tur rastgele. */
+  wordLength: number | null = null,
 ): Promise<MatchTicket> {
   return toTicket(
     await callRpc<TicketPayload>('create_private_room', {
       p_clock_ms: clockMs,
       p_first_turn_mode: firstTurnMode,
       p_room_mode: roomMode,
+      p_word_length: wordLength,
     }),
   );
 }

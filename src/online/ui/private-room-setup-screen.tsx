@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { FirstTurnMode, PrivateRoomMode } from '@/online';
 import { GlassButton } from '@/ui/glass';
@@ -32,26 +32,45 @@ const MODES: { mode: PrivateRoomMode; icon: 'zap' | 'cpu' | 'type'; nm: string; 
   { mode: 'word', icon: 'type', nm: 'Kelime', sub: 'Wordle · Bo3' },
 ];
 
-/** Özel oda ayar ekranı: oyun modu + maç süresi (kişi başı) + ilk tahmin sırası.
- *  "ODA KUR" → onConfirm(clockMs, firstTurnMode, roomMode). Varsayılan: Hızlı / 1 dk / Rastgele. */
+/** Kelime odası harf sayısı: 4/5/6 → 3 tur boyunca sabit; null → her tur rastgele. */
+const LENGTHS: { val: number | null; big: string; unit: string }[] = [
+  { val: 4, big: '4', unit: 'HARF' },
+  { val: 5, big: '5', unit: 'HARF' },
+  { val: 6, big: '6', unit: 'HARF' },
+  { val: null, big: '?', unit: 'RASTGELE' },
+];
+
+/** Özel oda ayar ekranı: oyun modu + (kelimede harf sayısı) + maç süresi + ilk sıra.
+ *  "ODA KUR" → onConfirm(clockMs, firstTurnMode, roomMode, wordLength). wordLength
+ *  yalnız kelime odasında anlamlı (4/5/6 sabit ya da null → rastgele). Varsayılan:
+ *  Hızlı / 1 dk / Rastgele / Rastgele-uzunluk. */
 export function PrivateRoomSetupScreen({
   busy,
   onConfirm,
   onBack,
 }: {
   busy?: boolean;
-  onConfirm: (clockMs: number, firstTurnMode: FirstTurnMode, roomMode: PrivateRoomMode) => void;
+  onConfirm: (
+    clockMs: number,
+    firstTurnMode: FirstTurnMode,
+    roomMode: PrivateRoomMode,
+    wordLength: number | null,
+  ) => void;
   onBack: () => void;
 }) {
   const [roomMode, setRoomMode] = useState<PrivateRoomMode>('quick');
   const [clockMs, setClockMs] = useState(60000);
   const [turn, setTurn] = useState<FirstTurnMode>('random');
+  const [wordLength, setWordLength] = useState<number | null>(null);
 
   return (
     <View style={styles.root}>
       <LobbyHeader title="ÖZEL ODA" onBack={onBack} />
 
-      <View style={styles.body}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         {/* Oyun modu */}
         <View style={styles.sec}>
           <View style={styles.lbl}>
@@ -76,6 +95,31 @@ export function PrivateRoomSetupScreen({
             })}
           </View>
         </View>
+
+        {/* Kelime uzunluğu — yalnız kelime odasında */}
+        {roomMode === 'word' ? (
+          <View style={styles.sec}>
+            <View style={styles.lbl}>
+              <Feather name="type" size={14} color={colors.cyan} />
+              <Text style={styles.lblText}>KELİME UZUNLUĞU · 3 TUR</Text>
+            </View>
+            <View style={styles.row}>
+              {LENGTHS.map((l) => {
+                const on = wordLength === l.val;
+                return (
+                  <Pressable
+                    key={l.unit + l.big}
+                    onPress={() => setWordLength(l.val)}
+                    style={[styles.timeCard, on && styles.timeCardOn]}>
+                    {on ? <View style={styles.timeDot} /> : null}
+                    <Text style={[styles.timeBig, on && styles.timeBigOn]}>{l.big}</Text>
+                    <Text style={[styles.timeUnit, on && styles.timeUnitOn]}>{l.unit}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         {/* Süre */}
         <View style={styles.sec}>
@@ -131,19 +175,28 @@ export function PrivateRoomSetupScreen({
           <Text style={styles.summaryText}>
             Her oyuncuya <Text style={styles.summaryB}>{TIME_TXT[clockMs]}</Text>, ilk sırayı{' '}
             <Text style={styles.summaryB}>{turn === 'random' ? 'sistem' : 'sen'}</Text> tarafından belirlenir.
+            {roomMode === 'word' ? (
+              <>
+                {' '}Kelime{' '}
+                <Text style={styles.summaryB}>
+                  {wordLength ? `${wordLength} harf (3 tur sabit)` : 'her tur rastgele uzunlukta'}
+                </Text>.
+              </>
+            ) : null}{' '}
             Kodları kilitleyince maç başlar.
           </Text>
         </View>
 
-        <View style={styles.spacer} />
+      </ScrollView>
 
+      <View style={styles.footer}>
         <GlassButton
           label={busy ? 'Oda kuruluyor…' : 'ODA KUR'}
           accent={colors.cyan}
           variant="fill"
           disabled={busy}
           icon={<Feather name="plus" size={16} color={colors.ice} />}
-          onPress={() => onConfirm(clockMs, turn, roomMode)}
+          onPress={() => onConfirm(clockMs, turn, roomMode, roomMode === 'word' ? wordLength : null)}
         />
       </View>
     </View>
@@ -154,9 +207,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  body: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
     paddingTop: 6,
+    paddingBottom: 16,
+  },
+  footer: {
+    paddingTop: 10,
   },
   sec: {
     marginBottom: 24,
@@ -293,8 +352,5 @@ const styles = StyleSheet.create({
   summaryB: {
     color: colors.ice,
     fontWeight: '700',
-  },
-  spacer: {
-    flex: 1,
   },
 });
