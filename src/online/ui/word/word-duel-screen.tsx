@@ -103,10 +103,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     [soundOn, playSfx],
   );
   const buzz = useCallback(
-    (kind: 'tap' | 'feedback' | 'win' | 'lose') => {
+    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn') => {
       if (!hapticsOn || !canHaptics) return;
       if (kind === 'tap') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       else if (kind === 'feedback') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      else if (kind === 'turn') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       else if (kind === 'win') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
@@ -185,6 +186,14 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!isMine) setEntry([]);
   }, [isMine]);
+
+  // Sıra BANA geçince (false→true) haptik "senin sıran" darbesi (ayar açıksa;
+  // buzz zaten hapticsOn+canHaptics kapılı). Rakibe devredince titremez.
+  const prevIsMineRef = useRef(false);
+  useEffect(() => {
+    if (isMine && !prevIsMineRef.current) buzz('turn');
+    prevIsMineRef.current = isMine;
+  }, [isMine, buzz]);
 
   useEffect(() => {
     session.claim(matchId, 'match');
