@@ -110,6 +110,12 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  // refresh()'in faz/moda göre gereksiz sorgu atlaması için son maç meta'sı
+  // (free-tier yükünü azaltır: ön-oyunda guesses/uses, protokol-dışı maçta uses yok).
+  const matchMetaRef = useRef<{ status: MatchState['status'] | null; isProtocol: boolean }>({
+    status: null,
+    isProtocol: false,
+  });
   // id → username cache'i: realtime payload'ında ad gelmez; bilinen adlar
   // buradan doldurulur, bilinmeyenler backfillUsernames ile bir kez çekilir.
   const usernamesRef = useRef<Record<string, string>>({});
@@ -158,11 +164,21 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const refresh = useCallback(async () => {
     if (!matchId) return;
     try {
+      // Free-tier yükünü azalt: yalnız o fazda/moda ANLAMLI sorguları çalıştır.
+      //  • guesses: sadece 'active' iken değişir (ön-oyunda tur boş). İlk yüklemede
+      //    (status null) çek — mevcut geçmişi doldurmak için.
+      //  • protokol kullanımları: yalnız protokol maçında ve seçim/aktif fazda.
+      // Atlanan sorgu null döner → ilgili state'e DOKUNULMAZ (mevcut veri silinmez).
+      const { status: metaStatus, isProtocol } = matchMetaRef.current;
+      const firstLoad = metaStatus === null;
+      const needGuesses = firstLoad || metaStatus === 'active';
+      const needUses =
+        firstLoad || (isProtocol && (metaStatus === 'active' || metaStatus === 'protocol_select'));
       const [state, guessList, presenceList, useList] = await Promise.all([
         fetchMatchState(matchId),
-        fetchGuesses(matchId),
+        needGuesses ? fetchGuesses(matchId) : Promise.resolve(null),
         fetchPresence(matchId),
-        fetchProtocolUses(matchId),
+        needUses ? fetchProtocolUses(matchId) : Promise.resolve(null),
       ]);
       if (!mountedRef.current) return;
       // Tam fetch'le gelen adları cache'e işle (realtime birleşmeleri kullanır).
@@ -172,9 +188,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
         }
       }
       setMatch(state);
-      setGuesses(guessList);
+      if (guessList !== null) setGuesses(guessList);
       setPresence(Object.fromEntries(presenceList.map((p) => [p.player, p])));
-      setProtocolUses(useList);
+      if (useList !== null) setProtocolUses(useList);
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
@@ -183,6 +199,14 @@ export function useMatch(matchId: string | null): UseMatchResult {
       if (mountedRef.current) setLoading(false);
     }
   }, [matchId]);
+
+  // matchMetaRef'i güncel tut — refresh() faz/moda göre gereksiz sorguları atlar.
+  useEffect(() => {
+    matchMetaRef.current = {
+      status: match?.status ?? null,
+      isProtocol: match?.mode === 'protocol',
+    };
+  }, [match?.status, match?.mode]);
 
   // Realtime kaçaklarına karşı EMNİYET AĞI (poll). Gerçek cihazda postgres_changes
   // gecikebilir/düşebilir (hücresel ağ, arka plan throttle, sessiz websocket ölümü);
