@@ -158,7 +158,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Hakkında</Text>
           <Text style={styles.about}>
             Gizemli Sayılar — sayı ve kelime tahmin düellosu.{'\n'}
-            Sürüm v{Constants.expoConfig?.version ?? '2.0.0'}
+            Sürüm v{Constants.expoConfig?.version ?? '2.2.0'}
           </Text>
         </GlassCard>
       </ScrollView>
