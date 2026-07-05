@@ -51,6 +51,19 @@ const MATCH_FOUND_HOLD_MS = 7000;
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
 
+/** Matchmaking RPC'si için istemci-taraflı zaman aşımı. Free-tier yük altında
+ *  sunucu yanıtı gecikirse kullanıcı sonsuz "yükleniyor"da TAKILMASIN: süre
+ *  aşılınca isteği eskitip lobiye net hatayla döneriz (silent stall yerine). */
+const MATCHMAKE_TIMEOUT_MS = 15000;
+const BUSY_MSG = 'Sunucu şu an yoğun, lütfen tekrar dene.';
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('matchmake_timeout')), ms)),
+  ]);
+}
+const isTimeout = (e: unknown) => e instanceof Error && e.message === 'matchmake_timeout';
+
 export default function OnlineScreen() {
   const router = useRouter();
   const { name } = useProfile();
@@ -166,11 +179,14 @@ export default function OnlineScreen() {
     setPendingFriendly(false);
     setPhase('searching');
     try {
-      const ticket = await (m === 'protocol'
-        ? findOrCreateProtocolMatch()
-        : m === 'word'
-          ? findOrCreateQuickMatch('word')
-          : findOrCreateQuickMatch());
+      const ticket = await withTimeout(
+        m === 'protocol'
+          ? findOrCreateProtocolMatch()
+          : m === 'word'
+            ? findOrCreateQuickMatch('word')
+            : findOrCreateQuickMatch(),
+        MATCHMAKE_TIMEOUT_MS,
+      );
       if (seq !== searchSeqRef.current) {
         // Bu arama iptal edildi/yenilendi: dönen maçı sessizce kapat.
         void leaveMatch(ticket.matchId).catch(() => {});
@@ -181,7 +197,17 @@ export default function OnlineScreen() {
       // Bekleyen bir maça katıldıysak zaten eşleştik.
       if (ticket.status !== 'waiting') setPhase('match-found');
     } catch (e) {
-      if (seq === searchSeqRef.current) setError(errMsg(e));
+      if (seq !== searchSeqRef.current) return;
+      if (isTimeout(e)) {
+        // Sunucu yanıtı gecikti: takılma yerine lobiye net hatayla dön (olası
+        // sahipsiz waiting sonraki aramada _cancel_unstarted_matchmade ile temizlenir).
+        searchSeqRef.current += 1;
+        setMatchId(null);
+        setNotice(BUSY_MSG);
+        setPhase('lobby');
+      } else {
+        setError(errMsg(e));
+      }
     }
   }, [session]);
   const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
@@ -249,7 +275,10 @@ export default function OnlineScreen() {
     setPendingFriendly(true);
     setPhase('create-room');
     try {
-      const ticket = await createPrivateRoom(clockMs, firstTurnMode, roomMode, wordLength);
+      const ticket = await withTimeout(
+        createPrivateRoom(clockMs, firstTurnMode, roomMode, wordLength),
+        MATCHMAKE_TIMEOUT_MS,
+      );
       if (seq !== searchSeqRef.current) {
         void leaveMatch(ticket.matchId).catch(() => {});
         return;
@@ -258,7 +287,15 @@ export default function OnlineScreen() {
       session.claim(ticket.matchId, 'lobby');
       setRoomCode(ticket.roomCode ?? null);
     } catch (e) {
-      if (seq === searchSeqRef.current) setError(errMsg(e));
+      if (seq !== searchSeqRef.current) return;
+      if (isTimeout(e)) {
+        searchSeqRef.current += 1;
+        setMatchId(null);
+        setNotice(BUSY_MSG);
+        setPhase('lobby');
+      } else {
+        setError(errMsg(e));
+      }
     }
   }, [session]);
 
@@ -297,7 +334,7 @@ export default function OnlineScreen() {
     setPendingFriendly(true);
     setJoinBusy(true);
     try {
-      const ticket = await joinPrivateRoom(code);
+      const ticket = await withTimeout(joinPrivateRoom(code), MATCHMAKE_TIMEOUT_MS);
       if (seq !== searchSeqRef.current) {
         // Kullanıcı beklerken vazgeçti: katıldığımız maçı sessizce kapat.
         void leaveMatch(ticket.matchId).catch(() => {});
@@ -307,7 +344,7 @@ export default function OnlineScreen() {
       session.claim(ticket.matchId, 'lobby');
       setPhase('match-found');
     } catch (e) {
-      if (seq === searchSeqRef.current) setJoinError(errMsg(e));
+      if (seq === searchSeqRef.current) setJoinError(isTimeout(e) ? BUSY_MSG : errMsg(e));
     } finally {
       setJoinBusy(false);
     }
