@@ -1,15 +1,14 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
-import { getToggle, resetSeen, setToggle } from '@/storage';
+import { getToggle, setToggle } from '@/storage';
+import { AdminWordPanel } from '@/ui/admin-word-panel';
 import { GlassButton, GlassCard } from '@/ui/glass';
-import { InfoModal } from '@/ui/info-modal';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors } from '@/ui/theme';
-import { WELCOME_INTRO } from '@/ui/welcome-intro';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -19,8 +18,22 @@ export default function SettingsScreen() {
   const [name, setName] = useState('');
   const [sound, setSound] = useState(true);
   const [haptics, setHaptics] = useState(true);
-  // Karşılama/tanıtım modalını elle yeniden açma (seen bayrağından bağımsız).
-  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  // Gizli yönetici paneli: sürüm yazısına 5 kez art arda basınca açılır.
+  const [adminOpen, setAdminOpen] = useState(false);
+  const tapRef = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onVersionTap = () => {
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapRef.current += 1;
+    if (tapRef.current >= 5) {
+      tapRef.current = 0;
+      setAdminOpen(true);
+      return;
+    }
+    tapTimer.current = setTimeout(() => {
+      tapRef.current = 0;
+    }, 1500);
+  };
 
   // Kaynaktaki ad değişince (giriş/çıkış, sunucu teyidi) inputu eşitle.
   useEffect(() => {
@@ -59,12 +72,6 @@ export default function SettingsScreen() {
   const changeHaptics = (value: boolean) => {
     setHaptics(value);
     setToggle('haptics', value);
-  };
-
-  // Tüm bilgilendirme bayraklarını sil → tanıtım modalları yeniden ilk-kez gibi.
-  const resetIntros = async () => {
-    await resetSeen();
-    Alert.alert('Bilgilendirmeler sıfırlandı', 'Tüm tanıtım modalları yeniden gösterilecek.');
   };
 
   return (
@@ -150,20 +157,12 @@ export default function SettingsScreen() {
           )}
         </GlassCard>
 
-        <GlassButton small label="Nasıl Oynanır" onPress={() => router.push('/how-to-play')} />
-        <GlassButton small label="Tanıtımı Göster" onPress={() => setWelcomeOpen(true)} />
-        <GlassButton small label="Bilgilendirmeleri Sıfırla" onPress={() => void resetIntros()} />
-
-        <GlassCard>
-          <Text style={styles.sectionTitle}>Hakkında</Text>
-          <Text style={styles.about}>
-            Gizemli Sayılar — sayı ve kelime tahmin düellosu.{'\n'}
-            Sürüm v{Constants.expoConfig?.version ?? '2.2.0'}
-          </Text>
-        </GlassCard>
+        <Pressable onPress={onVersionTap} hitSlop={8}>
+          <Text style={styles.version}>v{Constants.expoConfig?.version ?? '2.2.0'}</Text>
+        </Pressable>
       </ScrollView>
 
-      <InfoModal visible={welcomeOpen} onClose={() => setWelcomeOpen(false)} {...WELCOME_INTRO} />
+      <AdminWordPanel visible={adminOpen} onClose={() => setAdminOpen(false)} />
     </Screen>
   );
 }
@@ -215,9 +214,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  about: {
+  version: {
+    textAlign: 'center',
     color: colors.dim,
-    lineHeight: 22,
+    fontSize: 12,
+    paddingVertical: 6,
   },
   email: {
     color: colors.text,
