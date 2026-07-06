@@ -584,6 +584,31 @@ export async function getRoundReveal(matchId: string, round: number): Promise<Ro
   return { mine: p.mine ?? null, opponent: p.opponent ?? null };
 }
 
+// ─── Gizli admin paneli: PIN korumalı kelime havuzu ekleme ──────────────
+export type AdminAddStatus = 'added' | 'exists' | 'invalid';
+
+/** PIN'i SUNUCUDA doğrular (panel açılışı için). Yanlışsa false. */
+export async function adminVerifyPin(pin: string): Promise<boolean> {
+  return callRpc<boolean>('admin_verify_pin', { p_pin: pin });
+}
+
+/** PIN korumalı kelime ekleme (tek havuz = secret_words). Sunucu PIN + biçim
+ *  doğrular; kelime Türkçe küçük harfe normalize edilerek gönderilmeli. */
+export async function adminAddWord(word: string, pin: string): Promise<AdminAddStatus> {
+  const r = await callRpc<{ status: AdminAddStatus }>('admin_add_word', {
+    p_word: word,
+    p_pin: pin,
+  });
+  return r.status;
+}
+
+/** Havuz boyutu (secret_words'ün select grant'i zaten açık). */
+export async function adminPoolSize(): Promise<number> {
+  const client = requireClient();
+  const { count } = await client.from('secret_words').select('*', { count: 'exact', head: true });
+  return count ?? 0;
+}
+
 async function currentUserId(): Promise<string | null> {
   const client = requireClient();
   const { data } = await client.auth.getSession();
