@@ -23,8 +23,8 @@ type ParsedWord =
 
 /**
  * Format kontrolü: 4-6 harf + yalnız Türkçe harf (rakam/sembol/q-w-x yok).
- * Havuz üyeliği ("gerçek kelime mi") SUNUCUDA doğrulanır (valid_words /
- * secret_words lookup) — istemci yalnız biçim bakar.
+ * Havuz üyeliği ("gerçek kelime mi") SUNUCUDA doğrulanır — tek birleşik havuz
+ * (secret_words) hem gizli belirleme hem tahmin için — istemci yalnız biçim bakar.
  * Harf sayımı karakter bazındadır (Array.from; byte değil).
  */
 export function parseWord(input: string): ParsedWord {

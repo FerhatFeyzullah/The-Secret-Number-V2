@@ -25,6 +25,10 @@ export type {
 export { displayClocks, feedbackToGuessResult } from './mapping';
 export {
   activateProtocol,
+  adminAddWord,
+  adminPoolSize,
+  adminVerifyPin,
+  type AdminAddStatus,
   cancelSetupTimeout,
   cancelWaiting,
   claimTimeout,
