@@ -1,0 +1,41 @@
+# main güncellenince (merge/push) otomatik APK build — EAS bulutunda.
+# Ayrıca Actions sekmesinden elle tetiklenebilir (workflow_dispatch).
+#
+# Tek seferlik kurulum: expo.dev → Account → Access tokens'tan bir token üret,
+# GitHub repo → Settings → Secrets and variables → Actions → EXPO_TOKEN olarak ekle.
+#
+# versionCode her build'de otomatik +1 (eas.json: appVersionSource=remote +
+# preview.autoIncrement). APK linki bu iş logunda ve EAS panelinde görünür.
+
+name: Otomatik APK Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Android APK (preview)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: EAS kur (+ giriş)
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Bağımlılıklar
+        run: npm ci
+
+      - name: APK build (preview)
+        run: eas build --platform android --profile preview --non-interactive

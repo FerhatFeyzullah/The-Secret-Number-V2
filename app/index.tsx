@@ -1,5 +1,4 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,6 +20,7 @@ import {
   setLastSeenSeason,
   type GameMode,
 } from '@/storage';
+import { appVersionLabel } from '@/ui/app-version';
 import { InfoModal } from '@/ui/info-modal';
 import { useIntroDone } from '@/ui/intro-context';
 import { InfoTipBubble, TIPS, type TipId } from '@/ui/info-tip';
@@ -299,7 +299,7 @@ export default function MenuScreen() {
 
       {/* Alt: yalnızca sürüm (istatistik kartları kaldırıldı — online'da modal) */}
       <View style={styles.footer}>
-        <Text style={styles.version}>v{Constants.expoConfig?.version ?? '2.2.0'}</Text>
+        <Text style={styles.version}>{appVersionLabel()}</Text>
       </View>
 
       <LeaderboardModal visible={boardOpen} onClose={() => setBoardOpen(false)} />

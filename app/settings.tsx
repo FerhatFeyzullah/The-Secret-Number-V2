@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
@@ -6,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from
 import { useAuth, useProfile } from '@/auth';
 import { getToggle, setToggle } from '@/storage';
 import { AdminWordPanel } from '@/ui/admin-word-panel';
+import { appVersionLabel } from '@/ui/app-version';
 import { GlassButton, GlassCard } from '@/ui/glass';
 import { Screen, ScreenHeader } from '@/ui/screen';
 import { colors } from '@/ui/theme';
@@ -158,7 +158,7 @@ export default function SettingsScreen() {
         </GlassCard>
 
         <Pressable onPress={onVersionTap} hitSlop={8}>
-          <Text style={styles.version}>v{Constants.expoConfig?.version ?? '2.2.0'}</Text>
+          <Text style={styles.version}>{appVersionLabel()}</Text>
         </Pressable>
       </ScrollView>
 
