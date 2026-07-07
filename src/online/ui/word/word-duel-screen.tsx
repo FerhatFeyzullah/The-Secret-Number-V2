@@ -53,6 +53,9 @@ const fmtClock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+// Kendi süre bu eşiğin altına düşünce: saat kırmızılaşır + tek haptik + hafif çerçeve.
+const LOW_MS = 30_000;
+
 /** Kelime düello ekranı — duello-ekrani-v2 tasarımı birebir. Mantık katmanı
  *  sayı düellosuyla (duel-screen) aynı desen: useMatch realtime + sunucu RPC,
  *  merkezi sahiplik, çıkış onayı, sonuç overlay'i. Kelime modu PROTOKOLSÜZ
@@ -103,11 +106,12 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     [soundOn, playSfx],
   );
   const buzz = useCallback(
-    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn') => {
+    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn' | 'warn') => {
       if (!hapticsOn || !canHaptics) return;
       if (kind === 'tap') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       else if (kind === 'feedback') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       else if (kind === 'turn') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      else if (kind === 'warn') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       else if (kind === 'win') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
@@ -125,6 +129,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const p1 = match?.myRole === 'player1';
   const myClockMs = p1 ? clocks.clock1Ms : clocks.clock2Ms;
   const oppClockMs = p1 ? clocks.clock2Ms : clocks.clock1Ms;
+  const myLow = myClockMs > 0 && myClockMs < LOW_MS; // kendi kalan süre <30 sn
   const opponentName =
     (match ? (match.myRole === 'player1' ? match.player2?.username : match.player1.username) : null) ??
     'Rakip';
@@ -194,6 +199,18 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     if (isMine && !prevIsMineRef.current) buzz('turn');
     prevIsMineRef.current = isMine;
   }, [isMine, buzz]);
+
+  // Kendi süre 30 sn altına İLK düştüğünde bir kez haptik (round başına). Tekrar yok;
+  // round sıfırlanınca (saat >30) yeniden silahlanır.
+  const lowBuzzedRef = useRef(false);
+  useEffect(() => {
+    if (myLow && !lowBuzzedRef.current) {
+      buzz('warn');
+      lowBuzzedRef.current = true;
+    } else if (!myLow) {
+      lowBuzzedRef.current = false;
+    }
+  }, [myLow, buzz]);
 
   useEffect(() => {
     session.claim(matchId, 'match');
@@ -493,10 +510,19 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             <Text style={[styles.clockTime, !isMine && styles.clockTimeActive]}>{fmtClock(oppClockMs)}</Text>
             {!isMine ? <View style={styles.clockDot} /> : null}
           </View>
-          <View style={[styles.clockCard, isMine && styles.clockCardActive]}>
-            <Text style={[styles.clockName, isMine && styles.clockNameActive]}>sen</Text>
-            <Text style={[styles.clockTime, isMine && styles.clockTimeActive]}>{fmtClock(myClockMs)}</Text>
-            {isMine ? <View style={styles.clockDot} /> : null}
+          <View
+            style={[
+              styles.clockCard,
+              isMine && !myLow && styles.clockCardActive,
+              myLow && styles.clockCardLow,
+            ]}>
+            <Text style={[styles.clockName, isMine && !myLow && styles.clockNameActive, myLow && styles.clockNameLow]}>
+              sen
+            </Text>
+            <Text style={[styles.clockTime, isMine && !myLow && styles.clockTimeActive, myLow && styles.clockTimeLow]}>
+              {fmtClock(myClockMs)}
+            </Text>
+            {isMine ? <View style={[styles.clockDot, myLow && styles.clockDotLow]} /> : null}
           </View>
         </View>
 
@@ -605,6 +631,9 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           onMenu={goMenu}
         />
       ) : null}
+
+      {/* Süre <30 sn: hafif kırmızı çerçeve (dikkat dağıtmayan, tıklamayı engellemez). */}
+      {myLow ? <View pointerEvents="none" style={styles.lowFrame} /> : null}
     </Screen>
   );
 }
@@ -797,6 +826,29 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#2FA8E0',
     boxShadow: '0 0 6px #2FA8E0',
+  },
+  // Süre <30 sn — kendi saat kartı kırmızı (aktif-cyan'ı ezer).
+  clockCardLow: {
+    backgroundColor: 'rgba(255,123,123,0.12)',
+    borderColor: 'rgba(255,123,123,0.55)',
+    boxShadow: '0 0 14px rgba(255,123,123,0.22)',
+  },
+  clockNameLow: {
+    color: '#ff9a9a',
+  },
+  clockTimeLow: {
+    color: '#ff7b7b',
+    fontWeight: '700',
+  },
+  clockDotLow: {
+    backgroundColor: '#ff7b7b',
+    boxShadow: '0 0 6px #ff7b7b',
+  },
+  // Hafif kırmızı ekran çerçevesi (subtle; tıklamayı engellemez).
+  lowFrame: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,123,123,0.28)',
   },
   middle: {
     flex: 1,
