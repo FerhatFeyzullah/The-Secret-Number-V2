@@ -481,6 +481,19 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   }));
 }
 
+export type LobbyCounts = { quick: number; protocol: number; word: number };
+
+/** Lobi bekleme sayaçları: her mod kuyruğunda rakip bekleyen (taze, herkese açık)
+ *  oyuncu sayısı. Kuyruğu RLS gizlediği için SECURITY DEFINER RPC üzerinden. */
+export async function getLobbyCounts(): Promise<LobbyCounts> {
+  const p = await callRpc<{ quick?: number; protocol?: number; word?: number }>('get_lobby_counts');
+  return {
+    quick: Number(p?.quick ?? 0),
+    protocol: Number(p?.protocol ?? 0),
+    word: Number(p?.word ?? 0),
+  };
+}
+
 /** Çağıranın kendi sırası/istatistikleri (top 100 dışında da çalışır). */
 export async function getMyRank(): Promise<MyRank> {
   const p = await callRpc<{
@@ -596,6 +609,18 @@ export async function adminVerifyPin(pin: string): Promise<boolean> {
  *  doğrular; kelime Türkçe küçük harfe normalize edilerek gönderilmeli. */
 export async function adminAddWord(word: string, pin: string): Promise<AdminAddStatus> {
   const r = await callRpc<{ status: AdminAddStatus }>('admin_add_word', {
+    p_word: word,
+    p_pin: pin,
+  });
+  return r.status;
+}
+
+export type AdminRemoveStatus = 'removed' | 'not_found';
+
+/** PIN korumalı kelime silme (tek havuz = secret_words). Kelime havuzda varsa
+ *  siler ('removed'); yoksa 'not_found'. Sunucu PIN doğrular. */
+export async function adminRemoveWord(word: string, pin: string): Promise<AdminRemoveStatus> {
+  const r = await callRpc<{ status: AdminRemoveStatus }>('admin_remove_word', {
     p_word: word,
     p_pin: pin,
   });

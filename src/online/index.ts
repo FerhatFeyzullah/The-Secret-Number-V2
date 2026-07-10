@@ -26,9 +26,11 @@ export { displayClocks, feedbackToGuessResult } from './mapping';
 export {
   activateProtocol,
   adminAddWord,
+  adminRemoveWord,
   adminPoolSize,
   adminVerifyPin,
   type AdminAddStatus,
+  type AdminRemoveStatus,
   cancelSetupTimeout,
   cancelWaiting,
   claimTimeout,
@@ -41,6 +43,8 @@ export {
   findOrCreateQuickMatch,
   forfeitDisconnect,
   getLeaderboard,
+  getLobbyCounts,
+  type LobbyCounts,
   getMatchReveal,
   getRoundReveal,
   getMyHand,
@@ -62,4 +66,5 @@ export {
 } from './matchService';
 export { useMatch, type UseMatchResult } from './useMatch';
 export { MatchSessionProvider, useMatchSession } from './match-session';
+export { OnlinePresenceProvider, useOnlineCount } from './online-presence';
 export { levelTitle, isEliteLevel, MAX_LEVEL, ELITE_LEVEL } from './progression';

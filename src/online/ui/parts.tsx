@@ -91,6 +91,7 @@ export function ChoiceCard({
   accent,
   title,
   subtitle,
+  waiting,
   onPress,
   onInfo,
   hero = false,
@@ -100,6 +101,8 @@ export function ChoiceCard({
   accent: string;
   title: string;
   subtitle: string;
+  /** >0 ise kart altında "N kişi bekliyor" satırı gösterir (0/undefined → gizli). */
+  waiting?: number;
   onPress: () => void;
   /** Verilirse sağ-üst köşede "?" rozeti çıkar; bilgilendirme modalını açar
    *  (kartın onPress'ini tetiklemez — üstteki Pressable dokunuşu yakalar). */
@@ -125,6 +128,9 @@ export function ChoiceCard({
           {title}
         </Text>
         <Text style={styles.cardSubtitle}>{subtitle}</Text>
+        {waiting ? (
+          <Text style={[styles.cardWaiting, { color: accent }]}>{waiting} kişi bekliyor</Text>
+        ) : null}
         {children}
       </View>
       <Feather name="chevron-right" size={18} color={accent} style={{ opacity: 0.7 }} />
@@ -280,6 +286,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.dim,
     lineHeight: 16,
+  },
+  cardWaiting: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: mono,
+    marginTop: 1,
   },
   avatar: {
     borderWidth: 2,
