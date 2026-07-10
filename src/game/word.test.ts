@@ -1,5 +1,5 @@
 import { getContentType } from './index';
-import { evaluateWordGuess, normalizeTr, parseWord, wordContent, wordMarks } from './word';
+import { evaluateWordGuess, normalizeTr, parseWord, upperTr, wordContent, wordMarks } from './word';
 
 describe('normalizeTr (Türkçe locale)', () => {
   it("İ→i ve I→ı (İngilizce lower'ın aksine)", () => {
@@ -10,6 +10,20 @@ describe('normalizeTr (Türkçe locale)', () => {
 
   it('Türkçe harfleri korur', () => {
     expect(normalizeTr('ÇĞÖŞÜ')).toBe('çğöşü');
+  });
+});
+
+describe('upperTr (gösterim için Türkçe büyük harf)', () => {
+  it('i→İ ve ı→I (CSS uppercase aksine i/ı ayrımını korur)', () => {
+    expect(upperTr('bilim')).toBe('BİLİM'); // i → İ (noktalı)
+    expect(upperTr('kızıl')).toBe('KIZIL'); // ı → I (noktasız)
+    expect(upperTr('iı')).toBe('İI'); // ikisi AYRI kalır (yanlış okuma önlenir)
+  });
+
+  it('diğer Türkçe harfleri doğru büyütür', () => {
+    expect(upperTr('çğöşü')).toBe('ÇĞÖŞÜ');
+    expect(upperTr('inek')).toBe('İNEK');
+    expect(upperTr('sıçan')).toBe('SIÇAN');
   });
 });
 

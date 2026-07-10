@@ -7,6 +7,12 @@
     "icon": "./assets/images/app-icon.png",
     "scheme": "gizemlisayilar",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/13a7de1a-5cb8-4130-a91e-bd9fbe1f4ff0",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "icon": "./assets/images/app-icon.png",
       "bundleIdentifier": "com.gizemlisayilar.app"
@@ -16,6 +22,7 @@
       "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#0C0F19",
+        "backgroundImage": "./assets/images/app-icon-background.png",
         "foregroundImage": "./assets/images/app-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,

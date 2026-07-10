@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react';
 
 import { AuthProvider } from '@/auth';
 import { MatchSessionProvider } from '@/online';
+import { shouldShowOverlay } from '@/updates/update-machine';
+import { UpdateOverlay } from '@/updates/update-overlay';
+import { useUpdateGate } from '@/updates/use-update-gate';
 import { IntroDoneContext } from '@/ui/intro-context';
 import { colors } from '@/ui/theme';
 import { IntroOverlay } from '@/ui/intro-overlay';
@@ -21,6 +24,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   // Her soğuk başlangıçta yayıncı intro'su (route DEĞİL, overlay → nav yığını temiz).
   const [introDone, setIntroDone] = useState(false);
+  // OTA güncelleme kapısı: açılışta (intro ile eşzamanlı) arka planda kontrol eder.
+  const updateGate = useUpdateGate();
   useEffect(() => {
     // İlk render sonrası: native splash'i kapat (altında intro overlay zaten boyalı).
     SplashScreen.hideAsync().catch(() => {});
@@ -53,6 +58,11 @@ export default function RootLayout() {
         {/* Açılış intro'su — en üstte, menüyü kaplar; bitince fade-out + unmount,
             altta hazır menü görünür. Geri tuşu intro'ya dönmez (overlay, route değil). */}
         {!introDone ? <IntroOverlay onDone={() => setIntroDone(true)} /> : null}
+        {/* Intro bittikten SONRA, güncelleme varsa zorunlu OTA ekranı (menüyü kaplar).
+            Güncelleme yoksa/kontrol başarısızsa hiç görünmez → menü normal açılır. */}
+        {introDone && shouldShowOverlay(updateGate.phase) ? (
+          <UpdateOverlay {...updateGate} />
+        ) : null}
       </IntroDoneContext.Provider>
     </AuthProvider>
   );

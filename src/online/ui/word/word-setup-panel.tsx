@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { parseWord } from '@/game';
+import { parseWord, upperTr } from '@/game';
 import { OnlineError, setSecret, type MatchState } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
 
@@ -220,7 +220,7 @@ export function WordSetupPanel({
                 isFilled && styles.tileFilled,
                 !isFilled && isActive && styles.tileActive,
               ]}>
-              {isFilled ? <Text style={styles.tileLetter}>{letter}</Text> : null}
+              {isFilled ? <Text style={styles.tileLetter}>{upperTr(letter)}</Text> : null}
             </View>
           );
         })}
@@ -399,7 +399,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#E8F0FF',
-    textTransform: 'uppercase',
   },
   instruction: {
     color: '#4B6B8A',
