@@ -9,6 +9,7 @@ export {
   evaluateWordGuess,
   normalizeTr,
   parseWord,
+  upperTr,
   WORD_LENGTHS,
   wordContent,
   wordMarks,

@@ -42,6 +42,7 @@ assets/sfx/*.wav
 # local env files — gizli anahtarlar repoya girmez (.env.example şablondur)
 .env
 .env*.local
+.env.loadtest
 
 # typescript
 *.tsbuildinfo

@@ -7,13 +7,15 @@ import {
   Alert,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  Vibration,
   View,
   useWindowDimensions,
 } from 'react-native';
 
-import { parseWord, type LetterMark } from '@/game';
+import { parseWord, upperTr, type LetterMark } from '@/game';
 import {
   getMatchReveal,
   getMyMarks,
@@ -53,6 +55,12 @@ const fmtClock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+// Kendi süre bu eşiğin altına düşünce: saat kırmızılaşır + belirgin uzun titreşim.
+const LOW_MS = 30_000;
+// Süre-azaldı titreşimi: SIRA DEĞİŞİMİNDEKİ tek kısa darbeden (turn=Heavy) ayrışsın
+// diye uzun + çift-darbeli desen. Android'de gerçek süre, iOS'ta iki ayrı darbe.
+const LOW_TIME_VIBRATION = [0, 500, 160, 500];
+
 /** Kelime düello ekranı — duello-ekrani-v2 tasarımı birebir. Mantık katmanı
  *  sayı düellosuyla (duel-screen) aynı desen: useMatch realtime + sunucu RPC,
  *  merkezi sahiplik, çıkış onayı, sonuç overlay'i. Kelime modu PROTOKOLSÜZ
@@ -74,6 +82,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
+  const historyRef = useRef<ScrollView>(null);
   // KENDİ tahminlerimin per-harf renkleri (tahmin id → 'GYX'). Sunucudan
   // YALNIZ çağırana gelir (make_guess dönüşü + getMyMarks); rakibinki ASLA.
   const [myMarks, setMyMarks] = useState<Record<number, string>>({});
@@ -103,11 +112,12 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     [soundOn, playSfx],
   );
   const buzz = useCallback(
-    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn') => {
+    (kind: 'tap' | 'feedback' | 'win' | 'lose' | 'turn' | 'warn') => {
       if (!hapticsOn || !canHaptics) return;
       if (kind === 'tap') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       else if (kind === 'feedback') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       else if (kind === 'turn') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      else if (kind === 'warn') Vibration.vibrate(LOW_TIME_VIBRATION);
       else if (kind === 'win') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
@@ -125,6 +135,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const p1 = match?.myRole === 'player1';
   const myClockMs = p1 ? clocks.clock1Ms : clocks.clock2Ms;
   const oppClockMs = p1 ? clocks.clock2Ms : clocks.clock1Ms;
+  const myLow = myClockMs > 0 && myClockMs < LOW_MS; // kendi kalan süre <30 sn
   const opponentName =
     (match ? (match.myRole === 'player1' ? match.player2?.username : match.player1.username) : null) ??
     'Rakip';
@@ -194,6 +205,18 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     if (isMine && !prevIsMineRef.current) buzz('turn');
     prevIsMineRef.current = isMine;
   }, [isMine, buzz]);
+
+  // Kendi süre 30 sn altına İLK düştüğünde bir kez haptik (round başına). Tekrar yok;
+  // round sıfırlanınca (saat >30) yeniden silahlanır.
+  const lowBuzzedRef = useRef(false);
+  useEffect(() => {
+    if (myLow && !lowBuzzedRef.current) {
+      buzz('warn');
+      lowBuzzedRef.current = true;
+    } else if (!myLow) {
+      lowBuzzedRef.current = false;
+    }
+  }, [myLow, buzz]);
 
   useEffect(() => {
     session.claim(matchId, 'match');
@@ -410,12 +433,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     );
   }
 
-  // Geçmiş: son 4 tahmin, eskiler soluk (tasarım: 0.55 → 0.8 → 1).
-  const visibleHistory = myGuesses.slice(-4);
-  const historyOpacity = (i: number, n: number) => {
-    const fromEnd = n - 1 - i;
-    return fromEnd === 0 ? 1 : fromEnd === 1 ? 0.8 : 0.55;
-  };
+  // Geçmiş: tüm tur tahminleri kaydırılabilir listede (yeni en altta); ~4 satır
+  // görünür, öncekiler scroll ile görülür.
   const histTileW = Math.min(30, Math.floor((width - 140) / wordLength) - 4);
   const entryTileW = Math.min(44, Math.floor((width - 60 - (wordLength - 1) * 6) / wordLength));
 
@@ -452,7 +471,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
         {/* gizli kelimem (küçük, soluk — göz ikonu yok) */}
         <View style={styles.secretRow}>
           <Text style={styles.secretLabel}>gizli kelimen:</Text>
-          <Text style={styles.secretWord}>{mySecret ?? '—'}</Text>
+          <Text style={styles.secretWord}>{mySecret ? upperTr(mySecret) : '—'}</Text>
         </View>
 
         {/* Rakip ilerleme kartı: tahmin sayısı + EN SON tahmindeki yeşil sayısı.
@@ -493,22 +512,36 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             <Text style={[styles.clockTime, !isMine && styles.clockTimeActive]}>{fmtClock(oppClockMs)}</Text>
             {!isMine ? <View style={styles.clockDot} /> : null}
           </View>
-          <View style={[styles.clockCard, isMine && styles.clockCardActive]}>
-            <Text style={[styles.clockName, isMine && styles.clockNameActive]}>sen</Text>
-            <Text style={[styles.clockTime, isMine && styles.clockTimeActive]}>{fmtClock(myClockMs)}</Text>
-            {isMine ? <View style={styles.clockDot} /> : null}
+          <View
+            style={[
+              styles.clockCard,
+              isMine && !myLow && styles.clockCardActive,
+              myLow && styles.clockCardLow,
+            ]}>
+            <Text style={[styles.clockName, isMine && !myLow && styles.clockNameActive, myLow && styles.clockNameLow]}>
+              sen
+            </Text>
+            <Text style={[styles.clockTime, isMine && !myLow && styles.clockTimeActive, myLow && styles.clockTimeLow]}>
+              {fmtClock(myClockMs)}
+            </Text>
+            {isMine ? <View style={[styles.clockDot, myLow && styles.clockDotLow]} /> : null}
           </View>
         </View>
 
-        {/* ORTA: tahmin geçmişi (son 3-4, eskiler soluk) */}
+        {/* ORTA: tahmin geçmişi — kaydırılabilir (yeni en altta, otomatik kayar) */}
         <View style={styles.middle}>
           <Text style={styles.sectionLabel}>tahminlerin</Text>
-          <View style={styles.history}>
-            {visibleHistory.map((g, i) => {
+          <ScrollView
+            ref={historyRef}
+            style={styles.history}
+            contentContainerStyle={styles.historyBody}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => historyRef.current?.scrollToEnd({ animated: true })}>
+            {myGuesses.map((g) => {
               // KENDİ tahminimin per-harf renkleri (sunucudan, yalnız bana).
               const rowMarks = myMarks[g.id];
               return (
-              <View key={g.id} style={[styles.histRow, { opacity: historyOpacity(i, visibleHistory.length) }]}>
+              <View key={g.id} style={styles.histRow}>
                 <View style={styles.histTiles}>
                   {Array.from(g.digits).map((ch, ci) => {
                     // 'X'/yok ya da renk henüz gelmedi → şeffaf (varsayılan hücre).
@@ -523,7 +556,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
                           mk === 'G' && styles.histTileGreen,
                           mk === 'Y' && styles.histTileYellow,
                         ]}>
-                        <Text style={[styles.histTileText, colored && styles.histTileTextOn]}>{ch}</Text>
+                        <Text style={[styles.histTileText, colored && styles.histTileTextOn]}>{upperTr(ch)}</Text>
                       </View>
                     );
                   })}
@@ -531,12 +564,12 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
               </View>
               );
             })}
-            {visibleHistory.length === 0 ? (
+            {myGuesses.length === 0 ? (
               <Text style={styles.histEmpty}>
                 {isMine ? 'İlk tahminini yap' : 'Rakibin sırası…'}
               </Text>
             ) : null}
-          </View>
+          </ScrollView>
 
           {/* Aktif tahmin tile'ları */}
           <View style={styles.entryRow}>
@@ -552,7 +585,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
                     filled && styles.entryTileFilled,
                     locked && styles.entryTileLocked,
                   ]}>
-                  {filled ? <Text style={styles.entryTileText}>{letter}</Text> : null}
+                  {filled ? <Text style={styles.entryTileText}>{upperTr(letter)}</Text> : null}
                 </View>
               );
             })}
@@ -605,6 +638,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           onMenu={goMenu}
         />
       ) : null}
+
     </Screen>
   );
 }
@@ -688,7 +722,6 @@ const styles = StyleSheet.create({
     color: '#6A88A8',
     fontSize: 13,
     letterSpacing: 2,
-    textTransform: 'uppercase',
     fontFamily: mono,
   },
   oppCard: {
@@ -798,6 +831,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#2FA8E0',
     boxShadow: '0 0 6px #2FA8E0',
   },
+  // Süre <30 sn — kendi saat kartı kırmızı (aktif-cyan'ı ezer).
+  clockCardLow: {
+    backgroundColor: 'rgba(255,123,123,0.12)',
+    borderColor: 'rgba(255,123,123,0.55)',
+    boxShadow: '0 0 14px rgba(255,123,123,0.22)',
+  },
+  clockNameLow: {
+    color: '#ff9a9a',
+  },
+  clockTimeLow: {
+    color: '#ff7b7b',
+    fontWeight: '700',
+  },
+  clockDotLow: {
+    backgroundColor: '#ff7b7b',
+    boxShadow: '0 0 6px #ff7b7b',
+  },
   middle: {
     flex: 1,
   },
@@ -809,6 +859,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   history: {
+    // ~4 satır görünür (satır 34 + boşluk 6); fazlası scroll ile. flexGrow:0 →
+    // flex sütununda büyümez, içerik kadar (maxHeight'e kadar) yer kaplar.
+    maxHeight: 168,
+    flexGrow: 0,
+  },
+  historyBody: {
     gap: 6,
   },
   histRow: {
@@ -845,7 +901,6 @@ const styles = StyleSheet.create({
     color: '#A8C0D8',
     fontSize: 15,
     fontWeight: '600',
-    textTransform: 'uppercase',
     fontFamily: mono,
   },
   histTileTextOn: {
@@ -884,7 +939,6 @@ const styles = StyleSheet.create({
     color: '#E8F0FF',
     fontSize: 21,
     fontWeight: '700',
-    textTransform: 'uppercase',
     fontFamily: mono,
   },
   actionError: {

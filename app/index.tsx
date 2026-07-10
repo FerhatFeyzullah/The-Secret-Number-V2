@@ -1,12 +1,13 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth, useProfile } from '@/auth';
 import { LeagueBadge } from '@/leagues/badge';
 import { LeagueMapModal } from '@/leagues/league-map-modal';
 import { SeasonResetModal } from '@/leagues/season-reset-modal';
+import { isOnline } from '@/net';
 import { getMyRank } from '@/online';
 import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
 import {
@@ -139,7 +140,15 @@ export default function MenuScreen() {
   );
 
   // Online yalnızca burada oturum ister; oturum yoksa giriş ekranına yönlendir.
-  const goOnline = () => {
+  // Önce proaktif internet kontrolü: çevrimdışıysa net uyarı, boşuna yönlendirme yok.
+  const goOnline = async () => {
+    if (!(await isOnline())) {
+      Alert.alert(
+        'İnternet gerekli',
+        'Çok oyunculu mod için internet bağlantısı gerekiyor. Bağlantını kontrol edip tekrar dene.',
+      );
+      return;
+    }
     if (session) {
       router.push('/online');
     } else {
@@ -147,12 +156,12 @@ export default function MenuScreen() {
     }
   };
 
-  // OYNA: seçili moda göre mevcut navigasyon davranışı aynen korunur.
+  // OYNA: solo → mod seçim hub'ı (Sayı / Kelime); online → mevcut davranış.
   const play = () => {
     if (mode === 'solo') {
-      router.push('/offline-setup');
+      router.push('/solo');
     } else {
-      goOnline();
+      void goOnline();
     }
   };
 
