@@ -1,0 +1,89 @@
+# Kişisel iPhone'a ücretsiz kurulum için İMZASIZ .ipa üretir.
+#
+# Mantık: Apple Developer Program (ücretli) olmadan cihaz build'i alınamaz; ama
+# CODE_SIGNING_ALLOWED=NO ile imzasız bir .app derleyip Payload/ içine koyup
+# zip'leyerek .ipa yaparız. Sonra bu .ipa'yı Windows'ta Sideloadly ile ÜCRETSİZ
+# Apple ID'nle imzalayıp USB'den telefona kurarsın (7 günde bir yenilemen gerekir).
+#
+# NOT: Bu resmi bir Expo/EAS akışı DEĞİL. macOS runner (public repo ücretsiz;
+# private repo'da macOS dakikaları 10× sayılır). İlk çalıştırmada scheme/pod/xcode
+# ayrıntısı düzeltme isteyebilir — loglara bakıp uyarlarız.
+#
+# Çalıştırma: GitHub → Actions → "iOS unsigned IPA" → Run workflow.
+
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Bağımlılıklar (npm ci)
+        run: npm ci
+
+      # EXPO_PUBLIC_* değişkenleri JS bundle'a GÖMÜLÜR. Repo → Settings → Secrets
+      # and variables → Actions'a ekle. Eklenmezse app KURULUR ama online özellikler
+      # (Supabase) kapalı olur — offline/solo modlar çalışır.
+      - name: .env yaz (Supabase)
+        run: |
+          {
+            echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}"
+            echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}"
+          } > .env
+
+      # ios/ gitignore'lu (CNG) → app.json + plugin'lerden native proje üretilir.
+      - name: Prebuild (iOS) + pods
+        run: |
+          npx expo prebuild --platform ios
+          cd ios && pod install
+
+      # Expo prebuild'de scheme = xcworkspace'in adı. Türkçe karakter olabileceği
+      # için sabit yazmıyoruz, otomatik saptıyoruz.
+      - name: Scheme + workspace sapta
+        id: xc
+        run: |
+          WS=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          echo "workspace=$WS" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+          echo "workspace=$WS  scheme=$SCHEME"
+
+      - name: Derle (imzasız, cihaz için)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace "${{ steps.xc.outputs.workspace }}" \
+            -scheme "${{ steps.xc.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: .ipa paketle (Payload/ + zip)
+        run: |
+          APP=$(ls -d build/Build/Products/Release-iphoneos/*.app | head -1)
+          echo "App: $APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry app-unsigned.ipa Payload
+          ls -lh app-unsigned.ipa
+
+      - name: Artifact yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: app-unsigned.ipa
+          retention-days: 7
