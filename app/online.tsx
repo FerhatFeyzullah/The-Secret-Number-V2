@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Share } from 'react-native';
+import { AppState, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
 import { useProfile } from '@/auth';
@@ -8,13 +8,16 @@ import {
   createPrivateRoom,
   findOrCreateProtocolMatch,
   findOrCreateQuickMatch,
+  getLobbyCounts,
   joinPrivateRoom,
   leaveMatch,
   markReady,
   OnlineError,
   useMatch,
   useMatchSession,
+  useOnlineCount,
   type FirstTurnMode,
+  type LobbyCounts,
   type MatchMode,
   type PrivateRoomMode,
 } from '@/online';
@@ -85,6 +88,42 @@ export default function OnlineScreen() {
   const [pendingFriendly, setPendingFriendly] = useState(false);
   // VS ekranı en az MATCH_FOUND_HOLD_MS gösterildi mi (otomatik geçiş kapısı).
   const [vsHoldDone, setVsHoldDone] = useState(false);
+
+  // Lobi göstergeleri: uygulama-geneli canlı online oyuncu sayısı (presence) +
+  // moda göre rakip bekleyen sayısı (yalnız lobi fazında ~5sn poll; kuyruğa giren
+  // 'searching' fazına geçtiği için kendini saymaz).
+  const onlineCount = useOnlineCount();
+  const [waiting, setWaiting] = useState<LobbyCounts | null>(null);
+  useEffect(() => {
+    if (phase !== 'lobby') return;
+    let cancelled = false;
+    let iv: ReturnType<typeof setInterval> | null = null;
+    const poll = () =>
+      getLobbyCounts()
+        .then((c) => {
+          if (!cancelled) setWaiting(c);
+        })
+        .catch(() => {});
+    const start = () => {
+      if (!iv) {
+        void poll();
+        iv = setInterval(() => void poll(), 5000);
+      }
+    };
+    const stop = () => {
+      if (iv) {
+        clearInterval(iv);
+        iv = null;
+      }
+    };
+    start();
+    const sub = AppState.addEventListener('change', (s) => (s === 'active' ? start() : stop()));
+    return () => {
+      cancelled = true;
+      stop();
+      sub.remove();
+    };
+  }, [phase]);
 
   // Canlı maç durumu: rakip katılınca status 'waiting' → 'setup' olur.
   const { match } = useMatch(matchId);
@@ -473,6 +512,8 @@ export default function OnlineScreen() {
       content = (
         <LobbyHub
           notice={notice}
+          onlineCount={onlineCount}
+          waiting={waiting}
           onQuick={startQuick}
           onProtocol={startProtocol}
           onWord={startWord}

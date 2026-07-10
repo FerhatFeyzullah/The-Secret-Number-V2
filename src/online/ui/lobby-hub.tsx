@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import type { LobbyCounts } from '@/online';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
@@ -111,6 +112,8 @@ type Intro = { kind: 'quick' | 'protocol' | 'word'; proceed: boolean };
  *  modalı her zaman tekrar açar. */
 export function LobbyHub({
   notice,
+  onlineCount,
+  waiting,
   onQuick,
   onProtocol,
   onWord,
@@ -120,6 +123,10 @@ export function LobbyHub({
 }: {
   /** Lobiye dönüş nedeni bilgisi (ör. "Rakip ayrıldı, maç iptal edildi."). */
   notice?: string | null;
+  /** Uygulama-geneli canlı online oyuncu sayısı; null → gizli. */
+  onlineCount?: number | null;
+  /** Moda göre kuyrukta rakip bekleyen oyuncu sayısı; null → kartlarda gizli. */
+  waiting?: LobbyCounts | null;
   onQuick: () => void;
   onProtocol: () => void;
   onWord: () => void;
@@ -163,6 +170,13 @@ export function LobbyHub({
     <View style={styles.root}>
       <LobbyHeader title="ÇEVRİMİÇİ" onBack={onBack} />
 
+      {onlineCount != null ? (
+        <View style={styles.onlineRow}>
+          <View style={styles.onlineDot} />
+          <Text style={styles.onlineText}>{onlineCount} oyuncu çevrimiçi</Text>
+        </View>
+      ) : null}
+
       {notice ? (
         <View style={styles.notice}>
           <Feather name="info" size={13} color={colors.amber} />
@@ -182,6 +196,7 @@ export function LobbyHub({
           accent={colors.cyan}
           title="Hızlı Maç"
           subtitle="Rastgele rakiple eşleş"
+          waiting={waiting?.quick}
           onPress={tapQuick}
           onInfo={infoQuick}>
           <View style={styles.tags}>
@@ -195,6 +210,7 @@ export function LobbyHub({
           accent={colors.violet}
           title="Protokol Maçı"
           subtitle="Protokollü düello · 3 tur"
+          waiting={waiting?.protocol}
           onPress={tapProtocol}
           onInfo={infoProtocol}>
           <View style={styles.tags}>
@@ -207,6 +223,7 @@ export function LobbyHub({
           accent={colors.success}
           title="Kelime Modu"
           subtitle="Kelime düellosu · 3 tur"
+          waiting={waiting?.word}
           onPress={tapWord}
           onInfo={infoWord}>
           <View style={styles.tags}>
@@ -282,6 +299,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.amber,
     lineHeight: 17,
+  },
+  onlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 4,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.success,
+    boxShadow: `0 0 8px ${colors.success}`,
+  },
+  onlineText: {
+    color: colors.dim,
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: mono,
   },
   heading: {
     marginTop: 12,
