@@ -17,6 +17,17 @@ export function normalizeTr(input: string): string {
   return input.toLocaleLowerCase('tr-TR');
 }
 
+/**
+ * Türkçe BÜYÜK harf — YALNIZ gösterim için (tahmin tile'ları, gizli kelime).
+ * KRİTİK: CSS `textTransform:'uppercase'` ve JS varsayılan büyütmesi 'i' → 'I'
+ * (noktasız) yapar; Türkçe'de 'i' → 'İ' olmalı. Aksi halde büyük harfte 'i' ile
+ * 'ı' ayırt edilemez ve kullanıcı geçmiş tahminlerini yanlış okur. 'ı' → 'I'
+ * varsayılanda zaten doğru; tek düzeltme 'i' → 'İ'. Intl'e bağımlı değildir.
+ */
+export function upperTr(input: string): string {
+  return input.replace(/i/g, 'İ').toUpperCase();
+}
+
 type ParsedWord =
   | { ok: true; word: string }
   | { ok: false; reason: InvalidReason };
