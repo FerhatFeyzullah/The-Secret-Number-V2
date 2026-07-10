@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { adminAddWord, adminPoolSize, adminVerifyPin, OnlineError } from '@/online';
+import { adminAddWord, adminPoolSize, adminRemoveWord, adminVerifyPin, OnlineError } from '@/online';
 
 import { GlassButton } from './glass';
 import { colors, cyanAlpha, mono } from './theme';
@@ -33,6 +33,8 @@ export function AdminWordPanel({ visible, onClose }: { visible: boolean; onClose
   const [added, setAdded] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Hangi işlem yürüyor (buton etiketleri için): 'add' | 'remove' | null.
+  const [op, setOp] = useState<'add' | 'remove' | null>(null);
 
   const reset = () => {
     setPhase('pin');
@@ -42,6 +44,7 @@ export function AdminWordPanel({ visible, onClose }: { visible: boolean; onClose
     setAdded([]);
     setMsg(null);
     setBusy(false);
+    setOp(null);
   };
   const close = () => {
     reset();
@@ -87,26 +90,38 @@ export function AdminWordPanel({ visible, onClose }: { visible: boolean; onClose
     });
   };
 
-  const add = async () => {
+  const submit = async (mode: 'add' | 'remove') => {
     const w = trLower(word);
     if (!TR_WORD.test(w) || !VOWEL.test(w)) {
       setMsg('4-6 Türkçe harf olmalı');
       return;
     }
     setBusy(true);
+    setOp(mode);
     setMsg(null);
     try {
-      const status = await adminAddWord(w, pin);
-      if (status === 'added') {
-        setMsg(`"${w}" eklendi ✓`);
-        setAdded((p) => [w, ...p]);
-        setPoolSize((n) => (n == null ? n : n + 1));
-        setWord('');
-      } else if (status === 'exists') {
-        setMsg(`"${w}" zaten havuzda`);
-        setWord('');
+      if (mode === 'add') {
+        const status = await adminAddWord(w, pin);
+        if (status === 'added') {
+          setMsg(`"${w}" eklendi ✓`);
+          setAdded((p) => [w, ...p]);
+          setPoolSize((n) => (n == null ? n : n + 1));
+          setWord('');
+        } else if (status === 'exists') {
+          setMsg(`"${w}" zaten havuzda`);
+          setWord('');
+        } else {
+          setMsg('Geçersiz kelime');
+        }
       } else {
-        setMsg('Geçersiz kelime');
+        const status = await adminRemoveWord(w, pin);
+        if (status === 'removed') {
+          setMsg(`"${w}" silindi ✓`);
+          setPoolSize((n) => (n == null ? n : Math.max(0, n - 1)));
+          setWord('');
+        } else {
+          setMsg(`"${w}" havuzda yok`);
+        }
       }
     } catch (e) {
       setMsg(
@@ -114,6 +129,7 @@ export function AdminWordPanel({ visible, onClose }: { visible: boolean; onClose
       );
     } finally {
       setBusy(false);
+      setOp(null);
     }
   };
 
@@ -169,18 +185,36 @@ export function AdminWordPanel({ visible, onClose }: { visible: boolean; onClose
                 autoFocus
                 placeholder="kelime (4-6 harf)"
                 placeholderTextColor={colors.dim}
-                onSubmitEditing={() => void add()}
+                onSubmitEditing={() => void submit('add')}
               />
-              <Text style={[styles.msg, msg?.includes('eklendi') && styles.ok, !msg && styles.hidden]}>
+              <Text
+                style={[
+                  styles.msg,
+                  (msg?.includes('eklendi') || msg?.includes('silindi')) && styles.ok,
+                  !msg && styles.hidden,
+                ]}>
                 {msg ?? ' '}
               </Text>
-              <GlassButton
-                label={busy ? 'Ekleniyor…' : 'Ekle'}
-                accent={colors.cyan}
-                variant="fill"
-                disabled={busy}
-                onPress={() => void add()}
-              />
+              <View style={styles.actionRow}>
+                <View style={styles.actionBtn}>
+                  <GlassButton
+                    label={busy && op === 'add' ? 'Ekleniyor…' : 'Ekle'}
+                    accent={colors.cyan}
+                    variant="fill"
+                    disabled={busy}
+                    onPress={() => void submit('add')}
+                  />
+                </View>
+                <View style={styles.actionBtn}>
+                  <GlassButton
+                    label={busy && op === 'remove' ? 'Siliniyor…' : 'Sil'}
+                    accent={colors.danger}
+                    variant="outline"
+                    disabled={busy}
+                    onPress={() => void submit('remove')}
+                  />
+                </View>
+              </View>
               {added.length ? (
                 <Text style={styles.addedList} numberOfLines={2}>
                   Bu oturumda: {added.join(', ')}
@@ -283,6 +317,13 @@ const styles = StyleSheet.create({
   },
   keyBack: {
     color: colors.dim,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
   },
   wordInput: {
     backgroundColor: 'rgba(255,255,255,0.05)',
