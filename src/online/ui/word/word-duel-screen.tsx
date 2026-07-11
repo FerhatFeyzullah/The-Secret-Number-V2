@@ -147,12 +147,15 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const win = finished && !!match?.winner && match.winner === myId;
   const mySecret = recallMySecret(matchId, round);
 
-  // Rakip ilerlemesi (Wordle): rakibin EN SON tahminindeki YEŞİL harf sayısı.
-  // Sunucu YALNIZ green_count gönderir — rakibin per-harf dizisi (pozisyon)
-  // istemciye HİÇ gelmez. Yeşiller yakınlığa girer; sarılar GİRMEZ.
-  const oppLast = oppGuesses.length > 0 ? oppGuesses[oppGuesses.length - 1] : null;
-  const oppGreen = oppLast?.greenCount ?? 0;
-  const closeness = wordLength > 0 ? oppGreen / wordLength : 0;
+  // Rakip ilerlemesi (Wordle): rakibin EN İYİ (yüksek-su-seviyesi) yeşil + sarı
+  // sayısı — son tahmin değil, tüm turdaki maksimum (bir sonraki tahminde düşse
+  // bile korunur). Sunucu rakip-güvenli SAYI gönderir (per-harf dizi/pozisyon
+  // HİÇ gelmez). Hiç rakip tahmini yoksa 0.
+  const hasOppGuess = oppGuesses.length > 0;
+  const oppBestGreen = oppGuesses.reduce((mx, g) => Math.max(mx, g.greenCount ?? 0), 0);
+  const oppBestYellow = oppGuesses.reduce((mx, g) => Math.max(mx, g.yellowCount ?? 0), 0);
+  const greenPct = wordLength > 0 ? oppBestGreen / wordLength : 0;
+  const yellowPct = wordLength > 0 ? oppBestYellow / wordLength : 0;
 
   // Klavye harf renkleri: KENDİ tahminlerimin (myMarks) per-harf renklerinden.
   // Öncelik G > Y > X; bir kez yeşil olan yeşil kalır. Denenmemiş harf nötr.
@@ -468,8 +471,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           <Text style={styles.secretWord}>{mySecret ? upperTr(mySecret) : '—'}</Text>
         </View>
 
-        {/* Rakip ilerleme kartı: tahmin sayısı + EN SON tahmindeki yeşil sayısı.
-            Sunucu yalnız yeşil SAYISI gönderir (rakibin per-harf dizisi gelmez). */}
+        {/* Rakip ilerleme kartı: tahmin sayısı + EN İYİ yeşil/sarı (korunur, düşmez).
+            Sunucu yalnız rakip-güvenli SAYI gönderir (per-harf dizi/pozisyon gelmez). */}
         <View style={styles.oppCard}>
           <View style={styles.oppLeft}>
             <View style={styles.oppAvatar}>
@@ -481,21 +484,42 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             </View>
           </View>
           <View style={styles.closeWrap}>
-            <Text style={styles.closeLabel}>
-              {oppLast ? `son tahmin · ${oppGreen}/${wordLength} yeşil` : 'henüz tahmin yok'}
-            </Text>
-            <View style={styles.closeTrack}>
-              <View
-                style={[
-                  styles.closeFill,
-                  {
-                    width: `${Math.round(closeness * 100)}%` as `${number}%`,
-                    backgroundColor: '#22C55E',
-                    boxShadow: '0 0 8px rgba(34,197,94,0.5)',
-                  },
-                ]}
-              />
-            </View>
+            {hasOppGuess ? (
+              <>
+                <View style={styles.closeStat}>
+                  <Text style={styles.closeLabel}>en iyi · {oppBestGreen}/{wordLength} yeşil</Text>
+                  <View style={styles.closeTrack}>
+                    <View
+                      style={[
+                        styles.closeFill,
+                        {
+                          width: `${Math.round(greenPct * 100)}%` as `${number}%`,
+                          backgroundColor: '#22C55E',
+                          boxShadow: '0 0 8px rgba(34,197,94,0.5)',
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+                <View style={styles.closeStat}>
+                  <Text style={styles.closeLabel}>en iyi · {oppBestYellow}/{wordLength} sarı</Text>
+                  <View style={styles.closeTrack}>
+                    <View
+                      style={[
+                        styles.closeFill,
+                        {
+                          width: `${Math.round(yellowPct * 100)}%` as `${number}%`,
+                          backgroundColor: '#EAB308',
+                          boxShadow: '0 0 8px rgba(234,179,8,0.5)',
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.closeLabel}>henüz tahmin yok</Text>
+            )}
           </View>
         </View>
 
@@ -789,6 +813,10 @@ const styles = StyleSheet.create({
     fontFamily: mono,
   },
   closeWrap: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  closeStat: {
     alignItems: 'flex-end',
   },
   closeLabel: {

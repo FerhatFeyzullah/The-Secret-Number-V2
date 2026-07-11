@@ -15,10 +15,12 @@ import {
   getLastSeenLevel,
   getLastSeenSeason,
   getSeen,
+  getSeenWhatsnew,
   markSeen,
   setLastMode,
   setLastSeenLevel,
   setLastSeenSeason,
+  setSeenWhatsnew,
   type GameMode,
 } from '@/storage';
 import { appVersionLabel } from '@/ui/app-version';
@@ -26,6 +28,7 @@ import { InfoModal } from '@/ui/info-modal';
 import { useIntroDone } from '@/ui/intro-context';
 import { InfoTipBubble, TIPS, type TipId } from '@/ui/info-tip';
 import { WELCOME_INTRO } from '@/ui/welcome-intro';
+import { WhatsNewModal, WHATSNEW_ID } from '@/ui/whatsnew-modal';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
 import { Screen } from '@/ui/screen';
@@ -78,12 +81,22 @@ export default function MenuScreen() {
   // ÜSTÜNE çizilip önüne geçer. Sıra: splash → intro → menü → welcome.
   const introDone = useIntroDone();
   const [welcomeVisible, setWelcomeVisible] = useState(false);
+  const [whatsnewVisible, setWhatsnewVisible] = useState(false);
   useEffect(() => {
     if (!introDone) return;
     let alive = true;
     void (async () => {
-      const seen = await getSeen('welcome');
-      if (alive && !seen) setWelcomeVisible(true);
+      const welcomeSeen = await getSeen('welcome');
+      if (!welcomeSeen) {
+        // Yeni kurulum: karşılamayı göster; "Yenilikler"i de görüldü say (yeni
+        // kullanıcı zaten her şeyi ilk kez görüyor, güncelleme modalı gereksiz).
+        if (alive) setWelcomeVisible(true);
+        void setSeenWhatsnew(WHATSNEW_ID);
+        return;
+      }
+      // Mevcut kullanıcı: güncelleme yeniliklerini bu sürüm için bir kez göster.
+      const seenId = await getSeenWhatsnew();
+      if (alive && seenId !== WHATSNEW_ID) setWhatsnewVisible(true);
     })();
     return () => {
       alive = false;
@@ -92,6 +105,10 @@ export default function MenuScreen() {
   const closeWelcome = useCallback(() => {
     setWelcomeVisible(false);
     void markSeen('welcome');
+  }, []);
+  const closeWhatsnew = useCallback(() => {
+    setWhatsnewVisible(false);
+    void setSeenWhatsnew(WHATSNEW_ID);
   }, []);
 
   const selectMode = (next: GameMode) => {
@@ -334,6 +351,7 @@ export default function MenuScreen() {
         onClose={() => setLevelUp(null)}
       />
       <InfoModal visible={welcomeVisible} onClose={closeWelcome} {...WELCOME_INTRO} />
+      <WhatsNewModal visible={whatsnewVisible} onClose={closeWhatsnew} />
       {/* Haftalık sezon sıfırlandığında bir kez (yeni season_id). */}
       <SeasonResetModal
         visible={seasonResetOpen}
