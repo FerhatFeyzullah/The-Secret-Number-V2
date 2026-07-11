@@ -22,6 +22,10 @@ type AuthContextValue = {
   /** Başarıda null, hatada Türkçe mesaj döner. */
   signIn(email: string, password: string): Promise<string | null>;
   signUp(email: string, password: string): Promise<string | null>;
+  /** Şifre sıfırlama için 6 haneli OTP kodunu e-postayla gönderir. */
+  requestPasswordReset(email: string): Promise<string | null>;
+  /** OTP kodunu doğrular ve yeni şifreyi kaydeder (kullanıcıyı giriş yapmış duruma getirir). */
+  confirmPasswordReset(email: string, code: string, newPassword: string): Promise<string | null>;
   signOut(): Promise<void>;
   /** Oturum açıkken yalnızca DB'yi, kapalıyken yalnızca yerel adı günceller. */
   updateName(name: string): Promise<void>;
@@ -39,6 +43,11 @@ function turkishAuthError(message: string): string {
   if (m.includes('at least 6 characters')) return 'Şifre en az 6 karakter olmalı.';
   if (m.includes('valid email') || m.includes('invalid format')) return 'Geçerli bir e-posta adresi gir.';
   if (m.includes('too many') || m.includes('rate limit')) return 'Çok fazla deneme yapıldı. Biraz bekleyip tekrar dene.';
+  if (m.includes('expired')) return 'Kodun süresi dolmuş. Yeni bir kod iste.';
+  if ((m.includes('invalid') || m.includes('not found')) && (m.includes('token') || m.includes('otp')))
+    return 'Kod hatalı. Tekrar dene ya da yeni kod iste.';
+  if (m.includes('should be different') || m.includes('same as the old'))
+    return 'Yeni şifre eskisinden farklı olmalı.';
   if (m.includes('network') || m.includes('fetch')) return 'Bağlantı kurulamadı. İnternet bağlantını kontrol et.';
   return 'Bir şeyler ters gitti. Tekrar dene.';
 }
@@ -147,6 +156,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    if (!supabase) return NOT_CONFIGURED;
+    // Recovery e-postası gönderir. Şablonda {{ .Token }} varsa 6 haneli kod içerir.
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    return error ? turkishAuthError(error.message) : null;
+  }, []);
+
+  const confirmPasswordReset = useCallback(
+    async (email: string, code: string, newPassword: string) => {
+      if (!supabase) return NOT_CONFIGURED;
+      // OTP doğrulaması recovery tipinde bir oturum kurar → kullanıcı giriş yapmış olur.
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: code.trim(),
+        type: 'recovery',
+      });
+      if (verifyError) return turkishAuthError(verifyError.message);
+      // Oturum açıldı; artık yeni şifre kaydedilebilir.
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) return turkishAuthError(updateError.message);
+      return null;
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     await supabase?.auth.signOut();
   }, []);
@@ -180,6 +214,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName,
         signIn,
         signUp,
+        requestPasswordReset,
+        confirmPasswordReset,
         signOut,
         updateName,
         refreshDisplayName,

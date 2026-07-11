@@ -104,6 +104,16 @@ export default function AuthScreen() {
             />
           )}
 
+          {mode === 'signin' ? (
+            <Pressable
+              onPress={() =>
+                router.push({ pathname: '/reset-password', params: { email: email.trim() } })
+              }
+              hitSlop={8}>
+              <Text style={styles.forgotText}>Şifremi unuttum?</Text>
+            </Pressable>
+          ) : null}
+
           <Pressable onPress={toggleMode} hitSlop={8}>
             <Text style={styles.switchText}>
               {mode === 'signin' ? 'Hesabın yok mu? ' : 'Zaten hesabın var mı? '}
@@ -163,6 +173,12 @@ const styles = StyleSheet.create({
     color: colors.dim,
     textAlign: 'center',
     fontSize: 14,
+  },
+  forgotText: {
+    color: colors.cyan,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
   },
   switchLink: {
     color: colors.cyan,
