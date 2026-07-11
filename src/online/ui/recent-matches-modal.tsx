@@ -222,11 +222,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   card: {
-    // Tam ekran DEĞİL: yüzen panel gibi dursun ("oyundan çıkmış" hissi vermesin).
-    // İçerik azsa kompakt kalır, çoksa %80'de scroll'lanır.
+    // İçeriğe sarılan, sınırı olan kutu (LeaderboardModal deseni): kısa listede
+    // kompakt, uzun listede maxHeight'e dayanıp liste kayar. minHeight belirli bir
+    // taban verir; list flexGrow:0/flexShrink:1 olduğu için liste doğru render olur
+    // (flex:1 + maxHeight kombinasyonu listeyi 0'a çökertip GÖRÜNMEZ yapıyordu).
     width: '100%',
     maxWidth: 420,
     maxHeight: '80%',
+    minHeight: 320,
     backgroundColor: colors.bgMid,
     borderRadius: 20,
     borderWidth: 1,
@@ -267,7 +270,9 @@ const styles = StyleSheet.create({
     backgroundColor: cyanAlpha(0.12),
   },
   retryText: { color: colors.cyan, fontSize: 13, fontWeight: '700', fontFamily: mono },
-  list: { flex: 1 },
+  // Büyümez, gerekirse küçülür (LeaderboardModal deseni): kısa içerikte kart
+  // içeriğe sarılır; uzun içerikte kart maxHeight'e dayanınca liste kayar.
+  list: { flexGrow: 0, flexShrink: 1 },
   listBody: { padding: 12, gap: 12 },
 
   match: {
