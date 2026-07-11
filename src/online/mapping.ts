@@ -74,6 +74,8 @@ export type GuessRow = {
   /** KELİME modu: yeşil harf sayısı (rakip-güvenli; per-harf dizi DEĞİL).
    *  number satırlarda null/yok. Per-harf marks satırda SAKLANMAZ (rakibe sızmasın). */
   green_count?: number | null;
+  /** KELİME modu: sarı harf sayısı (rakip-güvenli). number satırlarda null/yok. */
+  yellow_count?: number | null;
 };
 
 /** presence tablosundan/realtime'dan gelen ham satır. */
@@ -161,8 +163,9 @@ export function guessRowToGuess(row: GuessRow): OnlineGuess {
     createdAt: row.created_at,
     // Yalnız işaretliyken eklenir (eski satır/teste şekil-uyumlu).
     ...(row.fogged ? { fogged: true } : {}),
-    // Kelime yeşil sayısı; number satırlarda null → eklenmez (şekil-uyumlu).
+    // Kelime yeşil/sarı sayısı; number satırlarda null → eklenmez (şekil-uyumlu).
     ...(row.green_count != null ? { greenCount: row.green_count } : {}),
+    ...(row.yellow_count != null ? { yellowCount: row.yellow_count } : {}),
   };
 }
 
