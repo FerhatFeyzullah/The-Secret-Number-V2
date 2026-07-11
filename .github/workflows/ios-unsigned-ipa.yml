@@ -10,11 +10,21 @@
 # ayrıntısı düzeltme isteyebilir — loglara bakıp uyarlarız.
 #
 # Çalıştırma: GitHub → Actions → "iOS unsigned IPA" → Run workflow.
+#
+# OTA: Bu IPA artık bir EAS Update channel'ı (varsayılan "preview") ile üretilir.
+# Kurulumdan SONRA saf-JS değişikliklerini yeniden IPA üretmeden gönderebilirsin:
+#   eas update --branch preview -m "mesaj"
+# (Native/paket/app.json değişikliğinde yine yeni IPA gerekir.)
 
 name: iOS unsigned IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "EAS Update channel — OTA bu branch'e bağlanır (eas update --branch <channel>)"
+        required: false
+        default: "preview"
 
 jobs:
   build:
@@ -54,6 +64,30 @@ jobs:
         run: |
           npx expo prebuild --platform ios
           cd ios && pod install
+
+      # OTA (EAS Update) için channel'ı build'e GÖM. `eas build` bunu otomatik yapar;
+      # biz ham xcodebuild kullandığımızdan Expo.plist'e elle ekliyoruz. Bu satır olmadan
+      # IPA hiçbir `eas update --branch <channel>` güncellemesini GÖREMEZ (channel yoksa
+      # istemci hangi branch'ten çekeceğini bilemez). runtimeVersion zaten app.json'dan
+      # gömülüyor; channel + runtimeVersion eşleşince OTA çalışır.
+      - name: OTA channel'ını Expo.plist'e göm
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -eo pipefail
+          PLIST=$(find ios -name Expo.plist | head -1)
+          if [ -z "$PLIST" ]; then
+            echo "HATA: Expo.plist bulunamadı — updates yapılandırması eksik olabilir."
+            exit 1
+          fi
+          echo "Expo.plist: $PLIST  |  channel: $CHANNEL"
+          # EXUpdatesRequestHeaders dict'i yoksa oluştur (varsa 'Add' hata verir → yok say).
+          /usr/libexec/PlistBuddy -c "Add :EXUpdatesRequestHeaders dict" "$PLIST" 2>/dev/null || true
+          # expo-channel-name'i ekle; zaten varsa güncelle.
+          /usr/libexec/PlistBuddy -c "Add :EXUpdatesRequestHeaders:expo-channel-name string $CHANNEL" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :EXUpdatesRequestHeaders:expo-channel-name $CHANNEL" "$PLIST"
+          echo "--- Expo.plist (doğrulama) ---"
+          /usr/libexec/PlistBuddy -c "Print" "$PLIST"
 
       # Expo prebuild'de scheme = xcworkspace'in adı. Türkçe karakter olabileceği
       # için sabit yazmıyoruz, otomatik saptıyoruz.
