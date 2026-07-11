@@ -346,3 +346,32 @@ export type PresenceInfo = {
   /** İstemcinin bildirdiği kopuş anı (ISO); bağlıyken null. */
   disconnectedAt: string | null;
 };
+
+/** Global "Son Maçlar" akışı — tek turun ifşası (get_recent_matches RPC). */
+export type RecentMatchRound = {
+  round: number;
+  /** Oyuncu1'in o turdaki gizlisi (sayı ya da kelime); yoksa null. */
+  p1Secret: string | null;
+  p2Secret: string | null;
+  /** Turu kazanan taraf. */
+  winner: 1 | 2;
+};
+
+/** Global "Son Maçlar" akışı — tek maç özeti. */
+export type RecentMatch = {
+  matchId: string;
+  mode: 'quick' | 'protocol';
+  contentType: 'number' | 'word';
+  winTarget: number;
+  player1Name: string | null;
+  player2Name: string | null;
+  /** Kazanan oyuncu1 mi (renk/kupa yönü için). */
+  p1Won: boolean;
+  result: 'win' | 'timeout' | 'forfeit' | null;
+  p1RoundWins: number;
+  p2RoundWins: number;
+  /** Maçta kazanılan/kaybedilen kupa (rating). Kazananda +, kaybedende −. */
+  p1RatingDelta: number | null;
+  p2RatingDelta: number | null;
+  rounds: RecentMatchRound[];
+};

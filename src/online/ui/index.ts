@@ -15,5 +15,6 @@ export { LeaderboardModal } from './leaderboard-modal';
 export { LevelUpOverlay } from './level-up-overlay';
 export { MatchFoundScreen } from './match-found-screen';
 export { ProfileStatsModal } from './profile-stats-modal';
+export { RecentMatchesModal } from './recent-matches-modal';
 export { WordDuelScreen } from './word/word-duel-screen';
 export { WordSecretSetupScreen } from './word/word-setup-screen';
