@@ -222,9 +222,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   card: {
+    // Tam ekran DEĞİL: yüzen panel gibi dursun ("oyundan çıkmış" hissi vermesin).
+    // İçerik azsa kompakt kalır, çoksa %80'de scroll'lanır.
     width: '100%',
-    maxWidth: 440,
-    flex: 1,
+    maxWidth: 420,
+    maxHeight: '80%',
     backgroundColor: colors.bgMid,
     borderRadius: 20,
     borderWidth: 1,
