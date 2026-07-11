@@ -31,6 +31,7 @@ import type {
   ProtocolUse,
   ProtocolUseOutcome,
   ProtocolUseOutcomeKind,
+  RecentMatch,
 } from './types';
 
 /** RPC'lerin fırlattığı, sunucu hata koduna göre Türkçe mesaj taşıyan hata. */
@@ -731,4 +732,45 @@ export async function fetchProtocolUses(matchId: string): Promise<ProtocolUse[]>
   );
   if (error) throw toOnlineError(error.message);
   return ((data ?? []) as ProtocolUseRow[]).map(protocolUseRowToUse);
+}
+
+/** Global son 30 eşleşmeli maç (get_recent_matches RPC). jsonb dizi → RecentMatch[]. */
+export async function getRecentMatches(): Promise<RecentMatch[]> {
+  const rows = await callRpc<
+    {
+      match_id: string;
+      mode: 'quick' | 'protocol';
+      content_type?: 'number' | 'word';
+      win_target?: number;
+      player1_name?: string | null;
+      player2_name?: string | null;
+      p1_won?: boolean;
+      result?: 'win' | 'timeout' | 'forfeit' | null;
+      p1_round_wins?: number;
+      p2_round_wins?: number;
+      p1_rating_delta?: number | null;
+      p2_rating_delta?: number | null;
+      rounds?: { round: number; p1_secret: string | null; p2_secret: string | null; winner: number }[];
+    }[]
+  >('get_recent_matches');
+  return (rows ?? []).map((r) => ({
+    matchId: r.match_id,
+    mode: r.mode,
+    contentType: r.content_type ?? 'number',
+    winTarget: Number(r.win_target ?? 1),
+    player1Name: r.player1_name ?? null,
+    player2Name: r.player2_name ?? null,
+    p1Won: !!r.p1_won,
+    result: r.result ?? null,
+    p1RoundWins: Number(r.p1_round_wins ?? 0),
+    p2RoundWins: Number(r.p2_round_wins ?? 0),
+    p1RatingDelta: r.p1_rating_delta ?? null,
+    p2RatingDelta: r.p2_rating_delta ?? null,
+    rounds: (r.rounds ?? []).map((rd) => ({
+      round: Number(rd.round),
+      p1Secret: rd.p1_secret ?? null,
+      p2Secret: rd.p2_secret ?? null,
+      winner: rd.winner === 1 ? (1 as const) : (2 as const),
+    })),
+  }));
 }
