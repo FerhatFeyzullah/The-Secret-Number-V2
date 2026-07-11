@@ -41,13 +41,15 @@ function reasonLabel(result: RecentMatch['result']): string {
 type TileSize = { w: number; h: number; fs: number };
 function tileMetrics(cardW: number, maxLen: number): TileSize {
   const roundInner = cardW - 26; // match yatay padding (13*2)
-  const perSecret = (roundInner - 46) / 2; // ortadaki "Tur N" pili payı
+  const turnW = 40; // ortadaki düz "Tur N" metni (pill kaldırıldı)
+  const edge = 10; // kupanın kart kenarına değmemesi için iki yana nefes payı
+  const perSecret = (roundInner - turnW - edge * 2) / 2;
   const tilesAvail = perSecret - 22; // kazanan tarafın kupası + boşluk payı
   const w = Math.max(
     13,
-    Math.min(24, Math.floor((tilesAvail - (maxLen - 1) * 3) / Math.max(1, maxLen))),
+    Math.min(22, Math.floor((tilesAvail - (maxLen - 1) * 3) / Math.max(1, maxLen))),
   );
-  return { w, h: Math.round(w * 1.2), fs: Math.max(10, Math.min(15, Math.round(w * 0.6))) };
+  return { w, h: Math.round(w * 1.2), fs: Math.max(10, Math.min(14, Math.round(w * 0.6))) };
 }
 
 /** Bir gizliyi (sayı ya da kelime) tile dizisine böler. Kazananınki altın vurgulu. */
@@ -339,17 +341,14 @@ const styles = StyleSheet.create({
   s1: { justifyContent: 'flex-end' },
   s2: { justifyContent: 'flex-start' },
   rt: { fontSize: 12 },
+  // Düz metin (kutu/pill yok) — ortada yatay yer açar, kenara nefes kalır.
   turn: {
-    fontSize: 9,
+    fontSize: 9.5,
     color: colors.dim,
     fontFamily: mono,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 6,
   },
   tiles: { flexDirection: 'row', gap: 3 },
   // width/height/fontSize dinamik (tileMetrics) — burada yalnız görünüm.
