@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import {
   cancelWaiting,
   claimTimeout,
+  fetchMatchState,
   findOrCreateQuickMatch,
   getMyRank,
   joinPrivateRoom,
@@ -17,15 +18,52 @@ jest.mock('../supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     rpc: jest.fn(),
+    from: jest.fn(),
     auth: { getSession: jest.fn() },
   },
 }));
 
-const rpcMock = (supabase as NonNullable<typeof supabase>).rpc as jest.Mock;
+const client = supabase as NonNullable<typeof supabase>;
+const rpcMock = client.rpc as jest.Mock;
+const fromMock = client.from as unknown as jest.Mock;
+const getSessionMock = client.auth.getSession as jest.Mock;
 
 beforeEach(() => {
   rpcMock.mockReset();
+  fromMock.mockReset();
+  getSessionMock.mockReset();
 });
+
+/** Zincirlenebilir + await edilebilir PostgREST sorgu taklidi (select/eq/in/
+ *  order/maybeSingle hepsi builder'ı döndürür; await → verilen sonuç). */
+function queryBuilder(result: { data: unknown; error: unknown }) {
+  const builder: Record<string, unknown> = {
+    select: () => builder,
+    eq: () => builder,
+    in: () => builder,
+    order: () => builder,
+    maybeSingle: () => Promise.resolve(result),
+    then: (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) =>
+      Promise.resolve(result).then(onF, onR),
+  };
+  return builder;
+}
+
+const MATCH_ROW = {
+  id: 'm1',
+  status: 'active',
+  mode: 'ranked',
+  room_code: null,
+  player1: 'me',
+  player2: 'opp',
+  current_turn: 'me',
+  turn_started_at: null,
+  clock1_ms: 60000,
+  clock2_ms: 60000,
+  setup_deadline: null,
+  winner: null,
+  result: null,
+};
 
 function rpcResolves(data: unknown) {
   rpcMock.mockResolvedValueOnce({ data, error: null });
@@ -333,5 +371,65 @@ describe('unlockProtocol', () => {
       owned: ['time_add', 'info_eliminate', 'def_shield'],
     });
     expect(rpcMock).toHaveBeenCalledWith('unlock_protocol', { p_id: 'def_shield' });
+  });
+});
+
+describe('istek zaman aşımı (withTimeout)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('asılı RPC ~10 sn sonra timeout OnlineError fırlatır', async () => {
+    jest.useFakeTimers();
+    rpcMock.mockReturnValueOnce(new Promise(() => {})); // hiç çözülmez (ölü ağ)
+    const settled = makeGuess('m1', '123').catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(10_000);
+    const err = await settled;
+    expect(err).toBeInstanceOf(OnlineError);
+    expect((err as OnlineError).code).toBe('timeout');
+    expect((err as OnlineError).message).toBe('Sunucu yanıt vermedi, lütfen tekrar dene.');
+  });
+
+  it('hızlı çözülen RPC timeout FIRLATMAZ (timer temizlenir)', async () => {
+    jest.useFakeTimers();
+    rpcResolves({
+      match_id: 'm1',
+      status: 'active',
+      result: null,
+      winner: null,
+      feedback: null,
+      current_turn: 'opp',
+      clock1_ms: 1,
+      clock2_ms: 2,
+    });
+    await expect(makeGuess('m1', '123')).resolves.toMatchObject({ matchId: 'm1' });
+    // Timer temizlendiyse ilerletme askıda bir reddi tetiklemez.
+    await jest.advanceTimersByTimeAsync(20_000);
+  });
+});
+
+describe('fetchMatchState skipProfiles (A5)', () => {
+  beforeEach(() => {
+    getSessionMock.mockResolvedValue({ data: { session: { user: { id: 'me' } } } });
+  });
+
+  it('varsayılan: profiles sorgusunu çağırır ve adları haritalar', async () => {
+    fromMock.mockImplementation((table: string) =>
+      table === 'profiles'
+        ? queryBuilder({ data: [{ id: 'me', username: 'Ben' }], error: null })
+        : queryBuilder({ data: MATCH_ROW, error: null }),
+    );
+    const state = await fetchMatchState('m1');
+    expect(fromMock).toHaveBeenCalledWith('profiles');
+    expect(state?.player1.username).toBe('Ben');
+  });
+
+  it('skipProfiles: profiles sorgusunu ATLAR, adlar null kalır', async () => {
+    fromMock.mockImplementation(() => queryBuilder({ data: MATCH_ROW, error: null }));
+    const state = await fetchMatchState('m1', { skipProfiles: true });
+    expect(fromMock).toHaveBeenCalledWith('matches');
+    expect(fromMock).not.toHaveBeenCalledWith('profiles');
+    expect(state?.player1.username).toBeNull();
+    expect(state?.player2?.username).toBeNull();
   });
 });

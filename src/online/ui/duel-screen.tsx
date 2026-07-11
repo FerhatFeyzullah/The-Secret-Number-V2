@@ -29,7 +29,7 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { DigitPad } from './duel/digit-pad';
 import { GuessHistory } from './duel/guess-history';
 import { HintsBar } from './duel/hints-bar';
-import { PlayerChip } from './duel/player-pod';
+import { LivePlayerChip } from './duel/player-pod';
 import { PostestPrompt } from './duel/postest-prompt';
 import { ProtocolStrip, type ProtocolTileState } from './duel/protocol-strip';
 import { ProtocolNotice, type DuelNotice } from './duel/protocol-notice';
@@ -54,7 +54,6 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const {
     match,
     guesses,
-    clocks,
     loading,
     error,
     sendSignal,
@@ -112,8 +111,6 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const locked = !isMine;
 
   const p1 = match?.myRole === 'player1';
-  const myClockMs = p1 ? clocks.clock1Ms : clocks.clock2Ms;
-  const oppClockMs = p1 ? clocks.clock2Ms : clocks.clock1Ms;
   const myName = name || 'Sen';
   const opponentName =
     (match ? (match.myRole === 'player1' ? match.player2?.username : match.player1.username) : null) ??
@@ -580,10 +577,15 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     });
   }, [buzz]);
 
+  // Çift-gönderim kilidi: `submitting` STATE'i asenkron güncellenir → aynı frame'de
+  // iki dokunuş ikisi de kontrolü geçebilir (sunucu ikincisini 'not_your_turn' ile
+  // reddedip sahte toast doğurur). Ref senkron kapatır.
+  const submitLatchRef = useRef(false);
   const submit = useCallback(async () => {
-    if (locked || submitting || entry.length < 3) return;
+    if (locked || submitting || submitLatchRef.current || entry.length < 3) return;
     const digits = entry.join('');
     if (!parseGuess(digits).ok) return; // istemci ön-doğrulaması; nihai otorite sunucu
+    submitLatchRef.current = true;
     setSubmitting(true);
     setActionError(null);
     try {
@@ -599,6 +601,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     } catch (e) {
       setActionError(errMsg(e));
     } finally {
+      submitLatchRef.current = false;
       setSubmitting(false);
     }
   }, [locked, submitting, entry, matchId, play, buzz]);
@@ -677,13 +680,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       <View style={styles.content}>
         <View style={styles.topRow}>
           {exitButton}
-          <PlayerChip
-            initial={opponentName.charAt(0)}
-            name={opponentName}
-            ms={oppClockMs}
-            active={!isMine && status === 'active'}
-            accent={colors.amber}
-          />
+          {match ? (
+            <LivePlayerChip match={match} self={false} name={opponentName} accent={colors.amber} />
+          ) : null}
           {isProtocol ? (
             <View style={styles.roundChip}>
               <Text style={styles.roundChipText}>
@@ -711,14 +710,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           onDelete={deleteDigit}
           onSubmit={submit}
           accessory={
-            <PlayerChip
-              stack
-              initial={myName.charAt(0)}
-              name={myName}
-              ms={myClockMs}
-              active={isMine}
-              accent={colors.cyan}
-            />
+            match ? (
+              <LivePlayerChip stack match={match} self name={myName} accent={colors.cyan} />
+            ) : null
           }
         />
 

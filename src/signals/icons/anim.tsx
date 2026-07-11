@@ -85,8 +85,34 @@ function useMotionStyle(kind: Motion, animated: boolean) {
   });
 }
 
-/** Tek bir SVG katmanı (256 viewBox) — verilen hareketle View seviyesinde
- *  animasyonlanır. Katmanlar üst üste (absolute) bindirilip kayıt korunur. */
+/** Statik katman: reanimated hook'ları HİÇ çalışmaz. Mağaza gibi ~30 statik ikon
+ *  render eden ekranlarda katman başına birkaç shared value + animated style
+ *  kurulumundan kaçınır (açılış takılması azalır). */
+function StillLayer({ size, children }: { size: number; children: ReactNode }) {
+  return (
+    <View style={{ position: 'absolute', width: size, height: size }} pointerEvents="none">
+      <Svg width={size} height={size} viewBox="0 0 256 256" fill="none">
+        {children}
+      </Svg>
+    </View>
+  );
+}
+
+/** Hareketli katman: reanimated shared value + animated style yalnız BURADA. */
+function MotionLayer({ size, motion, children }: { size: number; motion: Motion; children: ReactNode }) {
+  const style = useMotionStyle(motion, true);
+  return (
+    <Animated.View style={[{ position: 'absolute', width: size, height: size }, style]} pointerEvents="none">
+      <Svg width={size} height={size} viewBox="0 0 256 256" fill="none">
+        {children}
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** Tek bir SVG katmanı (256 viewBox). Statikse (animated=false ya da motion='none')
+ *  hook'suz StillLayer; aksi halde View seviyesinde animasyonlu MotionLayer.
+ *  Katmanlar üst üste (absolute) bindirilip kayıt korunur. */
 export function Layer({
   size = 64,
   animated = false,
@@ -98,46 +124,67 @@ export function Layer({
   motion?: Motion;
   children: ReactNode;
 }) {
-  const style = useMotionStyle(motion, animated);
+  if (!animated || motion === 'none') return <StillLayer size={size}>{children}</StillLayer>;
   return (
-    <Animated.View style={[{ position: 'absolute', width: size, height: size }, style]} pointerEvents="none">
-      <Svg width={size} height={size} viewBox="0 0 256 256" fill="none">
-        {children}
-      </Svg>
-    </Animated.View>
+    <MotionLayer size={size} motion={motion}>
+      {children}
+    </MotionLayer>
   );
 }
 
-/** Neon halo (radyal gradyan) — derinlik + parlama. animated iken nabız atar. */
-export function Glow({ size = 64, color, animated = false }: { size?: number; color: string; animated?: boolean }) {
+/** Halo radyal gradyanı (SVG) — statik/hareketli iki Glow da bunu kullanır. */
+function GlowSvg({ size, color }: { size: number; color: string }) {
+  const rid = useId().replace(/:/g, '');
+  return (
+    <Svg width={size} height={size} viewBox="0 0 256 256">
+      <Defs>
+        <RadialGradient id={`glow${rid}`} cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity="0.6" />
+          <Stop offset="0.6" stopColor={color} stopOpacity="0.18" />
+          <Stop offset="1" stopColor={color} stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Circle cx="128" cy="128" r="124" fill={`url(#glow${rid})`} />
+    </Svg>
+  );
+}
+
+/** Statik halo: reanimated hook'ları YOK (sabit opaklık 0.55). */
+function StillGlow({ size, color }: { size: number; color: string }) {
+  return (
+    <View style={{ position: 'absolute', width: size, height: size, opacity: 0.55 }} pointerEvents="none">
+      <GlowSvg size={size} color={color} />
+    </View>
+  );
+}
+
+/** Hareketli halo: nabız (opaklık + ölçek); shared value + animated style burada. */
+function MotionGlow({ size, color }: { size: number; color: string }) {
   const v = useSharedValue(0);
   useEffect(() => {
     cancelAnimation(v);
     v.value = 0;
-    if (!animated) return;
     v.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.ease) }), -1, true);
     return () => cancelAnimation(v);
-  }, [animated, v]);
+  }, [v]);
   const style = useAnimatedStyle(() => ({
     opacity: 0.45 + v.value * 0.4,
     transform: [{ scale: 0.92 + v.value * 0.16 }],
   }));
-  const rid = useId().replace(/:/g, '');
   return (
-    <Animated.View
-      style={[{ position: 'absolute', width: size, height: size }, animated ? style : { opacity: 0.55 }]}
-      pointerEvents="none">
-      <Svg width={size} height={size} viewBox="0 0 256 256">
-        <Defs>
-          <RadialGradient id={`glow${rid}`} cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={color} stopOpacity="0.6" />
-            <Stop offset="0.6" stopColor={color} stopOpacity="0.18" />
-            <Stop offset="1" stopColor={color} stopOpacity="0" />
-          </RadialGradient>
-        </Defs>
-        <Circle cx="128" cy="128" r="124" fill={`url(#glow${rid})`} />
-      </Svg>
+    <Animated.View style={[{ position: 'absolute', width: size, height: size }, style]} pointerEvents="none">
+      <GlowSvg size={size} color={color} />
     </Animated.View>
+  );
+}
+
+/** Neon halo (radyal gradyan) — derinlik + parlama. animated iken nabız atar;
+ *  statikken hook'suz StillGlow (mağazada ~30 statik ikon için tasarruf). */
+export function Glow({ size = 64, color, animated = false }: { size?: number; color: string; animated?: boolean }) {
+  return animated ? (
+    <MotionGlow size={size} color={color} />
+  ) : (
+    <StillGlow size={size} color={color} />
   );
 }
 
