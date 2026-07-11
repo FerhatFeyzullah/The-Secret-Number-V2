@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,32 +35,47 @@ function reasonLabel(result: RecentMatch['result']): string {
   return '';
 }
 
+/** Responsive tile ölçüsü: kart genişliği + o kartın EN UZUN gizlisine göre —
+ *  sayı (3) büyük, 6-harf kelime küçük; her ekranda bir tur satırı (iki secret +
+ *  "Tur N" + kazanan kupası) taşmadan sığar. */
+type TileSize = { w: number; h: number; fs: number };
+function tileMetrics(cardW: number, maxLen: number): TileSize {
+  const roundInner = cardW - 26; // match yatay padding (13*2)
+  const perSecret = (roundInner - 46) / 2; // ortadaki "Tur N" pili payı
+  const tilesAvail = perSecret - 22; // kazanan tarafın kupası + boşluk payı
+  const w = Math.max(
+    13,
+    Math.min(24, Math.floor((tilesAvail - (maxLen - 1) * 3) / Math.max(1, maxLen))),
+  );
+  return { w, h: Math.round(w * 1.2), fs: Math.max(10, Math.min(15, Math.round(w * 0.6))) };
+}
+
 /** Bir gizliyi (sayı ya da kelime) tile dizisine böler. Kazananınki altın vurgulu. */
-function Tiles({ value, win }: { value: string | null; win: boolean }) {
+function Tiles({ value, win, ts }: { value: string | null; win: boolean; ts: TileSize }) {
   const chars = (value ?? '').toUpperCase().split('');
   return (
     <View style={styles.tiles}>
       {chars.map((c, i) => (
-        <View key={i} style={[styles.tile, win && styles.tileWin]}>
-          <Text style={[styles.tileText, win && styles.tileTextWin]}>{c}</Text>
+        <View key={i} style={[styles.tile, { width: ts.w, height: ts.h }, win && styles.tileWin]}>
+          <Text style={[styles.tileText, { fontSize: ts.fs }, win && styles.tileTextWin]}>{c}</Text>
         </View>
       ))}
     </View>
   );
 }
 
-function RoundRow({ r }: { r: RecentMatchRound }) {
+function RoundRow({ r, ts }: { r: RecentMatchRound; ts: TileSize }) {
   const p1Win = r.winner === 1;
   const p2Win = r.winner === 2;
   return (
     <View style={styles.round}>
       <View style={[styles.secret, styles.s1]}>
         {p1Win ? <Text style={styles.rt}>🏆</Text> : null}
-        <Tiles value={r.p1Secret} win={p1Win} />
+        <Tiles value={r.p1Secret} win={p1Win} ts={ts} />
       </View>
       <Text style={styles.turn}>Tur {r.round}</Text>
       <View style={[styles.secret, styles.s2]}>
-        <Tiles value={r.p2Secret} win={p2Win} />
+        <Tiles value={r.p2Secret} win={p2Win} ts={ts} />
         {p2Win ? <Text style={styles.rt}>🏆</Text> : null}
       </View>
     </View>
@@ -77,9 +93,14 @@ function Delta({ value }: { value: number | null }) {
   );
 }
 
-function MatchCard({ m }: { m: RecentMatch }) {
+function MatchCard({ m, cardW }: { m: RecentMatch; cardW: number }) {
   const meta = MODE_META[modeKey(m)];
   const p1Won = m.p1Won;
+  const maxLen = m.rounds.reduce(
+    (mx, r) => Math.max(mx, r.p1Secret?.length ?? 0, r.p2Secret?.length ?? 0),
+    1,
+  );
+  const ts = tileMetrics(cardW, maxLen);
   return (
     <View style={styles.match}>
       <View style={styles.matchHead}>
@@ -109,7 +130,7 @@ function MatchCard({ m }: { m: RecentMatch }) {
       </View>
       <View style={styles.reveal}>
         {m.rounds.map((r) => (
-          <RoundRow key={r.round} r={r} />
+          <RoundRow key={r.round} r={r} ts={ts} />
         ))}
       </View>
     </View>
@@ -123,6 +144,10 @@ export function RecentMatchesModal({ visible, onClose }: { visible: boolean; onC
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  // Kart genişliği (root yatay padding 14*2 düşülür, maxWidth 420 ile sınırlı) →
+  // tile ölçüsü buna göre uyarlanır (responsive; küçük ekranda da satır sığar).
+  const cardW = Math.min(420, width - 28);
   const pop = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
@@ -200,7 +225,7 @@ export function RecentMatchesModal({ visible, onClose }: { visible: boolean; onC
               style={styles.list}
               data={matches ?? []}
               keyExtractor={(m) => m.matchId}
-              renderItem={({ item }) => <MatchCard m={item} />}
+              renderItem={({ item }) => <MatchCard m={item} cardW={cardW} />}
               contentContainerStyle={styles.listBody}
               showsVerticalScrollIndicator={false}
               refreshing={refreshing}
@@ -326,19 +351,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
-  tiles: { flexDirection: 'row', gap: 4 },
+  tiles: { flexDirection: 'row', gap: 3 },
+  // width/height/fontSize dinamik (tileMetrics) — burada yalnız görünüm.
   tile: {
-    minWidth: 20,
-    height: 24,
-    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
   tileWin: { borderColor: withAlpha(colors.gold, 0.55), backgroundColor: withAlpha(colors.gold, 0.1) },
-  tileText: { fontSize: 13, fontWeight: '800', color: colors.dim, fontFamily: mono },
+  tileText: { fontWeight: '800', color: colors.dim, fontFamily: mono },
   tileTextWin: { color: colors.ice },
 });
