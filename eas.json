@@ -14,6 +14,9 @@
       "environment": "preview",
       "channel": "preview",
       "autoIncrement": true,
+      "env": {
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a,armeabi-v7a"
+      },
       "android": {
         "buildType": "apk"
       }

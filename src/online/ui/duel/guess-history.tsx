@@ -31,6 +31,10 @@ export function describe(feedback: GuessFeedback): { label: string; color: strin
       return { label: '4 harf doğru', color: colors.cyan };
     case 'partial:5':
       return { label: '5 harf doğru', color: colors.cyan };
+    // Savunma: sunucu ileride tanımadığımız bir feedback eklerse ekran ÇÖKMESİN
+    // (destructure `undefined` yerine güvenli varsayılan çip döner).
+    default:
+      return { label: String(feedback), color: colors.dim };
   }
 }
 

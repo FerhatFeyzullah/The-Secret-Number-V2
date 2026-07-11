@@ -13,6 +13,17 @@ const SETUP_MS = 30_000;
 const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'Bağlantı hatası, lütfen tekrar dene.';
 
+/** Break (skor arası) durumu: deadline'ın SETUP_MS'ten fazlası "ara"dır.
+ *  inBreak → ara ekranı; breakSec → aradaki geri sayım (saniye). Saf fonksiyon. */
+function breakStateFor(deadline: number | null): { inBreak: boolean; breakSec: number } {
+  if (deadline == null) return { inBreak: false, breakSec: 0 };
+  const remaining = deadline - Date.now();
+  return {
+    inBreak: remaining > SETUP_MS,
+    breakSec: Math.ceil(Math.max(0, remaining - SETUP_MS) / 1000),
+  };
+}
+
 /** Turlar arası (Best of 3, round ≥ 2) belirleme: kısa skor arası + yeni gizli
  *  sayı. setup_deadline = ~8 sn ara + 30 sn; "ara" boyunca skor gösterilir, sonra
  *  belirleme. Düello ekranı içinde, status='setup' iken render edilir. */
@@ -33,12 +44,6 @@ export function RoundSetup({
   const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const iv = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(iv);
-  }, []);
 
   // Yeni tura geçince giriş/kilit sıfırlanır.
   useEffect(() => {
@@ -53,10 +58,21 @@ export function RoundSetup({
   const oppLocked = p1 ? match.player2Ready : match.player1Ready;
 
   const deadline = match.setupDeadline ? Date.parse(match.setupDeadline) : null;
-  const remaining = deadline ? Math.max(0, deadline - now) : SETUP_MS;
-  const inBreak = remaining > SETUP_MS; // ilk ~8 sn skor arası
-  const settingRemaining = Math.min(SETUP_MS, remaining);
-  const breakRemaining = Math.max(0, remaining - SETUP_MS);
+  // Break fazı için KUANTİZE state: yalnız saniye değişince ya da break→belirleme
+  // geçişinde render (250 ms ham tik yerine). Belirleme fazında CountdownRing kendi
+  // içinde tikler → RoundSetup gövdesi 4×/sn render OLMAZ.
+  const [breakState, setBreakState] = useState(() => breakStateFor(deadline));
+  useEffect(() => {
+    const tick = () =>
+      setBreakState((prev) => {
+        const next = breakStateFor(deadline);
+        return prev.inBreak === next.inBreak && prev.breakSec === next.breakSec ? prev : next;
+      });
+    tick();
+    const iv = setInterval(tick, 250);
+    return () => clearInterval(iv);
+  }, [deadline]);
+  const { inBreak, breakSec } = breakState;
   const distinct = new Set(dials).size === 3;
   const canLock = distinct && !locked && !busy;
 
@@ -145,7 +161,7 @@ export function RoundSetup({
           {myWins > oppWins ? 'Öndesin' : myWins < oppWins ? 'Rakip önde' : 'Berabere'}
         </Text>
         <Text style={styles.breakNext}>Tur {match.currentRound} başlıyor…</Text>
-        <Text style={styles.breakCount}>{Math.ceil(breakRemaining / 1000)}</Text>
+        <Text style={styles.breakCount}>{breakSec}</Text>
       </View>
     );
   }
@@ -153,7 +169,7 @@ export function RoundSetup({
   return (
     <View style={styles.root}>
       <View style={styles.countdown}>
-        <CountdownRing remainingMs={settingRemaining} totalMs={SETUP_MS} low={settingRemaining <= 5000} />
+        <CountdownRing deadline={deadline} totalMs={SETUP_MS} lowMs={5000} />
         {score}
       </View>
 

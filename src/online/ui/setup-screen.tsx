@@ -43,7 +43,6 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   const [showHint, setShowHint] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Ses/haptik tercihleri.
   const [soundOn, setSoundOn] = useState(true);
@@ -67,16 +66,11 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
   const distinct = new Set(dials).size === 3;
   // present = iki taraf da "Hazır"; sayaç ancak o an başlar.
   const bothPresent = !!match && match.player1Present && match.player2Present;
+  // Sunucu penceresi 7 sn VS tamponu içerebilir (37 sn); halka 30 sn'ye kelepçelenir
+  // (CountdownRing kendi içinde tikler). deadline/presentDeadline epoch — tike bağlı
+  // değil; süre-doldu tespiti artık ref-okuyan 500 ms interval'de (aşağıda).
   const deadline = match?.setupDeadline ? Date.parse(match.setupDeadline) : null;
-  // Sunucu penceresi 7 sn VS tamponu içerebilir (37 sn); halka 30 sn'ye kelepçelenir.
-  const remainingMs = deadline
-    ? Math.min(SETUP_TOTAL_MS, Math.max(0, deadline - nowMs))
-    : SETUP_TOTAL_MS;
-  const pastDeadline = deadline ? nowMs > deadline : false;
-  const low = remainingMs <= LOW_MS;
-  // Idle: bir taraf present olduktan sonra rakip için tanınan kısa pencere.
   const presentDeadline = match?.presentDeadline ? Date.parse(match.presentDeadline) : null;
-  const pastPresentDeadline = presentDeadline ? nowMs > presentDeadline : false;
   // oppReady = rakip gizli sayısını KİLİTLEDİ (present'ten farklı).
   const oppReady = match
     ? match.myRole === 'player1'
@@ -106,25 +100,25 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
     session.claim(matchId, 'match');
   }, [matchId, session]);
 
-  // Görsel geri sayım tiki (yalnız setup fazında).
-  useEffect(() => {
-    if (status !== 'setup') return;
-    const iv = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(iv);
-  }, [status]);
-
   // İptal tetikleyici (karar sunucuda): iki geçerli neden —
   //  a) idle: bir taraf present, diğeri gelmedi (present_deadline geçti),
   //  b) belirleme: iki taraf present ama 30 sn'de iki sayı girilmedi (setup_deadline).
+  // now state'i yok — 500 ms interval Date.now() okur (ekran 4×/sn render OLMAZ).
   const timeoutFiredRef = useRef(false);
-  const shouldCancel =
-    status === 'setup' &&
-    ((bothPresent && pastDeadline) || (!bothPresent && pastPresentDeadline));
   useEffect(() => {
-    if (!shouldCancel || timeoutFiredRef.current) return;
-    timeoutFiredRef.current = true;
-    void cancelSetupTimeout(matchId).catch(() => {});
-  }, [shouldCancel, matchId]);
+    if (status !== 'setup' || timeoutFiredRef.current) return;
+    const iv = setInterval(() => {
+      const now = Date.now();
+      const shouldCancel =
+        (bothPresent && deadline != null && now > deadline) ||
+        (!bothPresent && presentDeadline != null && now > presentDeadline);
+      if (shouldCancel && !timeoutFiredRef.current) {
+        timeoutFiredRef.current = true;
+        void cancelSetupTimeout(matchId).catch(() => {});
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [status, bothPresent, deadline, presentDeadline, matchId]);
 
   // active → düello ekranına geç (kısa "Maç başlıyor…" anından sonra).
   const leavingRef = useRef(false);
@@ -150,15 +144,18 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
       session.release(); // maç zaten kapandı → izleyici gereksiz leave atmasın
       // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama);
       // aksi halde idle ("katılmadı") ya da belirleme süresi dolmuştur.
+      const now = Date.now();
+      const pastAny =
+        (deadline != null && now > deadline) || (presentDeadline != null && now > presentDeadline);
       const reason =
-        status === 'cancelled' && !pastDeadline && !pastPresentDeadline
+        status === 'cancelled' && !pastAny
           ? 'Rakip ayrıldı, maç iptal edildi.'
           : !bothPresent
             ? 'Rakip katılmadı, maç iptal edildi.'
             : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router, session]);
+  }, [status, match, bothPresent, deadline, presentDeadline, router, session]);
 
   // Çıkış temizliği artık MERKEZİ: belirleme fazında geri/swipe/unmount ile maç
   // ekran kümesi dışına çıkıldığında provider'ın navigasyon izleyicisi leave_match
@@ -247,7 +244,7 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
         <View style={styles.countdown}>
           {bothPresent ? (
             <>
-              <CountdownRing remainingMs={remainingMs} totalMs={SETUP_TOTAL_MS} low={low} />
+              <CountdownRing deadline={deadline} totalMs={SETUP_TOTAL_MS} lowMs={LOW_MS} />
               <Text style={styles.cdLabel}>GİZLİ KODUNU BELİRLE</Text>
             </>
           ) : (

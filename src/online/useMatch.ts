@@ -28,13 +28,12 @@ import type { MatchState, OnlineGuess, PresenceInfo, ProtocolUse } from './types
 
 /** Heartbeat aralığı (maç setup/active iken). */
 const HEARTBEAT_MS = 5_000;
-/** Görsel saat/presence tazeleme aralığı. */
-const TICK_MS = 250;
-/** Rakipten bu kadar süre sinyal yoksa "bağlantısı koptu" göstergesi. */
-const UNSTABLE_AFTER_MS = 10_000;
+/** Zaman aşımı/rakip-kopuş tespiti için ref-okuyan denetim aralığı (görsel saat
+ *  DEĞİL — o artık useLiveClocks'ta yaprak seviyesinde). */
+const WATCH_MS = 500;
 /** Bu süreden sonra rakip "gitti" sayılır; sunucu heartbeat-reap eşiğiyle (15 sn)
- *  hizalı. opponentGone true olunca istemci hızlandırıcı heartbeat atar → sunucu
- *  reap'i hemen tetiklenir (karar yine sunucuda, _reap_if_opponent_stale). */
+ *  hizalı. Eşiğe ulaşınca istemci hızlandırıcı heartbeat atar → sunucu reap'i
+ *  hemen tetiklenir (karar yine sunucuda, _reap_if_opponent_stale). */
 const GONE_AFTER_MS = 15_000;
 /** Yeniden bağlanma backoff üst sınırı. */
 const MAX_RECONNECT_DELAY_MS = 10_000;
@@ -44,12 +43,6 @@ export type UseMatchResult = {
   match: MatchState | null;
   /** Tahmin geçmişi (kendi + rakip), eskiden yeniye, realtime güncel. */
   guesses: OnlineGuess[];
-  /** Görsel geri sayım — yalnızca gösterim, gerçek karar sunucuda. */
-  clocks: { clock1Ms: number; clock2Ms: number };
-  /** Rakipten ~10 sn'dir sinyal yok (gösterim seviyesi uyarı). */
-  opponentUnstable: boolean;
-  /** 30 sn penceresi doldu; claimTimeout/forfeitDisconnect denenebilir. */
-  opponentGone: boolean;
   loading: boolean;
   error: string | null;
   /** Tüm durumu sunucudan yeniden çeker (ör. ekrana dönünce). */
@@ -91,7 +84,6 @@ export function useMatch(matchId: string | null): UseMatchResult {
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
   const [loading, setLoading] = useState(matchId != null);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
   // Rakipten gelen efemeral sinyal (broadcast); nonce ile her geliş ayrışır.
   const [incomingSignal, setIncomingSignal] = useState<{ id: string; nonce: number } | null>(null);
   const signalNonceRef = useRef(0);
@@ -120,6 +112,33 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // buradan doldurulur, bilinmeyenler backfillUsernames ile bir kez çekilir.
   const usernamesRef = useRef<Record<string, string>>({});
   const pendingNamesRef = useRef<Set<string>>(new Set());
+  // Interval callback'leri render'a bağlı olmadan güncel state okusun diye
+  // ayna ref'ler (zaman aşımı/kopuş denetimi artık ref-okur, now state'i yok).
+  const matchRef = useRef<MatchState | null>(null);
+  const presenceRef = useRef<Record<string, PresenceInfo>>({});
+  // A3: son realtime olay anı — emniyet poll'u realtime tazeyse turu atlar.
+  const lastEventAtRef = useRef(0);
+  // A4: realtime maç-satırı olay sırası — refresh() fetch'i sürerken daha yeni
+  // bir realtime UPDATE geldiyse bayat snapshot maçı ezmesin.
+  const matchEventSeqRef = useRef(0);
+
+  /** Boş adlı (skipProfiles ya da realtime) MatchState'e cache'ten adları işler. */
+  const withNames = useCallback((state: MatchState): MatchState => {
+    const cache = usernamesRef.current;
+    return {
+      ...state,
+      player1: {
+        ...state.player1,
+        username: state.player1.username ?? cache[state.player1.id] ?? null,
+      },
+      player2: state.player2
+        ? {
+            ...state.player2,
+            username: state.player2.username ?? cache[state.player2.id] ?? null,
+          }
+        : null,
+    };
+  }, []);
 
   /** State'teki adı null kalan oyuncular için tek hafif profiles sorgusu. */
   const backfillUsernames = useCallback((ids: (string | null | undefined)[]) => {
@@ -174,8 +193,16 @@ export function useMatch(matchId: string | null): UseMatchResult {
       const needGuesses = firstLoad || metaStatus === 'active';
       const needUses =
         firstLoad || (isProtocol && (metaStatus === 'active' || metaStatus === 'protocol_select'));
+      // A5: iki oyuncunun adı da cache'te ise profiles sorgusunu atla (emniyet
+      // poll'u her turda profiles'ı yeniden çekmesin — en sıcak döngü ~ikiye iner).
+      const cached = usernamesRef.current;
+      const m = matchRef.current;
+      const skipProfiles =
+        !firstLoad && !!m && !!cached[m.player1.id] && (!m.player2 || !!cached[m.player2.id]);
+      // A4: fetch başlamadan realtime olay sırasını yakala.
+      const seqAtStart = matchEventSeqRef.current;
       const [state, guessList, presenceList, useList] = await Promise.all([
-        fetchMatchState(matchId),
+        fetchMatchState(matchId, { skipProfiles }),
         needGuesses ? fetchGuesses(matchId) : Promise.resolve(null),
         fetchPresence(matchId),
         needUses ? fetchProtocolUses(matchId) : Promise.resolve(null),
@@ -187,7 +214,14 @@ export function useMatch(matchId: string | null): UseMatchResult {
           if (pl?.username) usernamesRef.current[pl.id] = pl.username;
         }
       }
-      setMatch(state);
+      // A4: fetch sürerken daha YENİ realtime maç satırı geldiyse (seq değişti)
+      // bayat snapshot'la ezme — sıra/faz geri-dönme titremesini önler. guesses/
+      // presence/uses id-anahtarlı olduğundan koşulsuz uygulanır (kayıp olmaz).
+      if (state && matchEventSeqRef.current === seqAtStart) {
+        setMatch(withNames(state));
+      } else if (!state) {
+        setMatch(state);
+      }
       if (guessList !== null) setGuesses(guessList);
       setPresence(Object.fromEntries(presenceList.map((p) => [p.player, p])));
       if (useList !== null) setProtocolUses(useList);
@@ -198,7 +232,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [matchId]);
+  }, [matchId, withNames]);
 
   // matchMetaRef'i güncel tut — refresh() faz/moda göre gereksiz sorguları atlar.
   useEffect(() => {
@@ -208,25 +242,61 @@ export function useMatch(matchId: string | null): UseMatchResult {
     };
   }, [match?.status, match?.mode]);
 
+  // Ayna ref'ler: interval callback'leri (zaman aşımı/kopuş denetimi) güncel
+  // match/presence okusun; bunun için render'a bağlı state yerine ref kullanılır.
+  useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+  useEffect(() => {
+    presenceRef.current = presence;
+  }, [presence]);
+
   // Realtime kaçaklarına karşı EMNİYET AĞI (poll). Gerçek cihazda postgres_changes
   // gecikebilir/düşebilir (hücresel ağ, arka plan throttle, sessiz websocket ölümü);
   // poll faz geçişlerini ve aktif maç güncellemelerini yine de yakalar.
-  //  • Ön-oyun (waiting / protocol_select / setup): HIZLI (~1.5 sn) → belirleme→active
-  //    geçişinde "rakip belirliyor"da takılma ve eşleşme→setup gecikmesi (yeni maça
-  //    geç girme hissi) ~1.5 sn'ye iner.
+  //  • Ön-oyun (waiting / protocol_select / setup): HIZLI (~2.5 sn) → belirleme→active
+  //    geçişinde "rakip belirliyor"da takılma ve eşleşme→setup gecikmesi kısa kalır
+  //    (setup/select ekranlarında iki-taraf-hazır hızlandırıcı refresh'ler de var).
   //  • Aktif: DÜŞÜK frekanslı (~5 sn) emniyet → realtime sessizce düşse bile rakibin
   //    tahmini/sıra/kazanması gelir, maç ortada DONMAZ.
   //  • Bitmiş/iptal: kapalı (gereksiz yük yok).
+  // AppState kapılı (heartbeat gibi): arka planda poll durur (pil/free-tier);
+  // öne dönünce anında bir refresh + interval yeniden başlar. Ayrıca realtime az
+  // önce olay getirdiyse (lastEventAtRef) o tur atlanır → çift-çekim yok.
   useEffect(() => {
     if (!matchId) return;
     const s = match?.status ?? null;
     const pregame = s === null || s === 'waiting' || s === 'protocol_select' || s === 'setup';
     const active = s === 'active';
     if (!pregame && !active) return;
-    const iv = setInterval(() => {
-      void refresh();
-    }, pregame ? 1500 : 5000);
-    return () => clearInterval(iv);
+    const period = pregame ? 2500 : 5000;
+    let iv: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (iv) return;
+      iv = setInterval(() => {
+        if (Date.now() - lastEventAtRef.current < period) return; // realtime taze → atla
+        void refresh();
+      }, period);
+    };
+    const stop = () => {
+      if (iv) {
+        clearInterval(iv);
+        iv = null;
+      }
+    };
+    start();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') {
+        void refresh(); // arkadayken kaçan state'i hemen yakala
+        start();
+      } else {
+        stop();
+      }
+    });
+    return () => {
+      stop();
+      sub.remove();
+    };
   }, [matchId, match?.status, refresh]);
 
   // Realtime abonelik + kopunca yeniden bağlanma.
@@ -272,6 +342,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
           (payload) => {
             const myId = myIdRef.current;
             if (!myId) return;
+            lastEventAtRef.current = Date.now(); // A3: realtime canlı
+            matchEventSeqRef.current += 1; // A4: bayat refresh'i geçersizle
             const row = payload.new as MatchRow;
             setMatch((prev) => {
               const next = matchRowToState(row, myId);
@@ -303,6 +375,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'guesses', filter: `match_id=eq.${matchId}` },
           (payload) => {
+            lastEventAtRef.current = Date.now(); // A3
             const guess = guessRowToGuess(payload.new as GuessRow);
             setGuesses((prev) =>
               prev.some((g) => g.id === guess.id) ? prev : [...prev, guess],
@@ -313,6 +386,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'presence', filter: `match_id=eq.${matchId}` },
           (payload) => {
+            lastEventAtRef.current = Date.now(); // A3
             const row = payload.new as PresenceRow;
             if (!row?.player) return;
             const info = presenceRowToInfo(row);
@@ -328,6 +402,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
             filter: `match_id=eq.${matchId}`,
           },
           (payload) => {
+            lastEventAtRef.current = Date.now(); // A3
             const use = protocolUseRowToUse(payload.new as ProtocolUseRow);
             setProtocolUses((prev) =>
               prev.some((u) => u.id === use.id) ? prev : [...prev, use],
@@ -384,17 +459,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
   }, [matchId, refresh, backfillUsernames]);
 
   const phase = match?.status ?? null;
-  const inPlay = phase === 'setup' || phase === 'active';
   // Heartbeat TÜM canlı maç fazlarını kapsar (seçim dahil) → sunucu reap'i her
   // fazda çalışır. (Tur arası status='setup' zaten dahil.)
   const inMatch = phase === 'protocol_select' || phase === 'setup' || phase === 'active';
-
-  // Görsel saat + presence yaşı için yerel tik.
-  useEffect(() => {
-    if (!inPlay) return;
-    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(timer);
-  }, [inPlay]);
 
   // Heartbeat: maç CANLI (protocol_select/setup/active) iken ve uygulama öndeyken
   // periyodik gönder. Heartbeat aynı zamanda sunucu reap'ini tetikler (hayatta
@@ -438,24 +505,29 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // Otomatik zaman aşımı: sıradaki oyuncunun görsel saati 0'a inince HER iki
   // istemci de claim eder. Karar sunucuda (now() ile doğrular); kaybeden =
   // current_turn, kazanan = diğeri (çağıran kim olursa olsun). Idempotent.
+  // now state'i yerine matchRef okuyan interval → ekran her tikte render OLMAZ.
   const claimedTurnRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!matchId || !match || match.status !== 'active') return;
-    if (!match.currentTurn || !match.turnStartedAt) return;
-    const live = displayClocks(match, now);
-    const runningMs =
-      match.currentTurn === match.player1.id ? live.clock1Ms : live.clock2Ms;
-    if (runningMs > 0) return;
-    // Bu tur için zaten denendi/devam ediyor — tekrar tetikleme.
-    if (claimedTurnRef.current === match.turnStartedAt) return;
-    claimedTurnRef.current = match.turnStartedAt;
-    void claimTimeout(matchId).catch((e) => {
-      // Drift: sunucu "henüz dolmadı" derse kilidi aç, sonraki tikte tekrar dene.
-      if (e instanceof OnlineError && e.code === 'clock_not_expired') {
-        claimedTurnRef.current = null;
-      }
-    });
-  }, [matchId, match, now]);
+    if (!matchId || phase !== 'active') return;
+    const iv = setInterval(() => {
+      const m = matchRef.current;
+      if (!m || m.status !== 'active' || !m.currentTurn || !m.turnStartedAt) return;
+      const live = displayClocks(m, Date.now());
+      const runningMs = m.currentTurn === m.player1.id ? live.clock1Ms : live.clock2Ms;
+      if (runningMs > 0) return;
+      // Bu tur için zaten denendi/devam ediyor — tekrar tetikleme.
+      if (claimedTurnRef.current === m.turnStartedAt) return;
+      claimedTurnRef.current = m.turnStartedAt;
+      void claimTimeout(matchId).catch((e) => {
+        // Drift/timeout: sunucu "henüz dolmadı" ya da ağ zaman aşımı → kilidi aç,
+        // sonraki tikte tekrar dene.
+        if (e instanceof OnlineError && (e.code === 'clock_not_expired' || e.code === 'timeout')) {
+          claimedTurnRef.current = null;
+        }
+      });
+    }, WATCH_MS);
+    return () => clearInterval(iv);
+  }, [matchId, phase]);
 
   // Tur-arası (Bo3, round ≥ 2) belirleme zaman aşımı: setup_deadline geçince
   // HER iki istemci de resolve eder (idempotent, karar sunucuda). Sırrını giren
@@ -463,51 +535,58 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // sonsuz beklemeye/forfeit'e zorlama açığı kapanır. 1. tur (current_round=1)
   // BURADA ELE ALINMAZ: route ekranı cancel_setup_timeout ile iptal eder
   // (sunucu da round=1'i not_inter_round ile reddeder — çift güvence).
+  // now state'i yerine matchRef okuyan interval → render tetiklemez.
   const resolvedSetupRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!matchId || !match || match.status !== 'setup') return;
-    if (match.currentRound <= 1 || !match.setupDeadline) return;
-    if (now <= Date.parse(match.setupDeadline)) return;
-    // Tur + deadline başına bir kez (yeni tur taze deadline'la yeniden tetikler).
-    const key = `${match.currentRound}:${match.setupDeadline}`;
-    if (resolvedSetupRef.current === key) return;
-    resolvedSetupRef.current = key;
-    void resolveSetupTimeout(matchId).catch((e) => {
-      // Drift: sunucu "henüz dolmadı" derse kilidi aç, sonraki tikte tekrar dene.
-      if (e instanceof OnlineError && e.code === 'setup_not_expired') {
-        resolvedSetupRef.current = null;
-      }
-    });
-  }, [matchId, match, now]);
-
-  // Türetilmiş gösterim değerleri.
-  const clocks = match
-    ? displayClocks(match, now)
-    : { clock1Ms: 0, clock2Ms: 0 };
-
-  let opponentUnstable = false;
-  let opponentGone = false;
-  if (match && phase === 'active') {
-    const opponentId =
-      match.myRole === 'player1' ? (match.player2?.id ?? null) : match.player1.id;
-    const info = opponentId ? presence[opponentId] : undefined;
-    if (info) {
-      // Sunucudaki forfeit_disconnect ile aynı mantık: kopuş bildirildiyse o
-      // andan, bildirilmediyse son heartbeat'ten bu yana geçen süre.
-      const goneSinceMs =
-        now -
-        Date.parse(info.disconnectedAt ?? info.lastSeen);
-      opponentUnstable = goneSinceMs >= UNSTABLE_AFTER_MS;
-      opponentGone = goneSinceMs >= GONE_AFTER_MS;
-    }
-  }
+    if (!matchId || phase !== 'setup') return;
+    const iv = setInterval(() => {
+      const m = matchRef.current;
+      if (!m || m.status !== 'setup') return;
+      if (m.currentRound <= 1 || !m.setupDeadline) return;
+      if (Date.now() <= Date.parse(m.setupDeadline)) return;
+      // Tur + deadline başına bir kez (yeni tur taze deadline'la yeniden tetikler).
+      const key = `${m.currentRound}:${m.setupDeadline}`;
+      if (resolvedSetupRef.current === key) return;
+      resolvedSetupRef.current = key;
+      void resolveSetupTimeout(matchId).catch((e) => {
+        // Drift/timeout: kilidi aç, sonraki tikte tekrar dene.
+        if (e instanceof OnlineError && (e.code === 'setup_not_expired' || e.code === 'timeout')) {
+          resolvedSetupRef.current = null;
+        }
+      });
+    }, WATCH_MS);
+    return () => clearInterval(iv);
+  }, [matchId, phase]);
 
   // Hızlandırıcı: rakip "gitti" eşiğine (15 sn) ulaşınca hemen bir heartbeat at →
   // sunucu reap'i (hayatta olan lehine forfeit) periyodik 5 sn tikini beklemeden
   // tetiklenir. Karar yine sunucuda (_reap_if_opponent_stale); idempotent.
+  // presenceRef/matchRef okuyan interval (now state'i kaldırıldı); eşik başına
+  // bir kez ateşler, rakip dönünce yeniden tetiklenebilir.
+  const goneFiredRef = useRef(false);
   useEffect(() => {
-    if (opponentGone && matchId) void heartbeat(matchId).catch(() => {});
-  }, [opponentGone, matchId]);
+    if (!matchId || phase !== 'active') return;
+    const iv = setInterval(() => {
+      const m = matchRef.current;
+      if (!m || m.status !== 'active') return;
+      const opponentId =
+        m.myRole === 'player1' ? (m.player2?.id ?? null) : m.player1.id;
+      const info = opponentId ? presenceRef.current[opponentId] : undefined;
+      if (!info) return;
+      // Sunucudaki forfeit_disconnect ile aynı mantık: kopuş bildirildiyse o
+      // andan, bildirilmediyse son heartbeat'ten bu yana geçen süre.
+      const goneSinceMs = Date.now() - Date.parse(info.disconnectedAt ?? info.lastSeen);
+      if (goneSinceMs >= GONE_AFTER_MS) {
+        if (!goneFiredRef.current) {
+          goneFiredRef.current = true;
+          void heartbeat(matchId).catch(() => {});
+        }
+      } else {
+        goneFiredRef.current = false; // rakip döndü → tekrar tetiklenebilir
+      }
+    }, WATCH_MS);
+    return () => clearInterval(iv);
+  }, [matchId, phase]);
 
   // Efemeral sinyal yayını: kanal üzerinden broadcast (DB'ye yazmaz).
   const sendSignal = useCallback((signalId: string) => {
@@ -523,9 +602,6 @@ export function useMatch(matchId: string | null): UseMatchResult {
   return {
     match,
     guesses,
-    clocks,
-    opponentUnstable,
-    opponentGone,
     loading,
     error,
     refresh,

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { colors, mono } from './theme';
@@ -7,7 +8,15 @@ const DIGIT_COUNT = 14;
 /** Kelime modunda süzülen glifler: Türkçe alfabe (TR karakterler dahil). */
 const TR_LETTERS = 'abcçdefgğhıijklmnoöprsştuüvyz';
 
-function FloatingGlyph({ index, letters }: { index: number; letters: boolean }) {
+const FloatingGlyph = memo(function FloatingGlyph({
+  index,
+  letters,
+  paused,
+}: {
+  index: number;
+  letters: boolean;
+  paused: boolean;
+}) {
   const { width, height } = useWindowDimensions();
   // Her glif için mount'ta bir kez seçilen sabit rastgele parametreler.
   const cfg = useRef({
@@ -24,6 +33,7 @@ function FloatingGlyph({ index, letters }: { index: number; letters: boolean }) 
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (paused) return; // odak dışı: yeni sonsuz loop kurma (glif mount kalır, donar)
     const loop = Animated.loop(
       Animated.sequence([
         Animated.delay(cfg.delay),
@@ -43,7 +53,7 @@ function FloatingGlyph({ index, letters }: { index: number; letters: boolean }) 
     );
     loop.start();
     return () => loop.stop();
-  }, [cfg, progress]);
+  }, [cfg, progress, paused]);
 
   const translateY = progress.interpolate({
     inputRange: [0, 1],
@@ -69,18 +79,32 @@ function FloatingGlyph({ index, letters }: { index: number; letters: boolean }) 
       {cfg.glyph}
     </Animated.Text>
   );
-}
+});
 
-/** Arka planda hafifçe süzülen soluk rakamlar (kelime modunda: TR harfler). */
-export function FloatingDigits({ letters = false }: { letters?: boolean }) {
+/** Arka planda hafifçe süzülen soluk rakamlar (kelime modunda: TR harfler).
+ *  Odak dışındaki ekranlarda (stack'te altta / üstte modal) 14 sonsuz native loop
+ *  boşuna GPU/kompozit işi yapmasın diye odak kaybında duraklar; glifler unmount
+ *  EDİLMEZ (geri-kaydırma geçişinde ekran boş yanıp sönmesin). */
+export const FloatingDigits = memo(function FloatingDigits({
+  letters = false,
+}: {
+  letters?: boolean;
+}) {
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
   return (
     <>
       {Array.from({ length: DIGIT_COUNT }, (_, i) => (
-        <FloatingGlyph key={i} index={i} letters={letters} />
+        <FloatingGlyph key={i} index={i} letters={letters} paused={!focused} />
       ))}
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   digit: {

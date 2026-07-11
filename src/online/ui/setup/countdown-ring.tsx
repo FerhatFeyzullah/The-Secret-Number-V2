@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 
@@ -13,17 +13,38 @@ const fmt = (ms: number) => {
   return `00:${String(s).padStart(2, '0')}`;
 };
 
-/** 15 sn geri sayım halkası (SVG). low → kırmızı + "urgent" nabzı.
- *  remainingMs/totalMs yalnızca gösterim; gerçek karar sunucuda. */
+const clampRemaining = (deadline: number, totalMs: number) =>
+  Math.max(0, Math.min(totalMs, deadline - Date.now()));
+
+/** Geri sayım halkası (SVG). Kendi içinde 250 ms'de bir tikler → saat ekranın
+ *  geri kalanını değil yalnız halkayı yeniler. low (kalan ≤ lowMs) → kırmızı +
+ *  "urgent" nabzı. deadline null → tam dolu halka, tik yok. Yalnız gösterim;
+ *  gerçek karar sunucuda. */
 export function CountdownRing({
-  remainingMs,
+  deadline,
   totalMs,
-  low,
+  lowMs = 5_000,
 }: {
-  remainingMs: number;
+  /** Epoch ms (Date.parse sonucu) ya da null. */
+  deadline: number | null;
   totalMs: number;
-  low: boolean;
+  lowMs?: number;
 }) {
+  const [remainingMs, setRemainingMs] = useState(() =>
+    deadline == null ? totalMs : clampRemaining(deadline, totalMs),
+  );
+  useEffect(() => {
+    if (deadline == null) {
+      setRemainingMs(totalMs);
+      return;
+    }
+    const tick = () => setRemainingMs(clampRemaining(deadline, totalMs));
+    tick();
+    const iv = setInterval(tick, 250);
+    return () => clearInterval(iv);
+  }, [deadline, totalMs]);
+
+  const low = remainingMs <= lowMs;
   const ratio = totalMs > 0 ? Math.max(0, Math.min(1, remainingMs / totalMs)) : 0;
   const offset = CIRC * (1 - ratio);
   const color = low ? colors.danger : colors.cyan;

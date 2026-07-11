@@ -1,0 +1,36 @@
+# PR/push'larda tip kontrolü + test + lint çalıştırır. Çekirdek mantık (oyun
+# kuralları, matchService, update-machine) regresyonları sessizce merge olmasın.
+# Ucuz (ubuntu, secret gerekmez — testler Supabase'i mock'lar). iOS IPA workflow'u
+# ayrı (ios-unsigned-ipa.yml) ve elle tetiklenir.
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # postinstall (scripts/generate-sfx.js) burada çalışır — hızlı, saf JS.
+      - name: Bağımlılıklar (npm ci)
+        run: npm ci
+
+      - name: Tip kontrolü (tsc)
+        run: npx tsc --noEmit
+
+      - name: Testler (jest)
+        run: npm test -- --ci
+
+      - name: Lint (expo lint)
+        run: npm run lint

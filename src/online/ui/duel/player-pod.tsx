@@ -3,6 +3,9 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 
 import { colors, mono, withAlpha } from '@/ui/theme';
 
+import type { MatchState } from '../../types';
+import { useLiveClocks } from '../../useLiveClocks';
+
 const fmt = (ms: number) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -113,6 +116,42 @@ export function PlayerChip({
       {idRow}
       <ChipClock ms={ms} active={active} accent={accent} />
     </View>
+  );
+}
+
+/** Kendi içinde tikleyen oyuncu çipi: saatin 250 ms tiki YALNIZ bu çipi yeniler,
+ *  koca düello ekranını değil. self=true → benim tarafım, false → rakip.
+ *  ms/active değerleri match'ten türetilir (useLiveClocks görsel geri sayım). */
+export function LivePlayerChip({
+  match,
+  self,
+  name,
+  accent,
+  stack = false,
+}: {
+  match: MatchState;
+  self: boolean;
+  name: string;
+  accent: string;
+  stack?: boolean;
+}) {
+  const clocks = useLiveClocks(match);
+  const iAmP1 = match.myRole === 'player1';
+  const myMs = iAmP1 ? clocks.clock1Ms : clocks.clock2Ms;
+  const oppMs = iAmP1 ? clocks.clock2Ms : clocks.clock1Ms;
+  const myId = iAmP1 ? match.player1.id : match.player2?.id ?? '';
+  const oppId = iAmP1 ? match.player2?.id ?? '' : match.player1.id;
+  const sideId = self ? myId : oppId;
+  const active = match.status === 'active' && !!match.currentTurn && match.currentTurn === sideId;
+  return (
+    <PlayerChip
+      stack={stack}
+      initial={name.charAt(0)}
+      name={name}
+      ms={self ? myMs : oppMs}
+      active={active}
+      accent={accent}
+    />
   );
 }
 

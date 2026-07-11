@@ -15,6 +15,25 @@ import { WordConfirmButton } from './word-parts';
 export const WORD_SETUP_MS = 60_000;
 const LOW_MS = 10_000;
 
+const fmtClock = (ms: number) => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `0:${String(s).padStart(2, '0')}`;
+};
+
+/** Kalan görsel süre (totalMs'e kelepçeli). Saf: Date.now(). */
+const remainingFor = (deadline: number | null, totalMs: number) =>
+  deadline == null ? totalMs : Math.min(totalMs, Math.max(0, deadline - Date.now()));
+
+/** Break (skor arası, yalnız round ≥ 2) durumu — kuantize (inBreak + saniye). */
+function breakStateFor(
+  deadline: number | null,
+  isInterRound: boolean,
+): { inBreak: boolean; breakSec: number } {
+  if (deadline == null || !isInterRound) return { inBreak: false, breakSec: 0 };
+  const raw = deadline - Date.now();
+  return { inBreak: raw > WORD_SETUP_MS, breakSec: Math.ceil(Math.max(0, raw - WORD_SETUP_MS) / 1000) };
+}
+
 const errMsg = (e: unknown) => {
   if (e instanceof OnlineError) {
     // Sunucu sözlük/uzunluk reddi: sayı-metinli genel mesaj yerine kelimeye özel.
@@ -51,12 +70,6 @@ export function WordSetupPanel({
   const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const iv = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(iv);
-  }, []);
 
   // Yeni tur: giriş/kilit sıfırla (uzunluk da değişmiş olabilir).
   useEffect(() => {
@@ -71,12 +84,22 @@ export function WordSetupPanel({
   const oppReady = p1 ? match.player2Ready : match.player1Ready;
 
   const deadline = match.setupDeadline ? Date.parse(match.setupDeadline) : null;
-  const rawRemaining = deadline ? Math.max(0, deadline - now) : WORD_SETUP_MS;
-  // Tur arası (round ≥ 2): sunucu 68 sn verir; ilk ~8 sn skor arası.
-  const inBreak = match.currentRound > 1 && rawRemaining > WORD_SETUP_MS;
-  const remaining = Math.min(WORD_SETUP_MS, rawRemaining);
-  const breakRemaining = Math.max(0, rawRemaining - WORD_SETUP_MS);
-  const low = remaining <= LOW_MS;
+  // Break fazı (tur arası, round ≥ 2) KUANTİZE state — yalnız saniye/branch
+  // değişince render. Sayaç pili ise kendi içinde tikleyen SetupTimer'da → panel
+  // gövdesi (klavye/tile) 4×/sn render OLMAZ.
+  const isInterRound = match.currentRound > 1;
+  const [breakState, setBreakState] = useState(() => breakStateFor(deadline, isInterRound));
+  useEffect(() => {
+    const tick = () =>
+      setBreakState((prev) => {
+        const next = breakStateFor(deadline, isInterRound);
+        return prev.inBreak === next.inBreak && prev.breakSec === next.breakSec ? prev : next;
+      });
+    tick();
+    const iv = setInterval(tick, 250);
+    return () => clearInterval(iv);
+  }, [deadline, isInterRound]);
+  const { inBreak, breakSec } = breakState;
 
   const complete = typed.length === wordLength;
 
@@ -158,7 +181,7 @@ export function WordSetupPanel({
         </View>
 
         <Text style={styles.breakNext}>Tur {match.currentRound} başlıyor…</Text>
-        <Text style={styles.breakCount}>{Math.ceil(breakRemaining / 1000)}</Text>
+        <Text style={styles.breakCount}>{breakSec}</Text>
       </View>
     );
   }
@@ -166,11 +189,6 @@ export function WordSetupPanel({
   // Tile genişliği dinamik: 6 harf dar ekrana sığsın (tasarım 5 harf @56px).
   const tileW = Math.min(56, Math.floor((width - 40 - (wordLength - 1) * 10) / wordLength));
   const tileH = Math.round(tileW * (60 / 56));
-
-  const fmtClock = (ms: number) => {
-    const s = Math.max(0, Math.ceil(ms / 1000));
-    return `0:${String(s).padStart(2, '0')}`;
-  };
 
   return (
     <View style={styles.root}>
@@ -181,10 +199,7 @@ export function WordSetupPanel({
           <Text style={styles.badgeText}>1v1 düello</Text>
         </View>
         {active ? (
-          <View style={[styles.timerChip, low && styles.timerChipLow]}>
-            <Feather name="clock" size={11} color={low ? '#fca5a5' : colors.cyan} />
-            <Text style={[styles.timerText, low && styles.timerTextLow]}>{fmtClock(remaining)}</Text>
-          </View>
+          <SetupTimer deadline={deadline} totalMs={WORD_SETUP_MS} lowMs={LOW_MS} />
         ) : (
           <Text style={styles.waitingText}>rakip bekleniyor…</Text>
         )}
@@ -271,6 +286,36 @@ export function WordSetupPanel({
           <Text style={styles.confirmedSub}>{oppReady ? 'Düello başlıyor…' : 'Rakip bekleniyor…'}</Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** Kendi içinde tikleyen sayaç pili — panelin geri kalanını 250 ms'de yenilemez. */
+function SetupTimer({
+  deadline,
+  totalMs,
+  lowMs,
+}: {
+  deadline: number | null;
+  totalMs: number;
+  lowMs: number;
+}) {
+  const [remaining, setRemaining] = useState(() => remainingFor(deadline, totalMs));
+  useEffect(() => {
+    if (deadline == null) {
+      setRemaining(totalMs);
+      return;
+    }
+    const tick = () => setRemaining(remainingFor(deadline, totalMs));
+    tick();
+    const iv = setInterval(tick, 250);
+    return () => clearInterval(iv);
+  }, [deadline, totalMs]);
+  const low = remaining <= lowMs;
+  return (
+    <View style={[styles.timerChip, low && styles.timerChipLow]}>
+      <Feather name="clock" size={11} color={low ? '#fca5a5' : colors.cyan} />
+      <Text style={[styles.timerText, low && styles.timerTextLow]}>{fmtClock(remaining)}</Text>
     </View>
   );
 }
