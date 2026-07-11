@@ -144,6 +144,10 @@ export type OnlineGuess = {
    *  DEĞİL (rakibe pozisyon sızmaz). SAYI modunda yok. Per-harf renkler ayrı
    *  kanaldan, yalnız tahmini yapan oyuncuya gelir (bkz. getMyMarks). */
   greenCount?: number;
+  /** KELİME modu: bu tahmindeki SARI (doğru harf, yanlış pozisyon) harf sayısı.
+   *  greenCount ile aynı mantık — rakip-güvenli SAYI (per-harf dizi değil). Rakip
+   *  ilerleme kartı "en iyi sarı"yı buradan türetir. SAYI modunda yok. */
+  yellowCount?: number;
 };
 
 /** Bilgi protokollerinin verdiği kalıcı ipuçları (yalnız çağıranın; tur bazlı).

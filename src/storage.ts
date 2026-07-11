@@ -118,6 +118,18 @@ export async function markSeen(key: SeenKey): Promise<void> {
   await AsyncStorage.setItem(SEEN_PREFIX + key, '1');
 }
 
+const WHATSNEW_KEY = SEEN_PREFIX + 'whatsnew.id';
+
+/** En son GÖRÜLEN "Yenilikler" sürüm kimliği (hiç görülmediyse null). Sürüm-
+ *  bazlı: WHATSNEW_ID değişince modal bir kez daha gösterilir. */
+export async function getSeenWhatsnew(): Promise<string | null> {
+  return AsyncStorage.getItem(WHATSNEW_KEY);
+}
+
+export async function setSeenWhatsnew(id: string): Promise<void> {
+  await AsyncStorage.setItem(WHATSNEW_KEY, id);
+}
+
 /** Tüm seen.* bayraklarını sil → bütün bilgilendirme modalları yeniden ilk-kez
  *  gibi gösterilir (kullanıcı "tekrar göster" + test için). */
 export async function resetSeen(): Promise<void> {
