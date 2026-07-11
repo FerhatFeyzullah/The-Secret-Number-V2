@@ -6,6 +6,7 @@ import {
   fetchMatchState,
   findOrCreateQuickMatch,
   getMyRank,
+  getRecentMatches,
   joinPrivateRoom,
   leaveMatch,
   makeGuess,
@@ -405,6 +406,45 @@ describe('istek zaman aşımı (withTimeout)', () => {
     await expect(makeGuess('m1', '123')).resolves.toMatchObject({ matchId: 'm1' });
     // Timer temizlendiyse ilerletme askıda bir reddi tetiklemez.
     await jest.advanceTimersByTimeAsync(20_000);
+  });
+});
+
+describe('getRecentMatches', () => {
+  it('RPC jsonb dizisini RecentMatch[] olarak eşler', async () => {
+    rpcResolves([
+      {
+        match_id: 'm1',
+        mode: 'protocol',
+        content_type: 'word',
+        win_target: 3,
+        player1_name: 'ferhat',
+        player2_name: 'mehmet',
+        p1_won: true,
+        result: 'win',
+        p1_round_wins: 2,
+        p2_round_wins: 1,
+        p1_rating_delta: 21,
+        p2_rating_delta: -16,
+        rounds: [{ round: 1, p1_secret: 'kalem', p2_secret: 'masa', winner: 1 }],
+      },
+    ]);
+    const out = await getRecentMatches();
+    expect(out[0]).toMatchObject({
+      matchId: 'm1',
+      mode: 'protocol',
+      contentType: 'word',
+      winTarget: 3,
+      p1Won: true,
+      p1RatingDelta: 21,
+      p2RatingDelta: -16,
+    });
+    expect(out[0].rounds[0]).toEqual({ round: 1, p1Secret: 'kalem', p2Secret: 'masa', winner: 1 });
+    expect(rpcMock).toHaveBeenCalledWith('get_recent_matches', undefined);
+  });
+
+  it('boş/null dönüşte boş dizi', async () => {
+    rpcResolves(null);
+    await expect(getRecentMatches()).resolves.toEqual([]);
   });
 });
 

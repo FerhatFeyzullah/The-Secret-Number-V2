@@ -9,7 +9,7 @@ import { LeagueMapModal } from '@/leagues/league-map-modal';
 import { SeasonResetModal } from '@/leagues/season-reset-modal';
 import { isOnline } from '@/net';
 import { getMyRank } from '@/online';
-import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal } from '@/online/ui';
+import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal, RecentMatchesModal } from '@/online/ui';
 import {
   getLastMode,
   getLastSeenLevel,
@@ -42,6 +42,7 @@ export default function MenuScreen() {
   const [rating, setRating] = useState<number | null>(null);
   const [veri, setVeri] = useState<number | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   // Seviye atladıysa kutlanacak seviye (null = kutlama yok).
   const [levelUp, setLevelUp] = useState<number | null>(null);
@@ -275,6 +276,14 @@ export default function MenuScreen() {
           style={styles.headerBtn}>
           <Feather name="smile" size={20} color={colors.cyan} />
         </Pressable>
+        <Pressable
+          onPress={() => setRecentOpen(true)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Son Maçlar"
+          style={styles.headerBtn}>
+          <Feather name="activity" size={20} color={colors.cyan} />
+        </Pressable>
       </View>
 
       {/* Orta blok: istatistik kartları kalkınca logo + menü dikeyde ortalanır */}
@@ -312,6 +321,7 @@ export default function MenuScreen() {
       </View>
 
       <LeaderboardModal visible={boardOpen} onClose={() => setBoardOpen(false)} />
+      <RecentMatchesModal visible={recentOpen} onClose={() => setRecentOpen(false)} />
       <ProfileStatsModal
         visible={statsOpen}
         name={name}
