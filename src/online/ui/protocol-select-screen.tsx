@@ -46,20 +46,15 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
   const [lockedSelection, setLockedSelection] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const status = match?.status ?? null;
   const slots = hand?.slots ?? 2;
   const bothPresent = !!match && match.player1Present && match.player2Present;
+  // Sunucu penceresi 7 sn VS tamponu içerir (27 sn); halka 20 sn'ye kelepçelenir
+  // (CountdownRing kendi içinde tikler). deadline/presentDeadline epoch — tike bağlı
+  // değil; süre-doldu tespiti ref-okuyan 500 ms interval'de (aşağıda).
   const deadline = match?.selectDeadline ? Date.parse(match.selectDeadline) : null;
-  // Sunucu penceresi 7 sn VS tamponu içerir (27 sn); halka 20 sn'ye kelepçelenir.
-  const remainingMs = deadline
-    ? Math.min(SELECT_TOTAL_MS, Math.max(0, deadline - nowMs))
-    : SELECT_TOTAL_MS;
-  const pastDeadline = deadline ? nowMs > deadline : false;
-  const low = remainingMs <= LOW_MS;
   const presentDeadline = match?.presentDeadline ? Date.parse(match.presentDeadline) : null;
-  const pastPresentDeadline = presentDeadline ? nowMs > presentDeadline : false;
   const oppLocked = match
     ? match.myRole === 'player1'
       ? match.player2Ready
@@ -130,27 +125,26 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
     setReloadKey((k) => k + 1);
   }, []);
 
-  // Görsel geri sayım tiki (yalnız seçim fazında).
-  useEffect(() => {
-    if (status !== 'protocol_select') return;
-    const iv = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(iv);
-  }, [status]);
-
   // Süre/idle tetikleyici (karar sunucuda):
   //  a) idle: bir taraf present, diğeri gelmedi → cancel.
   //  b) seçim süresi doldu (iki taraf present) → resolve (eksikleri rastgele tamamla).
+  // now state'i yok — 500 ms interval Date.now() okur (ekran 4×/sn render OLMAZ).
   const firedRef = useRef(false);
   useEffect(() => {
     if (status !== 'protocol_select' || firedRef.current) return;
-    if (bothPresent && pastDeadline) {
-      firedRef.current = true;
-      void resolveProtocolSelect(matchId).catch(() => {});
-    } else if (!bothPresent && pastPresentDeadline) {
-      firedRef.current = true;
-      void cancelSetupTimeout(matchId).catch(() => {});
-    }
-  }, [status, bothPresent, pastDeadline, pastPresentDeadline, matchId]);
+    const iv = setInterval(() => {
+      if (firedRef.current) return;
+      const now = Date.now();
+      if (bothPresent && deadline != null && now > deadline) {
+        firedRef.current = true;
+        void resolveProtocolSelect(matchId).catch(() => {});
+      } else if (!bothPresent && presentDeadline != null && now > presentDeadline) {
+        firedRef.current = true;
+        void cancelSetupTimeout(matchId).catch(() => {});
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [status, bothPresent, deadline, presentDeadline, matchId]);
 
   // HIZ + SENKRON: ikimiz de seçimi kilitlediysek sunucu ikinci kilitte zaten
   // status='setup' yapmıştır; realtime UPDATE gecikse bile HEMEN tazele →
@@ -189,15 +183,18 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
       leavingRef.current = true;
       session.release(); // maç zaten kapandı → izleyici gereksiz leave atmasın
       // Hiçbir süre dolmadan iptal geldiyse rakip ayrılmıştır (leave/yeni arama).
+      const now = Date.now();
+      const pastAny =
+        (deadline != null && now > deadline) || (presentDeadline != null && now > presentDeadline);
       const reason =
-        status === 'cancelled' && !pastDeadline && !pastPresentDeadline
+        status === 'cancelled' && !pastAny
           ? 'Rakip ayrıldı, maç iptal edildi.'
           : !bothPresent
             ? 'Rakip katılmadı, maç iptal edildi.'
             : 'Süre doldu, maç iptal edildi.';
       Alert.alert('Maç iptal', reason, [{ text: 'Tamam', onPress: () => router.back() }]);
     }
-  }, [status, match, bothPresent, pastDeadline, pastPresentDeadline, router, session]);
+  }, [status, match, bothPresent, deadline, presentDeadline, router, session]);
 
   // Çıkış temizliği MERKEZİ: seçim fazında geri/swipe/unmount ile maç-ekran kümesi
   // dışına çıkıldığında provider izleyicisi leave_match çağırır (per-ekran net'leri
@@ -282,7 +279,7 @@ export function ProtocolSelectScreen({ matchId }: { matchId: string }) {
             </Text>
           </View>
           {bothPresent ? (
-            <CountdownRing remainingMs={remainingMs} totalMs={SELECT_TOTAL_MS} low={low} />
+            <CountdownRing deadline={deadline} totalMs={SELECT_TOTAL_MS} lowMs={LOW_MS} />
           ) : (
             <ActivityIndicator color={colors.amber} />
           )}

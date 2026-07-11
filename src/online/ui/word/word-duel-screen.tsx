@@ -23,9 +23,11 @@ import {
   getRoundReveal,
   makeGuess,
   OnlineError,
+  useLiveClocks,
   useMatch,
   useMatchSession,
   type MatchReveal,
+  type MatchState,
   type RoundReveal,
 } from '@/online';
 import { useSfx, type SfxName } from '@/sfx';
@@ -74,7 +76,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const {
     match,
     guesses,
-    clocks,
     loading,
     error,
     sendSignal,
@@ -123,6 +124,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     },
     [hapticsOn],
   );
+  // Kararlı referans: WordClockRow'un düşük-süre effect'i her render'da tetiklenmesin.
+  const buzzWarn = useCallback(() => buzz('warn'), [buzz]);
 
   // ── Türetilmiş durum ──────────────────────────────────────────
   const status = match?.status ?? null;
@@ -133,9 +136,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const wordLength = match?.wordLength ?? 5;
 
   const p1 = match?.myRole === 'player1';
-  const myClockMs = p1 ? clocks.clock1Ms : clocks.clock2Ms;
-  const oppClockMs = p1 ? clocks.clock2Ms : clocks.clock1Ms;
-  const myLow = myClockMs > 0 && myClockMs < LOW_MS; // kendi kalan süre <30 sn
   const opponentName =
     (match ? (match.myRole === 'player1' ? match.player2?.username : match.player1.username) : null) ??
     'Rakip';
@@ -205,18 +205,6 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     if (isMine && !prevIsMineRef.current) buzz('turn');
     prevIsMineRef.current = isMine;
   }, [isMine, buzz]);
-
-  // Kendi süre 30 sn altına İLK düştüğünde bir kez haptik (round başına). Tekrar yok;
-  // round sıfırlanınca (saat >30) yeniden silahlanır.
-  const lowBuzzedRef = useRef(false);
-  useEffect(() => {
-    if (myLow && !lowBuzzedRef.current) {
-      buzz('warn');
-      lowBuzzedRef.current = true;
-    } else if (!myLow) {
-      lowBuzzedRef.current = false;
-    }
-  }, [myLow, buzz]);
 
   useEffect(() => {
     session.claim(matchId, 'match');
@@ -352,11 +340,16 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     });
   }, [buzz]);
 
+  // Çift-gönderim kilidi: `submitting` STATE'i asenkron → aynı frame'de iki dokunuş
+  // ikisi de geçebilir (sunucu ikincisini reddedip sahte toast doğurur). Ref senkron
+  // kapatır.
+  const submitLatchRef = useRef(false);
   const submit = useCallback(async () => {
-    if (locked || submitting || entry.length < wordLength) return;
+    if (locked || submitting || submitLatchRef.current || entry.length < wordLength) return;
     const word = entry.join('');
     const parsed = parseWord(word);
     if (!parsed.ok) return; // istemci ön-doğrulaması; nihai otorite sunucu
+    submitLatchRef.current = true;
     setSubmitting(true);
     setActionError(null);
     try {
@@ -377,6 +370,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     } catch (e) {
       setActionError(errMsg(e));
     } finally {
+      submitLatchRef.current = false;
       setSubmitting(false);
     }
   }, [locked, submitting, entry, wordLength, matchId, play, buzz]);
@@ -505,28 +499,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           </View>
         </View>
 
-        {/* Satranç saati */}
-        <View style={styles.clockRow}>
-          <View style={[styles.clockCard, !isMine && styles.clockCardActive]}>
-            <Text style={[styles.clockName, !isMine && styles.clockNameActive]}>rakip</Text>
-            <Text style={[styles.clockTime, !isMine && styles.clockTimeActive]}>{fmtClock(oppClockMs)}</Text>
-            {!isMine ? <View style={styles.clockDot} /> : null}
-          </View>
-          <View
-            style={[
-              styles.clockCard,
-              isMine && !myLow && styles.clockCardActive,
-              myLow && styles.clockCardLow,
-            ]}>
-            <Text style={[styles.clockName, isMine && !myLow && styles.clockNameActive, myLow && styles.clockNameLow]}>
-              sen
-            </Text>
-            <Text style={[styles.clockTime, isMine && !myLow && styles.clockTimeActive, myLow && styles.clockTimeLow]}>
-              {fmtClock(myClockMs)}
-            </Text>
-            {isMine ? <View style={[styles.clockDot, myLow && styles.clockDotLow]} /> : null}
-          </View>
-        </View>
+        {/* Satranç saati — kendi içinde tikler (ekranı 250 ms'de bir yenilemez) */}
+        {match ? <WordClockRow match={match} onLowWarn={buzzWarn} /> : null}
 
         {/* ORTA: tahmin geçmişi — kaydırılabilir (yeni en altta, otomatik kayar) */}
         <View style={styles.middle}>
@@ -640,6 +614,55 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
       ) : null}
 
     </Screen>
+  );
+}
+
+/** Satranç saati satırı — kendi içinde useLiveClocks ile tikler; saat tiki koca
+ *  kelime düellosu ekranını değil YALNIZ bu satırı yeniler. Düşük-süre (<30 sn)
+ *  uyarı haptiği de round başına bir kez burada (onLowWarn geri çağrısıyla). */
+function WordClockRow({ match, onLowWarn }: { match: MatchState; onLowWarn: () => void }) {
+  const clocks = useLiveClocks(match);
+  const iAmP1 = match.myRole === 'player1';
+  const myClockMs = iAmP1 ? clocks.clock1Ms : clocks.clock2Ms;
+  const oppClockMs = iAmP1 ? clocks.clock2Ms : clocks.clock1Ms;
+  const myId = iAmP1 ? match.player1.id : match.player2?.id ?? '';
+  const isMine = match.status === 'active' && match.currentTurn === myId;
+  const myLow = myClockMs > 0 && myClockMs < LOW_MS; // kendi kalan süre <30 sn
+
+  // Kendi süre 30 sn altına İLK düştüğünde bir kez haptik (round başına). Tekrar
+  // yok; saat >30 olunca (yeni tur) yeniden silahlanır.
+  const lowBuzzedRef = useRef(false);
+  useEffect(() => {
+    if (myLow && !lowBuzzedRef.current) {
+      onLowWarn();
+      lowBuzzedRef.current = true;
+    } else if (!myLow) {
+      lowBuzzedRef.current = false;
+    }
+  }, [myLow, onLowWarn]);
+
+  return (
+    <View style={styles.clockRow}>
+      <View style={[styles.clockCard, !isMine && styles.clockCardActive]}>
+        <Text style={[styles.clockName, !isMine && styles.clockNameActive]}>rakip</Text>
+        <Text style={[styles.clockTime, !isMine && styles.clockTimeActive]}>{fmtClock(oppClockMs)}</Text>
+        {!isMine ? <View style={styles.clockDot} /> : null}
+      </View>
+      <View
+        style={[
+          styles.clockCard,
+          isMine && !myLow && styles.clockCardActive,
+          myLow && styles.clockCardLow,
+        ]}>
+        <Text style={[styles.clockName, isMine && !myLow && styles.clockNameActive, myLow && styles.clockNameLow]}>
+          sen
+        </Text>
+        <Text style={[styles.clockTime, isMine && !myLow && styles.clockTimeActive, myLow && styles.clockTimeLow]}>
+          {fmtClock(myClockMs)}
+        </Text>
+        {isMine ? <View style={[styles.clockDot, myLow && styles.clockDotLow]} /> : null}
+      </View>
+    </View>
   );
 }
 

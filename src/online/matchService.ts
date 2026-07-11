@@ -51,6 +51,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   // Yerel kodlar
   offline: 'Online mod yapılandırılmamış.',
   unknown: 'Beklenmeyen bir hata oluştu, lütfen tekrar dene.',
+  timeout: 'Sunucu yanıt vermedi, lütfen tekrar dene.',
   // Sunucu (RPC) kodları
   not_authenticated: 'Oturum açman gerekiyor.',
   match_not_found: 'Maç bulunamadı.',
@@ -112,9 +113,33 @@ function requireClient(): NonNullable<typeof supabase> {
   return supabase;
 }
 
+/** İstemci-taraflı istek zaman aşımı: ağ sessizce ölürse (hücresel geçiş, ölü
+ *  websocket) supabase-js'in fetch'i dakikalarca asılı kalabilir → busy kilitleri
+ *  hiç açılmaz, tuş takımı donar. Bu sarmalayıcı ~10 sn sonra reddeder ki catch/
+ *  finally çalışsın. AbortController yerine Promise yarışı kullanılır: mevcut
+ *  testler rpc'yi düz promise mock'luyor, .abortSignal() zinciri onları kırardı.
+ *  Sunucu otoritesi değişmez; geç gelen yanıt realtime/poll ile senkronlanır. */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(p: PromiseLike<T>, ms = REQUEST_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new OnlineError('timeout', ERROR_MESSAGES.timeout)), ms);
+    Promise.resolve(p).then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
   const client = requireClient();
-  const { data, error } = await client.rpc(fn, args);
+  const { data, error } = await withTimeout(client.rpc(fn, args));
   if (error) {
     // Teşhis: ham sunucu hatasını geliştirme konsoluna düş (UI'da yutulmasın).
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -630,7 +655,9 @@ export async function adminRemoveWord(word: string, pin: string): Promise<AdminR
 /** Havuz boyutu (secret_words'ün select grant'i zaten açık). */
 export async function adminPoolSize(): Promise<number> {
   const client = requireClient();
-  const { count } = await client.from('secret_words').select('*', { count: 'exact', head: true });
+  const { count } = await withTimeout(
+    client.from('secret_words').select('*', { count: 'exact', head: true }),
+  );
   return count ?? 0;
 }
 
@@ -640,32 +667,37 @@ async function currentUserId(): Promise<string | null> {
   return data.session?.user.id ?? null;
 }
 
-/** Maçın güvenli durumunu çeker; satır yok/oyuncu değilsen null. */
-export async function fetchMatchState(matchId: string): Promise<MatchState | null> {
+/** Maçın güvenli durumunu çeker; satır yok/oyuncu değilsen null.
+ *  skipProfiles: adlar çağıranda zaten cache'te → profiles sorgusunu atla.
+ *  (Emniyet poll'u her turda profiles'ı yeniden çekmesin; adlar caller'da
+ *  withNames ile geri doldurulur — matchRowToState boş adla haritalar.) */
+export async function fetchMatchState(
+  matchId: string,
+  opts?: { skipProfiles?: boolean },
+): Promise<MatchState | null> {
   const client = requireClient();
   const myId = await currentUserId();
   if (!myId) throw new OnlineError('not_authenticated', ERROR_MESSAGES.not_authenticated);
 
-  const { data, error } = await client
-    .from('matches')
-    .select('*')
-    .eq('id', matchId)
-    .maybeSingle();
+  const { data, error } = await withTimeout(
+    client.from('matches').select('*').eq('id', matchId).maybeSingle(),
+  );
   if (error) throw toOnlineError(error.message);
   if (!data) return null;
 
   const row = data as MatchRow;
-  // Profil adları: profiles RLS'i şimdilik yalnızca kendi satırını okutur;
-  // in() sorgusu izinli olanları döndürür, rakip adı null kalır (ileride
-  // lider tablosu politikası/RPC'siyle dolacak).
-  const ids = [row.player1, row.player2].filter((v): v is string => Boolean(v));
   const usernames: Record<string, string> = {};
-  const { data: profiles } = await client
-    .from('profiles')
-    .select('id, username')
-    .in('id', ids);
-  for (const p of profiles ?? []) {
-    if (p.username) usernames[p.id] = p.username;
+  if (!opts?.skipProfiles) {
+    // Profil adları: profiles RLS'i şimdilik yalnızca kendi satırını okutur;
+    // in() sorgusu izinli olanları döndürür, rakip adı null kalır (ileride
+    // lider tablosu politikası/RPC'siyle dolacak).
+    const ids = [row.player1, row.player2].filter((v): v is string => Boolean(v));
+    const { data: profiles } = await withTimeout(
+      client.from('profiles').select('id, username').in('id', ids),
+    );
+    for (const p of profiles ?? []) {
+      if (p.username) usernames[p.id] = p.username;
+    }
   }
   return matchRowToState(row, myId, usernames);
 }
@@ -673,11 +705,9 @@ export async function fetchMatchState(matchId: string): Promise<MatchState | nul
 /** Maçın tahmin geçmişi (kendi + rakip), eskiden yeniye. */
 export async function fetchGuesses(matchId: string): Promise<OnlineGuess[]> {
   const client = requireClient();
-  const { data, error } = await client
-    .from('guesses')
-    .select('*')
-    .eq('match_id', matchId)
-    .order('created_at', { ascending: true });
+  const { data, error } = await withTimeout(
+    client.from('guesses').select('*').eq('match_id', matchId).order('created_at', { ascending: true }),
+  );
   if (error) throw toOnlineError(error.message);
   return ((data ?? []) as GuessRow[]).map(guessRowToGuess);
 }
@@ -685,10 +715,9 @@ export async function fetchGuesses(matchId: string): Promise<OnlineGuess[]> {
 /** Maçın presence satırları (iki oyuncunun bağlantı durumu). */
 export async function fetchPresence(matchId: string): Promise<PresenceInfo[]> {
   const client = requireClient();
-  const { data, error } = await client
-    .from('presence')
-    .select('*')
-    .eq('match_id', matchId);
+  const { data, error } = await withTimeout(
+    client.from('presence').select('*').eq('match_id', matchId),
+  );
   if (error) throw toOnlineError(error.message);
   return ((data ?? []) as PresenceRow[]).map(presenceRowToInfo);
 }
@@ -697,11 +726,9 @@ export async function fetchPresence(matchId: string): Promise<PresenceInfo[]> {
  *  Şerit "kullanıldı" durumu + yeniden bağlanınca senkron için. */
 export async function fetchProtocolUses(matchId: string): Promise<ProtocolUse[]> {
   const client = requireClient();
-  const { data, error } = await client
-    .from('match_protocol_uses')
-    .select('*')
-    .eq('match_id', matchId)
-    .order('id', { ascending: true });
+  const { data, error } = await withTimeout(
+    client.from('match_protocol_uses').select('*').eq('match_id', matchId).order('id', { ascending: true }),
+  );
   if (error) throw toOnlineError(error.message);
   return ((data ?? []) as ProtocolUseRow[]).map(protocolUseRowToUse);
 }
