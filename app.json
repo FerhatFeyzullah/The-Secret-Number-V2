@@ -53,7 +53,8 @@
       ],
       "expo-audio",
       "expo-asset",
-      "./plugins/with-local-java-home.js"
+      "./plugins/with-local-java-home.js",
+      "./plugins/with-android-release-shrink.js"
     ],
     "experiments": {
       "typedRoutes": true,
