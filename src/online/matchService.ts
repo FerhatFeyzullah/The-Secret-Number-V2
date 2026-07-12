@@ -77,6 +77,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   profile_not_found: 'Profil bulunamadı.',
   invalid_clock: 'Geçersiz süre seçimi.',
   invalid_first_turn: 'Geçersiz ilk sıra seçimi.',
+  wrong_pin: 'PIN geçersiz.',
   // Protokol ekonomisi (Faz 2a)
   protocol_not_found: 'Protokol bulunamadı.',
   already_owned: 'Bu protokole zaten sahipsin.',
@@ -679,6 +680,46 @@ export async function adminPoolSize(): Promise<number> {
     client.from('secret_words').select('*', { count: 'exact', head: true }),
   );
   return count ?? 0;
+}
+
+// ─── Havuza kelime öneri sistemi (oyuncu isteği + admin onay) ───────────────
+export type RequestWordStatus = 'submitted' | 'exists' | 'invalid';
+
+/** Oyuncu önerisi: havuzda olmayan bir kelimeyi admin onayına gönderir. PIN'siz —
+ *  anon (offline giriş yapmamış) da çağırabilir. Sunucu biçimi tekrar doğrular. */
+export async function requestWord(word: string): Promise<RequestWordStatus> {
+  const r = await callRpc<{ status: RequestWordStatus }>('request_word', { p_word: word });
+  return r.status;
+}
+
+/** Onay bekleyen bir öneri satırı. */
+export type WordRequest = { word: string; count: number; at: string };
+
+/** Admin: onay bekleyen kelimeler (PIN'li), en çok istenen üstte. */
+export async function adminListWordRequests(pin: string): Promise<WordRequest[]> {
+  const rows = await callRpc<{ word: string; count: number; at: string }[]>(
+    'admin_list_word_requests',
+    { p_pin: pin },
+  );
+  return (rows ?? []).map((x) => ({ word: x.word, count: Number(x.count), at: x.at }));
+}
+
+/** Admin: öneriyi onayla → havuza (secret_words) ekler + istekten siler. */
+export async function adminApproveWord(word: string, pin: string): Promise<'approved'> {
+  const r = await callRpc<{ status: 'approved' }>('admin_approve_word', {
+    p_word: word,
+    p_pin: pin,
+  });
+  return r.status;
+}
+
+/** Admin: öneriyi reddet → istekten siler (havuza girmez). */
+export async function adminRejectWord(word: string, pin: string): Promise<'rejected'> {
+  const r = await callRpc<{ status: 'rejected' }>('admin_reject_word', {
+    p_word: word,
+    p_pin: pin,
+  });
+  return r.status;
 }
 
 async function currentUserId(): Promise<string | null> {

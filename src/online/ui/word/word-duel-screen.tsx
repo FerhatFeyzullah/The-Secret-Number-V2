@@ -37,6 +37,7 @@ import { colors, mono } from '@/ui/theme';
 
 import { ResultOverlay } from '../duel/result-overlay';
 import { WordOrbs } from './orbs';
+import { RequestWordButton } from './request-word-button';
 import { recallMySecret } from './secret-memory';
 import { TrKeyboard } from './tr-keyboard';
 import { WordConfirmButton } from './word-parts';
@@ -90,6 +91,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
   const [signalDeck, setSignalDeck] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Havuz-dışı (tam) tahmin → "Sözlüğe öner" için tutulan kelime; harf değişince temizlenir.
+  const [notInPoolWord, setNotInPoolWord] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [lastRound, setLastRound] = useState<{ winnerIsMe: boolean; reason: 'win' | 'timeout' } | null>(
     null,
@@ -343,6 +346,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const addLetter = useCallback(
     (k: string) => {
       if (locked) return;
+      setActionError(null);
+      setNotInPoolWord(null);
       setEntry((g) => (g.length >= wordLength ? g : [...g, k]));
       play('blip');
       buzz('tap');
@@ -350,6 +355,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     [locked, wordLength, play, buzz],
   );
   const deleteLetter = useCallback(() => {
+    setActionError(null);
+    setNotInPoolWord(null); // harf silinince "Sözlüğe öner" kaybolur (kısa kelime önerilemez)
     setEntry((g) => {
       if (g.length === 0) return g;
       buzz('tap');
@@ -369,6 +376,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     submitLatchRef.current = true;
     setSubmitting(true);
     setActionError(null);
+    setNotInPoolWord(null);
     try {
       const outcome = await makeGuess(matchId, parsed.word, 'word');
       setEntry([]);
@@ -386,6 +394,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
       }
     } catch (e) {
       setActionError(errMsg(e));
+      // invalid_digits + entry uzunluğu tam (parseWord geçti) → havuz-dışı: öner.
+      if (e instanceof OnlineError && e.code === 'invalid_digits') setNotInPoolWord(parsed.word);
     } finally {
       submitLatchRef.current = false;
       setSubmitting(false);
@@ -603,6 +613,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             })}
           </View>
           {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
+          {notInPoolWord ? (
+            <View style={styles.requestRow}>
+              <RequestWordButton word={notInPoolWord} />
+            </View>
+          ) : null}
         </View>
 
         {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen): onay tuşu
@@ -1010,6 +1025,10 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 11,
     textAlign: 'center',
+    marginTop: 8,
+  },
+  requestRow: {
+    alignItems: 'center',
     marginTop: 8,
   },
   kbWrap: {
