@@ -19,6 +19,7 @@ import { normalizeTr, parseWord, upperTr, wordMarks, type LetterMark } from '@/g
 import { isOnline } from '@/net';
 import { fetchWordPool } from '@/online/word-pool';
 import { WordOrbs } from '@/online/ui/word/orbs';
+import { RequestWordButton } from '@/online/ui/word/request-word-button';
 import { TrKeyboard } from '@/online/ui/word/tr-keyboard';
 import { WordConfirmButton } from '@/online/ui/word/word-parts';
 import { useSfx, type SfxName } from '@/sfx';
@@ -69,6 +70,8 @@ export default function OfflineWordScreen() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [timeLeft, setTimeLeft] = useState(limitSec);
   const [invalidMsg, setInvalidMsg] = useState<string | null>(null);
+  // Havuz-dışı (tam) tahmin → "Sözlüğe öner" için tutulan kelime; harf değişince temizlenir.
+  const [notInPoolWord, setNotInPoolWord] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const [hapticsOn, setHapticsOn] = useState(true);
 
@@ -194,6 +197,7 @@ export default function OfflineWordScreen() {
     (k: string) => {
       if (phase !== 'playing') return;
       setInvalidMsg(null);
+      setNotInPoolWord(null);
       setEntry((g) => (g.length >= wordLength ? g : [...g, k]));
       play('blip');
       buzz('tap');
@@ -201,6 +205,8 @@ export default function OfflineWordScreen() {
     [phase, wordLength, play, buzz],
   );
   const deleteLetter = useCallback(() => {
+    setInvalidMsg(null);
+    setNotInPoolWord(null); // harf silinince "Sözlüğe öner" kaybolur (kısa kelime önerilemez)
     setEntry((g) => {
       if (g.length === 0) return g;
       buzz('tap');
@@ -215,12 +221,14 @@ export default function OfflineWordScreen() {
     const word = parsed.word;
     if (!poolSetRef.current.has(word)) {
       setInvalidMsg('Bu kelime sözlükte yok.');
+      setNotInPoolWord(word); // tam kelime (4-6 harf) → "Sözlüğe öner" göster
       buzz('warn');
       return;
     }
     const marks = wordMarks(secret, word);
     setEntry([]);
     setInvalidMsg(null);
+    setNotInPoolWord(null);
     setHistory((h) => [...h, { word, marks }]);
     if (word === normalizeTr(secret)) {
       setPhase('won');
@@ -350,6 +358,11 @@ export default function OfflineWordScreen() {
             })}
           </View>
           {invalidMsg ? <Text style={styles.invalid}>{invalidMsg}</Text> : null}
+          {notInPoolWord ? (
+            <View style={styles.requestRow}>
+              <RequestWordButton word={notInPoolWord} />
+            </View>
+          ) : null}
         </View>
 
         {/* KLAVYE + ONAY BUTONU (çok oyunculu düello ile aynı desen) */}
@@ -557,6 +570,10 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
     textAlign: 'center',
+    marginTop: 8,
+  },
+  requestRow: {
+    alignItems: 'center',
     marginTop: 8,
   },
   kbWrap: {

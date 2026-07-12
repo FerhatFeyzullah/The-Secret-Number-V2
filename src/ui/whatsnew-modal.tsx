@@ -6,25 +6,20 @@ import { colors, cyanAlpha, mono } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'son-maclar-kelime-ilerleme';
+export const WHATSNEW_ID = 'sozluge-oner';
 
 type Note = { emoji: string; title: string; body: string };
 
 const WHATSNEW_NOTES: Note[] = [
   {
-    emoji: '🏆',
-    title: 'Son Maçlar geldi',
-    body: 'Ana menüden oyunun son 30 eşleşmeli maçını, tur-bazlı gizli ifşalarıyla gör.',
+    emoji: '📖',
+    title: 'Sözlüğe öner',
+    body: 'Kelime modunda tahmin ettiğin ya da gizli seçtiğin bir kelime sözlükte yoksa, artık "Sözlüğe öner" butonuyla havuza eklenmesini isteyebilirsin.',
   },
   {
-    emoji: '🟩',
-    title: 'Kelime modu · en iyi yeşil',
-    body: 'Rakip ilerlemesinde artık en iyi yeşilin korunuyor — sonraki tahminde düşse bile göstergede kalır.',
-  },
-  {
-    emoji: '🟨',
-    title: 'Kelime modu · en iyi sarı',
-    body: 'Rakibin en iyi sarı tahmini de ayrı bir satırda gösteriliyor.',
+    emoji: '✅',
+    title: 'Önerilerin bize ulaşıyor',
+    body: 'Gönderdiğin kelimeler incelenir; onaylananlar sözlüğe girer ve herkes için geçerli olur. Bir kelimeyi ne kadar çok kişi önerirse önceliği o kadar artar.',
   },
 ];
 
