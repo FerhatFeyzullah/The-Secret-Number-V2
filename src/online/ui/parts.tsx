@@ -2,9 +2,15 @@ import { Feather } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
+import { upperTr } from '@/game';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 export type FeatherName = keyof typeof Feather.glyphMap;
+
+/** Kart canlı-sayaç etiketleri — Türkçe BÜYÜK harf (upperTr; RN textTransform 'i'→'I'
+ *  yapıp İ'yi bozardı). Modül düzeyinde bir kez hesaplanır. */
+const LBL_WAITING = upperTr('bekliyor');
+const LBL_ACTIVE = upperTr('aktif maç');
 
 /** Lobi alt-ekran başlığı: geri ok callback ile (durum makinesinde faz-geri
  *  ya da route'tan çıkış için). ScreenHeader router.back() yaptığından burada
@@ -91,7 +97,7 @@ export function ChoiceCard({
   accent,
   title,
   subtitle,
-  waiting,
+  stats,
   onPress,
   onInfo,
   hero = false,
@@ -101,8 +107,9 @@ export function ChoiceCard({
   accent: string;
   title: string;
   subtitle: string;
-  /** >0 ise kart altında "N kişi bekliyor" satırı gösterir (0/undefined → gizli). */
-  waiting?: number;
+  /** Verilirse kart altında iki canlı çip: "N BEKLİYOR" (kuyruk) + "M AKTİF MAÇ".
+   *  0 olsa DA gösterilir (rakam hep görünür); undefined → çip yok (ör. Özel Oyun). */
+  stats?: { waiting: number; active: number };
   onPress: () => void;
   /** Verilirse sağ-üst köşede "?" rozeti çıkar; bilgilendirme modalını açar
    *  (kartın onPress'ini tetiklemez — üstteki Pressable dokunuşu yakalar). */
@@ -128,8 +135,25 @@ export function ChoiceCard({
           {title}
         </Text>
         <Text style={styles.cardSubtitle}>{subtitle}</Text>
-        {waiting ? (
-          <Text style={[styles.cardWaiting, { color: accent }]}>{waiting} kişi bekliyor</Text>
+        {stats ? (
+          <View style={styles.statRow}>
+            <View
+              style={[
+                styles.chip,
+                { borderColor: withAlpha(accent, 0.28), backgroundColor: withAlpha(accent, 0.1) },
+              ]}>
+              <View
+                style={[styles.chipDot, { backgroundColor: accent, boxShadow: `0 0 6px ${accent}` }]}
+              />
+              <Text style={[styles.chipNum, { color: accent }]}>{stats.waiting}</Text>
+              <Text style={[styles.chipLabel, { color: withAlpha(accent, 0.85) }]}>{LBL_WAITING}</Text>
+            </View>
+            <View style={[styles.chip, styles.chipActive]}>
+              <Feather name="play" size={10} color={colors.dim} />
+              <Text style={[styles.chipNum, styles.chipNumActive]}>{stats.active}</Text>
+              <Text style={styles.chipLabel}>{LBL_ACTIVE}</Text>
+            </View>
+          </View>
         ) : null}
         {children}
       </View>
@@ -287,11 +311,44 @@ const styles = StyleSheet.create({
     color: colors.dim,
     lineHeight: 16,
   },
-  cardWaiting: {
-    fontSize: 11,
-    fontWeight: '700',
+  statRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 3,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipActive: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: colors.glassBorder,
+  },
+  chipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  chipNum: {
     fontFamily: mono,
-    marginTop: 1,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  chipNumActive: {
+    color: colors.ice,
+  },
+  chipLabel: {
+    fontFamily: mono,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    color: colors.dim,
   },
   avatar: {
     borderWidth: 2,

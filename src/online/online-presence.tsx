@@ -17,7 +17,8 @@ const OnlineCountContext = createContext<number | null>(null);
  *
  * Kanal her ekranda katılır (kullanıcı nerede olursa olsun "online" sayılır);
  * sayı yalnızca lobi ekranında GÖSTERİLİR. Presence key = userId → aynı kullanıcının
- * birden çok cihazı tek sayılır. Uygulama arka plana alınınca `untrack` ("şu an
+ * birden çok cihazı tek sayılır. KENDİ anahtarı sayımdan HARİÇ tutulur → yalnızsan 0
+ * (başka oyuncu yoksa 1 yerine 0). Uygulama arka plana alınınca `untrack` ("şu an
  * açık" olanı yansıtır); öne gelince yeniden `track`. Çıkış/unmount'ta tam temizlik.
  */
 export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
@@ -39,7 +40,10 @@ export function OnlinePresenceProvider({ children }: { children: ReactNode }) {
     });
 
     channel.on('presence', { event: 'sync' }, () => {
-      if (!disposed) setCount(Object.keys(channel.presenceState()).length);
+      // Kendi presence anahtarını (userId) hariç tut → yalnızsan 0.
+      if (!disposed) {
+        setCount(Object.keys(channel.presenceState()).filter((key) => key !== userId).length);
+      }
     });
 
     channel.subscribe((status) => {
