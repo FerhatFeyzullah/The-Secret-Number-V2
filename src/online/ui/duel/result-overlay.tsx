@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { upperTr } from '@/game';
 import type { MatchResult } from '@/online/types';
 import { getSignal, SIGNALS } from '@/signals/catalog';
 import { colors, mono, withAlpha } from '@/ui/theme';
@@ -205,7 +206,7 @@ export function ResultOverlay({
               isWord ? styles.revealWord : styles.revealNum,
               { color: colors.cyan, textShadowColor: colors.cyan },
             ]}>
-            {isWord ? (mySecret?.toUpperCase() ?? '—') : spaced(mySecret)}
+            {isWord ? (mySecret ? upperTr(mySecret) : '—') : spaced(mySecret)}
           </Text>
         </View>
         <View style={styles.revealDivider} />
@@ -217,7 +218,7 @@ export function ResultOverlay({
               isWord ? styles.revealWord : styles.revealNum,
               { color: colors.amber, textShadowColor: colors.amber },
             ]}>
-            {isWord ? (theirSecret?.toUpperCase() ?? '—') : spaced(theirSecret)}
+            {isWord ? (theirSecret ? upperTr(theirSecret) : '—') : spaced(theirSecret)}
           </Text>
         </View>
       </View>
