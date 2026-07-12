@@ -106,7 +106,8 @@ export function ChoiceCard({
   icon: FeatherName;
   accent: string;
   title: string;
-  subtitle: string;
+  /** Verilmezse alt açıklama satırı çizilmez (ör. lobi mod kartları — sade). */
+  subtitle?: string;
   /** Verilirse kart altında iki canlı çip: "N BEKLİYOR" (kuyruk) + "M AKTİF MAÇ".
    *  0 olsa DA gösterilir (rakam hep görünür); undefined → çip yok (ör. Özel Oyun). */
   stats?: { waiting: number; active: number };
@@ -129,29 +130,30 @@ export function ChoiceCard({
         },
         pressed && styles.cardPressed,
       ]}>
-      <Emblem icon={icon} accent={accent} size={hero ? 72 : 66} iconSize={hero ? 30 : 26} />
+      <Emblem icon={icon} accent={accent} size={66} iconSize={26} />
       <View style={styles.cardBody}>
         <Text style={[styles.cardTitle, hero && styles.cardTitleHero, { color: colors.text }]}>
           {title}
         </Text>
-        <Text style={styles.cardSubtitle}>{subtitle}</Text>
+        {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
         {stats ? (
-          <View style={styles.statRow}>
+          // Alt alta KAPSÜL çipler — kart sadeleşti (başlık + sayaçlar), dikey yer var.
+          <View style={styles.statCol}>
             <View
               style={[
-                styles.chip,
+                styles.pill,
                 { borderColor: withAlpha(accent, 0.28), backgroundColor: withAlpha(accent, 0.1) },
               ]}>
               <View
-                style={[styles.chipDot, { backgroundColor: accent, boxShadow: `0 0 6px ${accent}` }]}
+                style={[styles.pillDot, { backgroundColor: accent, boxShadow: `0 0 6px ${accent}` }]}
               />
-              <Text style={[styles.chipNum, { color: accent }]}>{stats.waiting}</Text>
-              <Text style={[styles.chipLabel, { color: withAlpha(accent, 0.85) }]}>{LBL_WAITING}</Text>
+              <Text style={[styles.pillNum, { color: accent }]}>{stats.waiting}</Text>
+              <Text style={[styles.pillLabel, { color: withAlpha(accent, 0.85) }]}>{LBL_WAITING}</Text>
             </View>
-            <View style={[styles.chip, styles.chipActive]}>
-              <Feather name="play" size={10} color={colors.dim} />
-              <Text style={[styles.chipNum, styles.chipNumActive]}>{stats.active}</Text>
-              <Text style={styles.chipLabel}>{LBL_ACTIVE}</Text>
+            <View style={[styles.pill, styles.pillActive]}>
+              <Feather name="play" size={9} color={colors.dim} />
+              <Text style={[styles.pillNum, styles.pillNumActive]}>{stats.active}</Text>
+              <Text style={styles.pillLabel}>{LBL_ACTIVE}</Text>
             </View>
           </View>
         ) : null}
@@ -311,41 +313,41 @@ const styles = StyleSheet.create({
     color: colors.dim,
     lineHeight: 16,
   },
-  statRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 3,
+  statCol: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 4,
   },
-  chip: {
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingVertical: 4,
+    paddingVertical: 2,
     paddingHorizontal: 9,
     borderRadius: 999,
     borderWidth: 1,
   },
-  chipActive: {
+  pillActive: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderColor: colors.glassBorder,
   },
-  chipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  pillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
-  chipNum: {
+  pillNum: {
     fontFamily: mono,
     fontSize: 11,
     fontWeight: '800',
   },
-  chipNumActive: {
+  pillNumActive: {
     color: colors.ice,
   },
-  chipLabel: {
+  pillLabel: {
     fontFamily: mono,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.3,
     color: colors.dim,

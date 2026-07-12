@@ -200,47 +200,33 @@ export function LobbyHub({
           icon="zap"
           accent={colors.cyan}
           title="Hızlı Maç"
-          subtitle="Rastgele rakiple eşleş"
           stats={waiting ? { waiting: waiting.quick, active: waiting.activeQuick } : undefined}
           onPress={tapQuick}
-          onInfo={infoQuick}>
-          <View style={styles.tags}>
-            <Text style={styles.tag}>⏱ Zamana Karşı</Text>
-            <Text style={styles.tag}>🔢 3 haneli kod</Text>
-          </View>
-        </ChoiceCard>
+          onInfo={infoQuick}
+        />
 
         <ChoiceCard
           icon="layers"
           accent={colors.violet}
           title="Protokol Maçı"
-          subtitle="Protokollü düello · 3 tur"
           stats={waiting ? { waiting: waiting.protocol, active: waiting.activeProtocol } : undefined}
           onPress={tapProtocol}
-          onInfo={infoProtocol}>
-          <View style={styles.tags}>
-            <Text style={styles.tag}>🏆 2 tur kazanan alır</Text>
-          </View>
-        </ChoiceCard>
+          onInfo={infoProtocol}
+        />
 
         <ChoiceCard
           icon="type"
           accent={colors.success}
           title="Kelime Modu"
-          subtitle="Kelime düellosu · 3 tur"
           stats={waiting ? { waiting: waiting.word, active: waiting.activeWord } : undefined}
           onPress={tapWord}
-          onInfo={infoWord}>
-          <View style={styles.tags}>
-            <Text style={styles.tag}>🔤 4-6 harf · her tur rastgele</Text>
-          </View>
-        </ChoiceCard>
+          onInfo={infoWord}
+        />
 
         <ChoiceCard
           icon="lock"
           accent={colors.amber}
           title="Özel Oyun"
-          subtitle="Arkadaşınla oyna"
           onPress={onPrivate}
         />
       </View>
@@ -361,17 +347,6 @@ const styles = StyleSheet.create({
   },
   cards: {
     gap: 14,
-  },
-  tags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 8,
-  },
-  tag: {
-    fontSize: 9,
-    color: colors.dim,
-    fontFamily: mono,
   },
   footer: {
     marginTop: 'auto',
