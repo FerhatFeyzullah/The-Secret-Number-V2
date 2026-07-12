@@ -507,16 +507,35 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   }));
 }
 
-export type LobbyCounts = { quick: number; protocol: number; word: number };
+export type LobbyCounts = {
+  quick: number;
+  protocol: number;
+  word: number;
+  /** O modda ŞU AN oynanan (setup/protocol_select/active) maç adedi. RPC eski
+   *  sürümdeyse (migration henüz uygulanmadıysa) 0 döner. */
+  activeQuick: number;
+  activeProtocol: number;
+  activeWord: number;
+};
 
-/** Lobi bekleme sayaçları: her mod kuyruğunda rakip bekleyen (taze, herkese açık)
- *  oyuncu sayısı. Kuyruğu RLS gizlediği için SECURITY DEFINER RPC üzerinden. */
+/** Lobi sayaçları: her mod kuyruğunda rakip bekleyen (taze, herkese açık) sayı +
+ *  o modda süren aktif maç adedi. Kuyruğu RLS gizlediği için SECURITY DEFINER RPC. */
 export async function getLobbyCounts(): Promise<LobbyCounts> {
-  const p = await callRpc<{ quick?: number; protocol?: number; word?: number }>('get_lobby_counts');
+  const p = await callRpc<{
+    quick?: number;
+    protocol?: number;
+    word?: number;
+    active_quick?: number;
+    active_protocol?: number;
+    active_word?: number;
+  }>('get_lobby_counts');
   return {
     quick: Number(p?.quick ?? 0),
     protocol: Number(p?.protocol ?? 0),
     word: Number(p?.word ?? 0),
+    activeQuick: Number(p?.active_quick ?? 0),
+    activeProtocol: Number(p?.active_protocol ?? 0),
+    activeWord: Number(p?.active_word ?? 0),
   };
 }
 
