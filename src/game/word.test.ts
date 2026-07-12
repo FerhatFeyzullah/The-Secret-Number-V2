@@ -1,5 +1,13 @@
 import { getContentType } from './index';
-import { evaluateWordGuess, normalizeTr, parseWord, upperTr, wordContent, wordMarks } from './word';
+import {
+  evaluateWordGuess,
+  normalizeTr,
+  opponentKnowledge,
+  parseWord,
+  upperTr,
+  wordContent,
+  wordMarks,
+} from './word';
 
 describe('normalizeTr (Türkçe locale)', () => {
   it("İ→i ve I→ı (İngilizce lower'ın aksine)", () => {
@@ -144,6 +152,65 @@ describe('wordMarks — Wordle iki-geçişli işaretleme (KELİME modu; pozisyon
 
   it('hiç ortak harf yok → hepsi X', () => {
     expect(wordMarks('abck', 'demo')).toEqual(['X', 'X', 'X', 'X']);
+  });
+});
+
+describe('opponentKnowledge — birikimli yeşil/sarı bilgi durumu (multiset)', () => {
+  // Marks el ile doğrulandı (bkz. wordMarks testleri). Model:
+  //  green = tur boyunca G işaretli pozisyonların birleşimi;
+  //  yellow = Σ_c ( known(c) − greenKnown(c) ), known(c)=max(bestNonX(c), greenKnown(c)).
+
+  it('hiç tahmin yok / boş girdi → 0/0', () => {
+    expect(opponentKnowledge('kalp', [])).toEqual({ green: 0, yellow: 0 });
+    expect(opponentKnowledge('', [])).toEqual({ green: 0, yellow: 0 });
+  });
+
+  it('t1: 2 sarı, 0 yeşil (iki harf "var" ama yersiz)', () => {
+    // gizli "kalp", tahmin "lkoe" → [Y,Y,X,X]: l,k biliniyor (yersiz).
+    expect(opponentKnowledge('kalp', ['lkoe'])).toEqual({ green: 0, yellow: 2 });
+  });
+
+  it('promotion: bir sarı yeşile oturunca sarı−1 / yeşil+1', () => {
+    // t1 "lkoe" [Y,Y,X,X] (l,k sarı) → t2 "kloe" [G,Y,X,X] (k yeşile oturdu, l hâlâ sarı).
+    expect(opponentKnowledge('kalp', ['lkoe', 'kloe'])).toEqual({ green: 1, yellow: 1 });
+  });
+
+  it('yeni yeşil (eski sarılardan değil): yeşil+1, sarı sabit', () => {
+    // t1 "lkoe" (l,k sarı) → t2 "zazz" [X,G,X,X] (a yeşil, yepyeni). Sarılar korunur.
+    expect(opponentKnowledge('kalp', ['lkoe', 'zazz'])).toEqual({ green: 1, yellow: 2 });
+  });
+
+  it('daha kötü sonraki tahmin bilgiyi düşürmez (birikimli)', () => {
+    // t1 "lkoe" (0 yeşil, 2 sarı) → t3 "zzzz" (hiç isabet). Durum korunur.
+    expect(opponentKnowledge('kalp', ['lkoe', 'zzzz'])).toEqual({ green: 0, yellow: 2 });
+  });
+
+  it('yeşiller farklı tahminlerden birikir (union, max değil)', () => {
+    // t1 "kzzz" [G,X,X,X] (k@0) + t2 "zazz" [X,G,X,X] (a@1) → 2 ayrı pozisyon yeşil.
+    expect(opponentKnowledge('kalp', ['kzzz', 'zazz'])).toEqual({ green: 2, yellow: 0 });
+  });
+
+  it('multiset: iki N — biri yeşil biri sarı → yeşil+1, sarı+1', () => {
+    // gizli "anne" (a,n,n,e), tahmin "nnzz" [Y,G,X,X]: bir n yeşil, öbür n sarı.
+    expect(opponentKnowledge('anne', ['nnzz'])).toEqual({ green: 1, yellow: 1 });
+  });
+
+  it('multiset: aynı harfin iki farklı pozisyonu ayrı tahminlerde yeşil', () => {
+    // "znzz" [X,G,X,X] (n@1) + "zznz" [X,X,G,X] (n@2) → iki n de yeşil, sarı 0.
+    expect(opponentKnowledge('anne', ['znzz', 'zznz'])).toEqual({ green: 2, yellow: 0 });
+  });
+
+  it('rakip kazandı → hepsi yeşil, sarı 0', () => {
+    expect(opponentKnowledge('kalp', ['kalp'])).toEqual({ green: 4, yellow: 0 });
+  });
+
+  it('yeşil+sarı toplamı kelime uzunluğunu aşmaz', () => {
+    const { green, yellow } = opponentKnowledge('anne', ['nnea', 'anne', 'enna']);
+    expect(green + yellow).toBeLessThanOrEqual(4);
+  });
+
+  it('uzunluğu uyuşmayan tahmin atlanır (çökme yok)', () => {
+    expect(opponentKnowledge('kalp', ['abc'])).toEqual({ green: 0, yellow: 0 });
   });
 });
 

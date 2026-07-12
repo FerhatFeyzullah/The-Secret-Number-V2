@@ -144,6 +144,68 @@ export function wordMarks(secret: string, guess: string): LetterMark[] {
 }
 
 /**
+ * Rakip ilerlemesi (kelime modu) — BİRİKİMLİ bilgi durumu (multiset).
+ * Rakibin bu turda GİZLİ kelimeme karşı yaptığı tüm tahminlerden, tur boyunca
+ * biriktirdiği bilgiyi tek tutarlı çift olarak verir:
+ *   green  = herhangi bir tahminde G işaretli POZİSYONLARIN birleşimi (union).
+ *   yellow = Σ_c ( known(c) − greenKnown(c) ), harf değeri c için:
+ *     greenKnown(c) = yeşil pozisyonlardan secret harfi c olanların sayısı,
+ *     bestNonX(c)   = TEK tahmindeki (G+Y) işaretli c sayısının tahminler üstü max'ı,
+ *     known(c)      = max(bestNonX(c), greenKnown(c)).
+ *
+ * Özellikler: green hiç düşmez; green+yellow hiç düşmez ve ≤ L; yellow yalnız
+ * promotion (sarı→yeşil) ile düşer. İşaretler wordMarks ile hesaplanır — istemci
+ * kendi gizlisinin sahibi olduğundan sunucu verisi gerekmez. Uzunluğu secret'tan
+ * farklı (ör. bozuk/yabancı) tahminler atlanır.
+ */
+export function opponentKnowledge(
+  secret: string,
+  guesses: readonly string[],
+): { green: number; yellow: number } {
+  const s = Array.from(normalizeTr(secret));
+  const len = s.length;
+  if (len === 0) return { green: 0, yellow: 0 };
+
+  const greenPos: boolean[] = new Array(len).fill(false);
+  const bestNonX = new Map<string, number>(); // harf → tek tahmindeki max (G+Y) adedi
+
+  for (const guess of guesses) {
+    const g = Array.from(normalizeTr(guess));
+    if (g.length !== len) continue; // aynı uzunluk beklenir; değilse atla
+    const marks = wordMarks(secret, guess);
+    const nonXThis = new Map<string, number>();
+    for (let i = 0; i < len; i++) {
+      if (marks[i] === 'X') continue;
+      if (marks[i] === 'G') greenPos[i] = true;
+      nonXThis.set(g[i], (nonXThis.get(g[i]) ?? 0) + 1);
+    }
+    for (const [c, cnt] of nonXThis) {
+      if (cnt > (bestNonX.get(c) ?? 0)) bestNonX.set(c, cnt);
+    }
+  }
+
+  // Yeşil pozisyonlardan harf-bazlı greenKnown + toplam yeşil.
+  const greenKnown = new Map<string, number>();
+  let green = 0;
+  for (let i = 0; i < len; i++) {
+    if (!greenPos[i]) continue;
+    green++;
+    greenKnown.set(s[i], (greenKnown.get(s[i]) ?? 0) + 1);
+  }
+
+  // yellow = Σ ( max(bestNonX, greenKnown) − greenKnown ) ≥ 0.
+  let yellow = 0;
+  const letters = new Set<string>([...bestNonX.keys(), ...greenKnown.keys()]);
+  for (const c of letters) {
+    const gk = greenKnown.get(c) ?? 0;
+    const known = Math.max(bestNonX.get(c) ?? 0, gk);
+    yellow += known - gk;
+  }
+
+  return { green, yellow };
+}
+
+/**
  * Offline/test yedeği: gerçek gizli havuz sunucudadır (secret_words) ve
  * oyuncu kendi kelimesini SEÇER — generate yalnız offline mod / test için
  * küçük, yaygın bir örneklemden çeker. (Hepsi secret_words havuzundandır.)

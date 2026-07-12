@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { parseWord, upperTr, type LetterMark } from '@/game';
+import { opponentKnowledge, parseWord, upperTr, type LetterMark } from '@/game';
 import {
   getMatchReveal,
   getMyMarks,
@@ -147,13 +147,27 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const win = finished && !!match?.winner && match.winner === myId;
   const mySecret = recallMySecret(matchId, round);
 
-  // Rakip ilerlemesi (Wordle): rakibin EN İYİ (yüksek-su-seviyesi) yeşil + sarı
-  // sayısı — son tahmin değil, tüm turdaki maksimum (bir sonraki tahminde düşse
-  // bile korunur). Sunucu rakip-güvenli SAYI gönderir (per-harf dizi/pozisyon
-  // HİÇ gelmez). Hiç rakip tahmini yoksa 0.
+  // Rakip ilerlemesi (Wordle): BİRİKİMLİ bilgi durumu — tur boyunca rakibin
+  // gizli kelimemden öğrendiği tutarlı yeşil/sarı (bkz. opponentKnowledge). Bir
+  // sarı yeşile oturunca sarı−1/yeşil+1; yeni yeşilde sarı sabit; bilgi düşmez.
+  // Kendi gizlim elimde (recallMySecret) → rakip tahminlerinin işaretlerini
+  // istemcide hesaplarız (rakibin digits'i RLS ile zaten gelir; sunucu değişmez).
+  // Gizli yerelde yoksa (nadir: farklı cihaz/temiz depo) sunucu sayılarının
+  // bağımsız-max'ına düşeriz — asla çökmez. Hiç rakip tahmini yoksa 0.
   const hasOppGuess = oppGuesses.length > 0;
-  const oppBestGreen = oppGuesses.reduce((mx, g) => Math.max(mx, g.greenCount ?? 0), 0);
-  const oppBestYellow = oppGuesses.reduce((mx, g) => Math.max(mx, g.yellowCount ?? 0), 0);
+  const oppGuessKey = oppGuesses.map((g) => g.digits).join('|');
+  const oppKnow = useMemo(
+    () => (mySecret ? opponentKnowledge(mySecret, oppGuesses.map((g) => g.digits)) : null),
+    // oppGuessKey tahmin kümesini özetler (oppGuesses referansı her render değişir).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mySecret, oppGuessKey],
+  );
+  const oppBestGreen = oppKnow
+    ? oppKnow.green
+    : oppGuesses.reduce((mx, g) => Math.max(mx, g.greenCount ?? 0), 0);
+  const oppBestYellow = oppKnow
+    ? oppKnow.yellow
+    : oppGuesses.reduce((mx, g) => Math.max(mx, g.yellowCount ?? 0), 0);
   const greenPct = wordLength > 0 ? oppBestGreen / wordLength : 0;
   const yellowPct = wordLength > 0 ? oppBestYellow / wordLength : 0;
 
@@ -487,7 +501,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             {hasOppGuess ? (
               <>
                 <View style={styles.closeStat}>
-                  <Text style={styles.closeLabel}>en iyi · {oppBestGreen}/{wordLength} yeşil</Text>
+                  <Text style={styles.closeLabel}>{oppBestGreen}/{wordLength} yeşil</Text>
                   <View style={styles.closeTrack}>
                     <View
                       style={[
@@ -502,7 +516,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
                   </View>
                 </View>
                 <View style={styles.closeStat}>
-                  <Text style={styles.closeLabel}>en iyi · {oppBestYellow}/{wordLength} sarı</Text>
+                  <Text style={styles.closeLabel}>{oppBestYellow}/{wordLength} sarı</Text>
                   <View style={styles.closeTrack}>
                     <View
                       style={[

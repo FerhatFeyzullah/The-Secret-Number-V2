@@ -8,6 +8,7 @@ export { evaluateGuess, generateSecret, numberContent, parseGuess } from './numb
 export {
   evaluateWordGuess,
   normalizeTr,
+  opponentKnowledge,
   parseWord,
   upperTr,
   WORD_LENGTHS,

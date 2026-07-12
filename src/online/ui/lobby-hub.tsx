@@ -2,11 +2,15 @@ import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { upperTr } from '@/game';
 import type { LobbyCounts } from '@/online';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { ChoiceCard, LobbyHeader } from './parts';
+
+/** Çevrimiçi kapsül etiketi — Türkçe BÜYÜK harf (upperTr; textTransform İ'yi bozar). */
+const LBL_ONLINE = upperTr('çevrimiçi');
 
 /** Hızlı Maç tanıtımı — gerçek mekanikle birebir (3 farklı rakam, pozisyonsuz
  *  geri bildirim, kişi-başı saat, Kupa/XP/Veri kazanımı). */
@@ -171,9 +175,10 @@ export function LobbyHub({
       <LobbyHeader title="ÇEVRİMİÇİ" onBack={onBack} />
 
       {onlineCount != null ? (
-        <View style={styles.onlineRow}>
+        <View style={styles.onlineCap}>
           <View style={styles.onlineDot} />
-          <Text style={styles.onlineText}>{onlineCount} oyuncu çevrimiçi</Text>
+          <Text style={styles.onlineNum}>{onlineCount}</Text>
+          <Text style={styles.onlineLbl}>{LBL_ONLINE}</Text>
         </View>
       ) : null}
 
@@ -196,7 +201,7 @@ export function LobbyHub({
           accent={colors.cyan}
           title="Hızlı Maç"
           subtitle="Rastgele rakiple eşleş"
-          waiting={waiting?.quick}
+          stats={waiting ? { waiting: waiting.quick, active: waiting.activeQuick } : undefined}
           onPress={tapQuick}
           onInfo={infoQuick}>
           <View style={styles.tags}>
@@ -210,7 +215,7 @@ export function LobbyHub({
           accent={colors.violet}
           title="Protokol Maçı"
           subtitle="Protokollü düello · 3 tur"
-          waiting={waiting?.protocol}
+          stats={waiting ? { waiting: waiting.protocol, active: waiting.activeProtocol } : undefined}
           onPress={tapProtocol}
           onInfo={infoProtocol}>
           <View style={styles.tags}>
@@ -223,7 +228,7 @@ export function LobbyHub({
           accent={colors.success}
           title="Kelime Modu"
           subtitle="Kelime düellosu · 3 tur"
-          waiting={waiting?.word}
+          stats={waiting ? { waiting: waiting.word, active: waiting.activeWord } : undefined}
           onPress={tapWord}
           onInfo={infoWord}>
           <View style={styles.tags}>
@@ -300,12 +305,20 @@ const styles = StyleSheet.create({
     color: colors.amber,
     lineHeight: 17,
   },
-  onlineRow: {
+  onlineCap: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
+    alignSelf: 'center',
+    gap: 8,
     marginTop: 4,
+    paddingVertical: 7,
+    paddingLeft: 12,
+    paddingRight: 15,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: withAlpha(colors.success, 0.32),
+    backgroundColor: withAlpha(colors.success, 0.1),
+    boxShadow: `0 0 18px ${withAlpha(colors.success, 0.3)}`,
   },
   onlineDot: {
     width: 8,
@@ -314,10 +327,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     boxShadow: `0 0 8px ${colors.success}`,
   },
-  onlineText: {
-    color: colors.dim,
-    fontSize: 12,
-    fontWeight: '600',
+  onlineNum: {
+    color: colors.ice,
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: mono,
+    textShadowColor: colors.success,
+    textShadowRadius: 8,
+  },
+  onlineLbl: {
+    color: colors.success,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
     fontFamily: mono,
   },
   heading: {

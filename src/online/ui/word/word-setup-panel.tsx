@@ -168,14 +168,14 @@ export function WordSetupPanel({
           <View style={styles.revealCol}>
             <Text style={styles.revealLabel}>SENİN KELİMEN</Text>
             <Text numberOfLines={1} style={[styles.revealWord, { color: colors.cyan }]}>
-              {reveal?.mine?.toUpperCase() ?? '—'}
+              {reveal?.mine ? upperTr(reveal.mine) : '—'}
             </Text>
           </View>
           <View style={styles.revealDivider} />
           <View style={styles.revealCol}>
             <Text style={styles.revealLabel}>RAKİBİN KELİMESİ</Text>
             <Text numberOfLines={1} style={[styles.revealWord, { color: colors.amber }]}>
-              {reveal?.opponent?.toUpperCase() ?? '—'}
+              {reveal?.opponent ? upperTr(reveal.opponent) : '—'}
             </Text>
           </View>
         </View>
