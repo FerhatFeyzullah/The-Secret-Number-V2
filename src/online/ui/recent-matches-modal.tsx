@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { upperTr } from '@/game';
 import { getRecentMatches, OnlineError, type RecentMatch, type RecentMatchRound } from '@/online';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
@@ -54,7 +55,9 @@ function tileMetrics(cardW: number, maxLen: number): TileSize {
 
 /** Bir gizliyi (sayı ya da kelime) tile dizisine böler. Kazananınki altın vurgulu. */
 function Tiles({ value, win, ts }: { value: string | null; win: boolean; ts: TileSize }) {
-  const chars = (value ?? '').toUpperCase().split('');
+  // Türkçe-doğru büyük harf: 'i'→'İ' (İngilizce toUpperCase 'i'→'I' yapıp ı/i'yi
+  // ayırt edilemez kılar). Sayı modunda no-op. Bkz. word.ts upperTr.
+  const chars = Array.from(upperTr(value ?? ''));
   return (
     <View style={styles.tiles}>
       {chars.map((c, i) => (

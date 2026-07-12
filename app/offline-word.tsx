@@ -381,7 +381,7 @@ export default function OfflineWordScreen() {
                   <Text style={styles.endDetail}>
                     Kelimeyi {history.length}. tahminde buldun.
                   </Text>
-                  <Text style={styles.revealed}>{secret}</Text>
+                  <Text style={styles.revealed}>{upperTr(secret)}</Text>
                 </>
               ) : (
                 <>
