@@ -7,6 +7,7 @@ import { OnlineError, setSecret, type MatchState } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
 
 import { rememberMySecret } from './secret-memory';
+import { RequestWordButton } from './request-word-button';
 import { TrKeyboard } from './tr-keyboard';
 import { WordConfirmButton } from './word-parts';
 
@@ -70,12 +71,15 @@ export function WordSetupPanel({
   const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Havuz-dışı (tam) gizli kelime → "Sözlüğe öner" için tutulan kelime; harf değişince temizlenir.
+  const [notInPoolWord, setNotInPoolWord] = useState<string | null>(null);
 
   // Yeni tur: giriş/kilit sıfırla (uzunluk da değişmiş olabilir).
   useEffect(() => {
     setTyped([]);
     setLocked(false);
     setError(null);
+    setNotInPoolWord(null);
   }, [match.currentRound, wordLength]);
 
   const p1 = match.myRole === 'player1';
@@ -107,12 +111,15 @@ export function WordSetupPanel({
     (k: string) => {
       if (locked || !active) return;
       setError(null);
+      setNotInPoolWord(null);
       setTyped((p) => (p.length < wordLength ? [...p, k] : p));
     },
     [locked, active, wordLength],
   );
   const handleDelete = useCallback(() => {
     if (locked) return;
+    setError(null);
+    setNotInPoolWord(null); // harf silinince "Sözlüğe öner" kaybolur (kısa kelime önerilemez)
     setTyped((p) => p.slice(0, -1));
   }, [locked]);
 
@@ -126,12 +133,15 @@ export function WordSetupPanel({
     }
     setBusy(true);
     setError(null);
+    setNotInPoolWord(null);
     try {
       await setSecret(matchId, parsed.word, 'word');
       rememberMySecret(matchId, match.currentRound, parsed.word);
       setLocked(true);
     } catch (e) {
       setError(errMsg(e));
+      // invalid_digits + tam kelime (parseWord geçti) → havuz-dışı: öner.
+      if (e instanceof OnlineError && e.code === 'invalid_digits') setNotInPoolWord(parsed.word);
     } finally {
       setBusy(false);
     }
@@ -253,6 +263,11 @@ export function WordSetupPanel({
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {notInPoolWord ? (
+        <View style={styles.requestRow}>
+          <RequestWordButton word={notInPoolWord} />
+        </View>
+      ) : null}
 
       {/* Rakip durumu */}
       <View style={[styles.opp, oppReady && styles.oppReady]}>
@@ -456,6 +471,10 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  requestRow: {
+    alignItems: 'center',
     marginBottom: 8,
   },
   opp: {
