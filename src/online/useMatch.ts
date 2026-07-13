@@ -53,6 +53,11 @@ export type UseMatchResult = {
   /** Rakipten gelen son sinyal id'si (kendi yayınların filtrelenir). nonce her
    *  gelişte artar; tüketici aynı sinyal tekrarında bile pop'u yenileyebilir. */
   incomingSignal: { id: string; nonce: number } | null;
+  /** Maç kanalına efemeral METİN (hazır mesaj) yayınlar (realtime broadcast;
+   *  DB'ye YAZMAZ). Sabit 6 hazır mesajdan biri (bkz. quick-texts). */
+  sendText: (text: string) => void;
+  /** Rakipten gelen son metin mesajı (kendi yayınların filtrelenir); nonce artar. */
+  incomingText: { text: string; nonce: number } | null;
   /** Maçın protokol kullanım kayıtları (iki oyuncununki; sır içermez),
    *  realtime güncel. Şerit "kullanıldı" durumu buradan türetilir. */
   protocolUses: ProtocolUse[];
@@ -87,6 +92,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // Rakipten gelen efemeral sinyal (broadcast); nonce ile her geliş ayrışır.
   const [incomingSignal, setIncomingSignal] = useState<{ id: string; nonce: number } | null>(null);
   const signalNonceRef = useRef(0);
+  const [incomingText, setIncomingText] = useState<{ text: string; nonce: number } | null>(null);
+  const textNonceRef = useRef(0);
   // Protokol kullanım kayıtları (realtime + refresh) ve canlı olay sinyali.
   const [protocolUses, setProtocolUses] = useState<ProtocolUse[]>([]);
   const [incomingProtocolUse, setIncomingProtocolUse] = useState<{
@@ -428,6 +435,13 @@ export function useMatch(matchId: string | null): UseMatchResult {
           signalNonceRef.current += 1;
           setIncomingSignal({ id: p.signal, nonce: signalNonceRef.current });
         })
+        .on('broadcast', { event: 'text' }, ({ payload }) => {
+          // Efemeral hazır mesaj: yalnızca rakibinkini göster (kendi yayınını filtrele).
+          const p = payload as { text?: string; from?: string } | undefined;
+          if (!p?.text || p.from === myIdRef.current) return;
+          textNonceRef.current += 1;
+          setIncomingText({ text: p.text, nonce: textNonceRef.current });
+        })
         .subscribe((status) => {
           if (disposed) return;
           if (status === 'SUBSCRIBED') {
@@ -599,6 +613,17 @@ export function useMatch(matchId: string | null): UseMatchResult {
     });
   }, []);
 
+  // Efemeral hazır-mesaj yayını: kanal üzerinden broadcast (DB'ye yazmaz).
+  const sendText = useCallback((text: string) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    void ch.send({
+      type: 'broadcast',
+      event: 'text',
+      payload: { text, from: myIdRef.current },
+    });
+  }, []);
+
   return {
     match,
     guesses,
@@ -607,6 +632,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
     refresh,
     sendSignal,
     incomingSignal,
+    sendText,
+    incomingText,
     protocolUses,
     incomingProtocolUse,
   };

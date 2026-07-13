@@ -76,6 +76,7 @@ export function DigitPad({
   onDelete,
   onSubmit,
   accessory,
+  emoteSlot,
 }: {
   guess: string[];
   locked: boolean;
@@ -83,6 +84,8 @@ export function DigitPad({
   onDelete: () => void;
   onSubmit: () => void;
   accessory?: React.ReactNode;
+  /** Alt aksiyon satırının soluna iliştirilen emote/mesaj butonu (maç-içi). */
+  emoteSlot?: React.ReactNode;
 }) {
   const used = new Set(guess);
   const full = guess.length >= 3;
@@ -119,6 +122,7 @@ export function DigitPad({
           ))}
         </View>
         <View style={styles.bottomRow}>
+          {emoteSlot}
           <PadKey variant="action" onPress={onDelete} disabled={locked || guess.length === 0}>
             <Feather name="delete" size={18} color={colors.dim} />
           </PadKey>
