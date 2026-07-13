@@ -19,7 +19,7 @@ const WHATSNEW_NOTES: Note[] = [
   {
     emoji: '💬',
     title: '6 hazır mesaj',
-    body: 'Sinyal tepsisinde hazır mesajlar da var: "İyi oyunlar!", "Bol şans!", "Kolay gelsin" ve daha fazlası. Gönderdiğin sinyal ve mesajlar rakibin ekranında kısa süre belirir.',
+    body: 'Sinyal tepsisinde hazır mesajlar da var: "İyi oyunlar!", "Kafanı kullan", "Hadi acele et" ve daha fazlası. Gönderdiğin sinyal ve mesajlar rakibin ekranında kısa süre belirir.',
   },
 ];
 
