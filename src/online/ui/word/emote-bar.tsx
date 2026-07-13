@@ -52,7 +52,7 @@ export function EmoteBar({
         onPress={() => setOpen(true)}
         disabled={disabled || cooling}
         hitSlop={8}
-        accessibilityLabel="Emote / mesaj gönder"
+        accessibilityLabel="Sinyal / mesaj gönder"
         style={[styles.toggle, cooling && styles.toggleCooling]}>
         <Feather name="smile" size={18} color={cooling ? colors.dim : colors.cyan} />
       </Pressable>
@@ -64,7 +64,7 @@ export function EmoteBar({
             <View style={styles.grip} />
             <View style={styles.headRow}>
               <Feather name="smile" size={14} color={colors.cyan} />
-              <Text style={styles.headText}>EMOTE</Text>
+              <Text style={styles.headText}>SİNYAL</Text>
             </View>
             <View style={styles.emoteRow}>
               {deck.map((id) => {
