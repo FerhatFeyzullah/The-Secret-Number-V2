@@ -37,6 +37,7 @@ import { colors, mono } from '@/ui/theme';
 
 import { ResultOverlay } from '../duel/result-overlay';
 import { WordOrbs } from './orbs';
+import { EmoteBar, IncomingReaction } from './emote-bar';
 import { RequestWordButton } from './request-word-button';
 import { recallMySecret } from './secret-memory';
 import { TrKeyboard } from './tr-keyboard';
@@ -81,6 +82,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     error,
     sendSignal,
     incomingSignal,
+    sendText,
+    incomingText,
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
@@ -285,8 +288,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
       alive = false;
     };
   }, [finished, matchId]);
+  // Sinyal destesini maç BAŞINDA yükle (maç-içi emote + maç-sonu reaksiyon için).
   useEffect(() => {
-    if (!finished) return;
     let alive = true;
     getMyRank()
       .then((r) => alive && setSignalDeck(r.signalDeck))
@@ -294,7 +297,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     return () => {
       alive = false;
     };
-  }, [finished]);
+  }, []);
 
   const finishFxRef = useRef(false);
   useEffect(() => {
@@ -545,6 +548,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
               <Text style={styles.closeLabel}>henüz tahmin yok</Text>
             )}
           </View>
+          {/* Gelen emote/mesaj — rakip kartının tam ortasında pop'lar, ~2.6 sn */}
+          <IncomingReaction signal={incomingSignal} text={incomingText} />
         </View>
 
         {/* Satranç saati — kendi içinde tikler (ekranı 250 ms'de bir yenilemez) */}
@@ -623,12 +628,22 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
         {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen): onay tuşu
             klavyeden çıktı; tek aksiyon butonu klavyenin ÜSTÜNDE. */}
         <View style={styles.kbWrap}>
-          <WordConfirmButton
-            label="Kelimeyi Onayla"
-            enabled={entry.length === wordLength && !locked && !submitting}
-            busy={submitting}
-            onPress={submit}
-          />
+          <View style={styles.confirmRow}>
+            <EmoteBar
+              deck={signalDeck}
+              onSendSignal={sendSignal}
+              onSendText={sendText}
+              disabled={finished}
+            />
+            <View style={styles.confirmFill}>
+              <WordConfirmButton
+                label="Kelimeyi Onayla"
+                enabled={entry.length === wordLength && !locked && !submitting}
+                busy={submitting}
+                onPress={submit}
+              />
+            </View>
+          </View>
           <TrKeyboard
             large
             onKey={addLetter}
@@ -1041,6 +1056,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.07)',
     gap: 10,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  confirmFill: {
+    flex: 1,
   },
   centered: {
     flex: 1,
