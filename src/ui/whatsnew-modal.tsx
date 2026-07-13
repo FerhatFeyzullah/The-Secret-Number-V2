@@ -13,13 +13,13 @@ type Note = { emoji: string; title: string; body: string };
 const WHATSNEW_NOTES: Note[] = [
   {
     emoji: '😄',
-    title: 'Maç içinde emote gönder',
-    body: 'Artık maç sırasında rakibine sahip olduğun animasyonlu sinyalleri (emote) gönderebilirsin — kelime, hızlı ve protokol maçlarının hepsinde. Emote butonu tahmin/onay alanının hemen yanında.',
+    title: 'Maç içinde sinyal gönder',
+    body: 'Artık maç sırasında rakibine sahip olduğun animasyonlu sinyalleri gönderebilirsin — kelime, hızlı ve protokol maçlarının hepsinde. Sinyal butonu tahmin/onay alanının hemen yanında.',
   },
   {
     emoji: '💬',
     title: '6 hazır mesaj',
-    body: 'Emote tepsisinde hazır mesajlar da var: "İyi oyunlar!", "Bol şans!", "Kolay gelsin" ve daha fazlası. Gönderdiğin emote ve mesajlar rakibin ekranında kısa süre belirir.',
+    body: 'Sinyal tepsisinde hazır mesajlar da var: "İyi oyunlar!", "Bol şans!", "Kolay gelsin" ve daha fazlası. Gönderdiğin sinyal ve mesajlar rakibin ekranında kısa süre belirir.',
   },
 ];
 
