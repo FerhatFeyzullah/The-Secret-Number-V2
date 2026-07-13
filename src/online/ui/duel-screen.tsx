@@ -38,6 +38,7 @@ import { RoundSetup } from './duel/round-setup';
 import { TurnBanner } from './duel/turn-banner';
 import type { FeatherName } from './parts';
 import { OPPONENT_VISIBLE_PROTOCOLS, PILLAR_COLOR, protocolIcon } from './protocol-visuals';
+import { EmoteBar, IncomingReaction } from './word/emote-bar';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 const errMsg = (e: unknown) =>
@@ -58,13 +59,15 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     error,
     sendSignal,
     incomingSignal,
+    sendText,
+    incomingText,
     protocolUses,
     incomingProtocolUse,
   } = useMatch(matchId);
 
   const [entry, setEntry] = useState<string[]>([]);
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
-  // Maç sonu reaksiyon seti: oyuncunun sinyal destesi (sunucudan, Adım 2).
+  // Reaksiyon seti: oyuncunun sinyal destesi (sunucudan) — maç-içi emote + maç sonu.
   const [signalDeck, setSignalDeck] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -488,9 +491,8 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     };
   }, [finished, matchId]);
 
-  // Maç bitince sinyal destesini çek (sonuç ekranı reaksiyon şeridi için).
+  // Sinyal destesini maç BAŞINDA yükle (maç-içi emote + maç-sonu reaksiyon için).
   useEffect(() => {
-    if (!finished) return;
     let alive = true;
     getMyRank()
       .then((r) => alive && setSignalDeck(r.signalDeck))
@@ -498,7 +500,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     return () => {
       alive = false;
     };
-  }, [finished]);
+  }, []);
 
   // Bitiş sesi/haptiği (bir kez).
   const finishFxRef = useRef(false);
@@ -692,6 +694,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
               </Text>
             </View>
           ) : null}
+          {/* Gelen emote/mesaj — üst barın altında, sağa yaslı (banner metni ortada
+              → sağ boş; tur çipinin altında). ~2.6 sn pop'lar, UI'yı itmez. */}
+          {!finished ? (
+            <IncomingReaction signal={incomingSignal} text={incomingText} placement="belowRight" />
+          ) : null}
         </View>
 
         <TurnBanner mine={isMine} />
@@ -713,6 +720,9 @@ export function DuelScreen({ matchId }: { matchId: string }) {
             match ? (
               <LivePlayerChip stack match={match} self name={myName} accent={colors.cyan} />
             ) : null
+          }
+          emoteSlot={
+            <EmoteBar deck={signalDeck} onSendSignal={sendSignal} onSendText={sendText} />
           }
         />
 
@@ -787,6 +797,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    // Reaksiyon (top:'100%') üst barın altına taşar; zIndex → sıra banner'ının
+    // ÜZERİNDE render'lansın (banner sonraki kardeş, aksi halde üste biner).
+    position: 'relative',
+    zIndex: 10,
   },
   roundChip: {
     marginLeft: 'auto',
