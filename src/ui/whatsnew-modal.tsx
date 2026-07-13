@@ -6,20 +6,20 @@ import { colors, cyanAlpha, mono } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'sozluge-oner';
+export const WHATSNEW_ID = 'mac-ici-emote';
 
 type Note = { emoji: string; title: string; body: string };
 
 const WHATSNEW_NOTES: Note[] = [
   {
-    emoji: '📖',
-    title: 'Sözlüğe öner',
-    body: 'Kelime modunda tahmin ettiğin ya da gizli seçtiğin bir kelime sözlükte yoksa, artık "Sözlüğe öner" butonuyla havuza eklenmesini isteyebilirsin.',
+    emoji: '😄',
+    title: 'Maç içinde emote gönder',
+    body: 'Artık maç sırasında rakibine sahip olduğun animasyonlu sinyalleri (emote) gönderebilirsin — kelime, hızlı ve protokol maçlarının hepsinde. Emote butonu tahmin/onay alanının hemen yanında.',
   },
   {
-    emoji: '✅',
-    title: 'Önerilerin bize ulaşıyor',
-    body: 'Gönderdiğin kelimeler incelenir; onaylananlar sözlüğe girer ve herkes için geçerli olur. Bir kelimeyi ne kadar çok kişi önerirse önceliği o kadar artar.',
+    emoji: '💬',
+    title: '6 hazır mesaj',
+    body: 'Emote tepsisinde hazır mesajlar da var: "İyi oyunlar!", "Bol şans!", "Kolay gelsin" ve daha fazlası. Gönderdiğin emote ve mesajlar rakibin ekranında kısa süre belirir.',
   },
 ];
 
