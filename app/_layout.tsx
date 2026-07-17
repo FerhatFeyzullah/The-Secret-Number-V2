@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/auth';
 import { MatchSessionProvider, OnlinePresenceProvider } from '@/online';
@@ -12,10 +13,10 @@ import { IntroDoneContext } from '@/ui/intro-context';
 import { colors } from '@/ui/theme';
 import { IntroOverlay } from '@/ui/intro-overlay';
 
-// Kök yığının çapası HER ZAMAN ana menü (index). Cihaz son açık derin route'a
-// (ör. /match/[id], /match-setup) geri yüklense bile yığının ilk ekranı index
-// olur → geri tuşu/swipe ana menüye gider, ASLA uygulamadan çıkmaz.
-export const unstable_settings = { initialRouteName: 'index' };
+// Kök yığının çapası HER ZAMAN sekme kabuğu (tabs → orta sekme Ana Ekran). Cihaz
+// son açık derin route'a (ör. /match/[id], /match-setup) geri yüklense bile yığının
+// ilk ekranı (tabs) olur → geri tuşu/swipe ana menüye gider, ASLA uygulamadan çıkmaz.
+export const unstable_settings = { initialRouteName: '(tabs)' };
 
 // Native splash'i biz kapatacağız (intro overlay hazır olunca) → splash ile intro
 // arasında menü flash'i olmaz.
@@ -32,11 +33,13 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      {/* introDone: ekranlar (ör. ana menü welcome modalı) intro bitmeden modal
-          açmasın. Native <Modal>, JS-overlay intro'nun üstüne çizilir → intro'ya
-          bağlamazsak önüne geçer. */}
-      <IntroDoneContext.Provider value={introDone}>
+    // GestureHandlerRootView: alt sekmelerde yatay kaydırma jesti için kök sarmalayıcı.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        {/* introDone: ekranlar (ör. ana menü welcome modalı) intro bitmeden modal
+            açmasın. Native <Modal>, JS-overlay intro'nun üstüne çizilir → intro'ya
+            bağlamazsak önüne geçer. */}
+        <IntroDoneContext.Provider value={introDone}>
         {/* Uygulama-geneli "aktif online oyuncu" presence sayacı (lobide gösterilir).
             useAuth gerektirir → AuthProvider içinde; Stack'i sarar ki /online route'u
             useOnlineCount'a erişsin. */}
@@ -69,6 +72,7 @@ export default function RootLayout() {
           <UpdateOverlay {...updateGate} />
         ) : null}
       </IntroDoneContext.Provider>
-    </AuthProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
