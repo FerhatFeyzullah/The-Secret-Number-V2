@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fragment, useEffect, useRef, useState } from 'react';
@@ -26,27 +25,35 @@ const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 /** Clash Royale tarzı özel alt sekme çubuğu. Aktif sekme neon camgöbeği renk +
  *  dolgulu ikon + hafif büyüme; pasifler sönük çizgi ikon. Dokununca sekme
  *  hafifçe sallanır (yukarı kalkmaz) ve — ayarda açıksa — haptik verir. */
-export function TabBar({ state, navigation }: MaterialTopTabBarProps) {
+export function TabBar({
+  routes,
+  index,
+  onSelect,
+}: {
+  routes: readonly string[];
+  index: number;
+  onSelect: (i: number) => void;
+}) {
   const insets = useSafeAreaInsets();
   // Odak animasyonu (aktiflik): glow opaklığı + hafif büyüme.
   const anims = useRef(
-    state.routes.map((_, i) => new Animated.Value(i === state.index ? 1 : 0)),
+    routes.map((_, i) => new Animated.Value(i === index ? 1 : 0)),
   ).current;
   // Dokunma anındaki tek seferlik sallanma (rotasyon).
-  const shakes = useRef(state.routes.map(() => new Animated.Value(0))).current;
+  const shakes = useRef(routes.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     Animated.parallel(
-      state.routes.map((_, i) =>
+      routes.map((_, i) =>
         Animated.spring(anims[i], {
-          toValue: i === state.index ? 1 : 0,
+          toValue: i === index ? 1 : 0,
           useNativeDriver: true,
           speed: 16,
           bounciness: 8,
         }),
       ),
     ).start();
-  }, [state.index, state.routes, anims]);
+  }, [index, routes, anims]);
 
   // Klavye açıkken alt sekme çubuğu gizlenir → yazarken çubuk yukarı çıkıp
   // görünmez, altta klavyenin ardında kalır (sohbet vb. ekranlar için).
@@ -88,10 +95,9 @@ export function TabBar({ state, navigation }: MaterialTopTabBarProps) {
       />
       <View style={styles.topLine} pointerEvents="none" />
       <View style={styles.row}>
-        {state.routes.map((route, i) => {
-          const meta =
-            TAB_META[route.name] ?? { label: route.name, icon: 'ellipse' as IoniconName };
-          const focused = state.index === i;
+        {routes.map((name, i) => {
+          const meta = TAB_META[name] ?? { label: name, icon: 'ellipse' as IoniconName };
+          const focused = index === i;
           const a = anims[i];
           const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
           const rotate = shakes[i].interpolate({ inputRange: [-1, 1], outputRange: ['-9deg', '9deg'] });
@@ -101,18 +107,11 @@ export function TabBar({ state, navigation }: MaterialTopTabBarProps) {
             if (canHaptics && (await getToggle('haptics'))) {
               Haptics.selectionAsync().catch(() => {});
             }
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-            if (!focused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
+            if (!focused) onSelect(i);
           };
 
           return (
-            <Fragment key={route.key}>
+            <Fragment key={name}>
               {i > 0 ? <View style={styles.divider} pointerEvents="none" /> : null}
               <Pressable
                 onPress={onPress}

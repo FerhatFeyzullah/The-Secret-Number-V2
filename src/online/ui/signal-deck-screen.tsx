@@ -1,9 +1,9 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { getSignal } from '@/signals/catalog';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
+import { useTabsPager } from '@/ui/tabs-pager-context';
 
 export const DECK_MAX = 6;
 
@@ -19,7 +19,7 @@ export function SignalDeckPanel({
   deck: string[];
   onToggle: (id: string) => void;
 }) {
-  const router = useRouter();
+  const { goToTab } = useTabsPager();
   const extras = owned.filter((id) => !deck.includes(id));
 
   return (
@@ -97,7 +97,7 @@ export function SignalDeckPanel({
       </View>
 
       {extras.length === 0 ? (
-        <Pressable onPress={() => router.push('/store')} style={styles.shopHint}>
+        <Pressable onPress={() => goToTab('store')} style={styles.shopHint}>
           <Feather name="shopping-bag" size={13} color={colors.cyan} />
           <Text style={styles.shopHintText}>Daha fazla sinyal için Mağaza’ya git</Text>
         </Pressable>
