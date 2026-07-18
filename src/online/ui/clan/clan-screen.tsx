@@ -16,12 +16,14 @@ import { Screen, TAB_EDGES } from '@/ui/screen';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { ChoiceCard } from '../parts';
 import { ClanBrowse } from './clan-browse';
+import { ClanChat } from './clan-chat';
 import { ClanCreate } from './clan-create';
 import { ClanHome } from './clan-home';
 import { ClanLeaderboard } from './clan-leaderboard';
 import { ClanEmblemView } from './emblem';
 
-type SubView = 'none' | 'browse' | 'create' | 'leaderboard';
+// 'none' klandayken = sohbet; 'members' = üye/yönetim ekranı.
+type SubView = 'none' | 'browse' | 'create' | 'leaderboard' | 'members';
 
 /** Klan sekmesi (/clan) — Faz 1 iskelet. Klanda ise ana ekran; değilse kur/gözat. */
 export function ClanScreen() {
@@ -112,21 +114,29 @@ export function ClanScreen() {
     );
   }
 
-  // ── Klandaysa: ana ekran ──
+  // ── Klandaysa: sohbet (varsayılan) ya da üye/yönetim ──
   if (clan) {
+    if (view === 'members') {
+      return (
+        <Screen edges={TAB_EDGES}>
+          <ClanHome
+            clan={clan}
+            myId={myId}
+            onReload={() => load(false)}
+            onLeaderboard={() => setView('leaderboard')}
+            onBack={() => setView('none')}
+            onExit={() => {
+              setClan(null);
+              setView('none');
+              void load(false);
+            }}
+          />
+        </Screen>
+      );
+    }
     return (
       <Screen edges={TAB_EDGES}>
-        <ClanHome
-          clan={clan}
-          myId={myId}
-          onReload={() => load(false)}
-          onLeaderboard={() => setView('leaderboard')}
-          onExit={() => {
-            setClan(null);
-            setView('none');
-            void load(false);
-          }}
-        />
+        <ClanChat clan={clan} myId={myId} onOpenMembers={() => setView('members')} />
       </Screen>
     );
   }
@@ -200,7 +210,7 @@ export function ClanScreen() {
                   <ClanEmblemView emblem={c.emblem} size={38} glow={false} />
                   <View style={styles.pendingInfo}>
                     <Text style={styles.pendingName} numberOfLines={1}>
-                      {c.name} <Text style={styles.pendingTag}>[{c.tag}]</Text>
+                      {c.name}
                     </Text>
                     <Text style={styles.pendingMeta}>Onay bekleniyor</Text>
                   </View>
@@ -241,7 +251,6 @@ const styles = StyleSheet.create({
   },
   pendingInfo: { flex: 1, gap: 2 },
   pendingName: { fontSize: 14, fontWeight: '700', color: colors.text },
-  pendingTag: { color: colors.cyan, fontFamily: mono, fontWeight: '800', fontSize: 12 },
   pendingMeta: { fontSize: 11, color: colors.amber, fontFamily: mono },
   cancelBtn: {
     width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center',

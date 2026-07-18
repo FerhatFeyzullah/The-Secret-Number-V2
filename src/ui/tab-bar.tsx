@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Fragment, useEffect, useRef } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { Animated, Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getToggle } from '@/storage';
@@ -48,6 +48,20 @@ export function TabBar({ state, navigation }: MaterialTopTabBarProps) {
     ).start();
   }, [state.index, state.routes, anims]);
 
+  // Klavye açıkken alt sekme çubuğu gizlenir → yazarken çubuk yukarı çıkıp
+  // görünmez, altta klavyenin ardında kalır (sohbet vb. ekranlar için).
+  const [kbVisible, setKbVisible] = useState(false);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const s = Keyboard.addListener(showEvt, () => setKbVisible(true));
+    const h = Keyboard.addListener(hideEvt, () => setKbVisible(false));
+    return () => {
+      s.remove();
+      h.remove();
+    };
+  }, []);
+
   const wiggle = (i: number) => {
     shakes[i].setValue(0);
     Animated.sequence([
@@ -61,6 +75,9 @@ export function TabBar({ state, navigation }: MaterialTopTabBarProps) {
   // Home-indicator payı (makul sınırla), üste ve alta EŞİT verilir → ikonlar
   // renkli şeritte tam ortalı görünür; inset'i tamamen alta yığmayız.
   const safe = Math.min(insets.bottom, 14);
+
+  // Klavye açıkken çubuğu hiç render etme (yer kaplamasın, yukarı çıkmasın).
+  if (kbVisible) return null;
 
   return (
     <View style={[styles.wrap, { paddingTop: 8 + safe, paddingBottom: 8 + safe }]}>

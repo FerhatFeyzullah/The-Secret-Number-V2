@@ -17,6 +17,7 @@ import type {
   ClanJoinMode,
   ClanLeaderboardEntry,
   ClanMember,
+  ClanMessage,
   ClanRequest,
   ClanRole,
   FirstTurnMode,
@@ -114,9 +115,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_in_clan: 'Bir klanda değilsin.',
   clan_not_found: 'Klan bulunamadı.',
   clan_full: 'Klan dolu (30 üye).',
-  clan_tag_taken: 'Bu klan etiketi zaten alınmış.',
   invalid_clan_name: 'Klan adı 3–20 karakter olmalı.',
-  invalid_clan_tag: 'Etiket 2–5 karakter, yalnız harf/rakam olmalı.',
   invalid_clan_description: 'Açıklama çok uzun (en çok 120 karakter).',
   invalid_join_mode: 'Geçersiz katılım modu.',
   invalid_role: 'Geçersiz rol işlemi.',
@@ -127,6 +126,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   cannot_kick_self: 'Kendini atamazsın.',
   cannot_kick_leader: 'Lideri atamazsın.',
   request_not_found: 'İstek bulunamadı.',
+  // Klan sohbeti (Faz 3)
+  empty_message: 'Boş mesaj gönderilemez.',
+  message_too_long: 'Mesaj çok uzun (en çok 300 karakter).',
+  too_many_messages: 'Çok hızlı yazıyorsun, biraz bekle.',
+  message_not_found: 'Mesaj bulunamadı.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -881,7 +885,6 @@ type ClanRequestRow = {
 type ClanRow = {
   id: string;
   name: string;
-  tag: string;
   description: string;
   emblem: ClanEmblemRow | null;
   join_mode: string;
@@ -897,7 +900,6 @@ type ClanRow = {
 type ClanCardRow = {
   id: string;
   name: string;
-  tag: string;
   emblem: ClanEmblemRow | null;
   join_mode: string;
   min_trophies: number;
@@ -943,7 +945,6 @@ function mapClan(c: ClanRow): Clan {
   return {
     id: c.id,
     name: c.name,
-    tag: c.tag,
     description: c.description ?? '',
     emblem: mapEmblem(c.emblem),
     joinMode: asJoinMode(c.join_mode),
@@ -962,7 +963,6 @@ function mapClanCard(c: ClanCardRow): ClanCard {
   return {
     id: c.id,
     name: c.name,
-    tag: c.tag,
     emblem: mapEmblem(c.emblem),
     joinMode: asJoinMode(c.join_mode),
     minTrophies: Number(c.min_trophies ?? 0),
@@ -976,7 +976,7 @@ export async function getMyClan(): Promise<Clan | null> {
   return p ? mapClan(p) : null;
 }
 
-/** Klan dizini + arama (ad/tag). Boş sorgu → en kalabalık klanlar. */
+/** Klan dizini + arama (ad). Boş sorgu → en kalabalık klanlar. */
 export async function listClans(query: string): Promise<ClanCard[]> {
   const p = await callRpc<ClanCardRow[] | null>('list_clans', { p_query: query });
   return (p ?? []).map(mapClanCard);
@@ -992,7 +992,6 @@ type ClanLbRow = {
   rank: number;
   id: string;
   name: string;
-  tag: string;
   emblem: ClanEmblemRow | null;
   member_count: number;
   score: number;
@@ -1005,17 +1004,31 @@ export async function getClanLeaderboard(): Promise<ClanLeaderboardEntry[]> {
     rank: Number(c.rank),
     id: c.id,
     name: c.name,
-    tag: c.tag,
     emblem: mapEmblem(c.emblem),
     memberCount: Number(c.member_count ?? 0),
     score: Number(c.score ?? 0),
   }));
 }
 
+/** Verilen klanların üye id'leri (clan_id → player[]). Çevrimiçi sayımı için
+ *  (presence set'iyle kesişim). clan_members RLS'i authenticated okumaya açık. */
+export async function fetchClanMemberIds(clanIds: string[]): Promise<Record<string, string[]>> {
+  if (clanIds.length === 0) return {};
+  const client = requireClient();
+  const { data, error } = await withTimeout(
+    client.from('clan_members').select('clan_id,player').in('clan_id', clanIds),
+  );
+  if (error) throw toOnlineError(error.message);
+  const out: Record<string, string[]> = {};
+  for (const r of (data ?? []) as { clan_id: string; player: string }[]) {
+    (out[r.clan_id] ??= []).push(r.player);
+  }
+  return out;
+}
+
 /** Klan kur (Sv.>=3 + 1000 Veri). Kuran = Operatör. */
 export async function createClan(input: {
   name: string;
-  tag: string;
   description: string;
   emblem: ClanEmblem;
   joinMode: ClanJoinMode;
@@ -1023,7 +1036,6 @@ export async function createClan(input: {
 }): Promise<Clan> {
   const p = await callRpc<ClanRow>('create_clan', {
     p_name: input.name,
-    p_tag: input.tag,
     p_description: input.description,
     p_emblem: input.emblem,
     p_join_mode: input.joinMode,
@@ -1087,4 +1099,76 @@ export async function acceptClanRequest(player: string): Promise<Clan | null> {
 /** İsteği reddet (yönetici). */
 export async function rejectClanRequest(player: string): Promise<void> {
   await callRpc('reject_request', { p_player: player });
+}
+
+// ─── Klan sohbeti (Faz 3) ──────────────────────────────────────────────────
+
+type ClanMessageRow = {
+  id: string;
+  clan_id: string;
+  player: string;
+  body: string;
+  created_at: string;
+};
+
+function mapClanMessage(m: ClanMessageRow): ClanMessage {
+  return { id: m.id, clanId: m.clan_id, player: m.player, body: m.body, createdAt: m.created_at };
+}
+
+/** Klanın son mesajları (eskiden yeniye sıralı). RLS: yalnız üye okur. */
+export async function fetchClanMessages(clanId: string, limit = 50): Promise<ClanMessage[]> {
+  const client = requireClient();
+  const { data, error } = await withTimeout(
+    client
+      .from('clan_messages')
+      .select('id,clan_id,player,body,created_at')
+      .eq('clan_id', clanId)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  );
+  if (error) throw toOnlineError(error.message);
+  const rows = (data ?? []) as ClanMessageRow[];
+  return rows.map(mapClanMessage).reverse();
+}
+
+/** Mesaj gönder (uzunluk + spam sunucuda uygulanır). */
+export async function sendClanMessage(body: string): Promise<ClanMessage> {
+  const m = await callRpc<ClanMessageRow>('send_clan_message', { p_body: body });
+  return mapClanMessage(m);
+}
+
+/** Mesaj sil (yazar ya da yönetici). */
+export async function deleteClanMessage(id: string): Promise<void> {
+  await callRpc('delete_clan_message', { p_id: id });
+}
+
+/** Klan sohbetine realtime abone ol; INSERT/DELETE olaylarını iletir. Kapatıcı döner. */
+export function subscribeClanMessages(
+  clanId: string,
+  handlers: { onInsert: (m: ClanMessage) => void; onDelete: (id: string) => void },
+): () => void {
+  if (!supabase) return () => {};
+  const client = supabase;
+  const channel = client
+    .channel(`clan-chat-${clanId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'clan_messages', filter: `clan_id=eq.${clanId}` },
+      (payload) => {
+        const r = payload.new as ClanMessageRow;
+        if (r?.id) handlers.onInsert(mapClanMessage(r));
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'clan_messages', filter: `clan_id=eq.${clanId}` },
+      (payload) => {
+        const r = payload.old as { id?: string };
+        if (r?.id) handlers.onDelete(r.id);
+      },
+    )
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
 }

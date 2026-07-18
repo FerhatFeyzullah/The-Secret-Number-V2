@@ -17,7 +17,7 @@ import { DEFAULT_EMBLEM, EmblemBuilder } from './emblem';
 const MIN_TROPHY_PRESETS = [0, 500, 1000, 1500];
 const CREATE_COST = 1000;
 
-/** Klan kurma: amblem oluşturucu + ad/tag/açıklama + mod + min kupa. */
+/** Klan kurma: amblem oluşturucu + ad/açıklama + mod + min kupa. */
 export function ClanCreate({
   onBack,
   onCreated,
@@ -27,14 +27,13 @@ export function ClanCreate({
 }) {
   const [emblem, setEmblem] = useState<ClanEmblem>(DEFAULT_EMBLEM);
   const [name, setName] = useState('');
-  const [tag, setTag] = useState('');
   const [description, setDescription] = useState('');
   const [joinMode, setJoinMode] = useState<ClanJoinMode>('open');
   const [minTrophies, setMinTrophies] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = name.trim().length >= 3 && tag.length >= 2 && !busy;
+  const canSubmit = name.trim().length >= 3 && !busy;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -43,7 +42,6 @@ export function ClanCreate({
     try {
       const clan = await createClan({
         name: name.trim(),
-        tag,
         description: description.trim(),
         emblem,
         joinMode,
@@ -82,16 +80,6 @@ export function ClanCreate({
         placeholderTextColor={withAlpha(colors.dim, 0.6)}
         style={styles.input}
         maxLength={20}
-      />
-
-      <Text style={styles.label}>ETİKET (2–5, HARF/RAKAM)</Text>
-      <TextInput
-        value={tag}
-        onChangeText={(t) => setTag(t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))}
-        placeholder="SK"
-        placeholderTextColor={withAlpha(colors.dim, 0.6)}
-        autoCapitalize="characters"
-        style={[styles.input, styles.tagInput]}
       />
 
       <Text style={styles.label}>AÇIKLAMA (İSTEĞE BAĞLI)</Text>
@@ -167,7 +155,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.25)', borderWidth: 1, borderColor: colors.glassBorder,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: colors.text, fontSize: 15,
   },
-  tagInput: { fontFamily: mono, fontWeight: '800', letterSpacing: 3 },
   multiline: { minHeight: 64, textAlignVertical: 'top' },
   segment: {
     flexDirection: 'row', gap: 8, backgroundColor: 'rgba(0,0,0,0.25)',

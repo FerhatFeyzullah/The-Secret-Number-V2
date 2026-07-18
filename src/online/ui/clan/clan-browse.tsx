@@ -10,7 +10,15 @@ import {
   View,
 } from 'react-native';
 
-import { joinClan, listClans, OnlineError, type Clan, type ClanCard } from '@/online';
+import {
+  fetchClanMemberIds,
+  joinClan,
+  listClans,
+  OnlineError,
+  useOnlineIds,
+  type Clan,
+  type ClanCard,
+} from '@/online';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 import { ClanEmblemView } from './emblem';
 import { joinModeLabel } from './roles';
@@ -25,16 +33,24 @@ export function ClanBrowse({
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ClanCard[]>([]);
+  const [memberIds, setMemberIds] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const onlineIds = useOnlineIds();
 
   const load = useCallback(async (q: string) => {
     setLoading(true);
     setError(null);
     try {
-      setResults(await listClans(q));
+      const rows = await listClans(q);
+      setResults(rows);
+      try {
+        setMemberIds(await fetchClanMemberIds(rows.map((r) => r.id)));
+      } catch {
+        setMemberIds({});
+      }
     } catch (e) {
       setError(e instanceof OnlineError ? e.message : 'Klanlar yüklenemedi.');
     } finally {
@@ -81,7 +97,7 @@ export function ClanBrowse({
           onChangeText={setQuery}
           onSubmitEditing={() => void load(query.trim())}
           returnKeyType="search"
-          placeholder="Klan adı veya etiket…"
+          placeholder="Klan adı…"
           placeholderTextColor={withAlpha(colors.dim, 0.6)}
           style={styles.searchInput}
         />
@@ -108,16 +124,21 @@ export function ClanBrowse({
           {results.map((c) => {
             const isRequested = requested.has(c.id);
             const full = c.memberCount >= 30;
+            const onlineCount = (memberIds[c.id] ?? []).filter((id) => onlineIds.has(id)).length;
             return (
               <View key={c.id} style={styles.card}>
                 <ClanEmblemView emblem={c.emblem} size={46} />
                 <View style={styles.cardInfo}>
                   <View style={styles.cardNameRow}>
                     <Text style={styles.cardName} numberOfLines={1}>{c.name}</Text>
-                    <Text style={styles.cardTag}>[{c.tag}]</Text>
                   </View>
                   <View style={styles.cardMeta}>
                     <Text style={styles.cardMetaText}>{c.memberCount}/30</Text>
+                    <Text style={styles.cardDot}>·</Text>
+                    <View style={styles.onlineInline}>
+                      <View style={styles.onlineDot} />
+                      <Text style={styles.cardMetaText}>{onlineCount}</Text>
+                    </View>
                     <Text style={styles.cardDot}>·</Text>
                     <Text style={styles.cardMetaText}>{joinModeLabel(c.joinMode)}</Text>
                     {c.minTrophies > 0 ? (
@@ -182,10 +203,11 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, gap: 4 },
   cardNameRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   cardName: { flexShrink: 1, fontSize: 15, fontWeight: '800', color: colors.text, fontFamily: mono },
-  cardTag: { fontSize: 11, fontWeight: '800', color: colors.cyan, fontFamily: mono },
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   cardMetaText: { fontSize: 11, color: colors.dim, fontFamily: mono },
   cardDot: { color: colors.dim, fontSize: 11 },
+  onlineInline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
   joinBtn: {
     paddingVertical: 9, paddingHorizontal: 16, borderRadius: 12, minWidth: 74, alignItems: 'center',
     borderWidth: 1.5, borderColor: cyanAlpha(0.55), backgroundColor: cyanAlpha(0.18),

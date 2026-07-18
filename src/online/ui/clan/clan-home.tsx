@@ -11,6 +11,7 @@ import {
   rejectClanRequest,
   setClanMemberRole,
   transferClanLeadership,
+  useOnlineIds,
   type Clan,
   type ClanMember,
   type ClanRequest,
@@ -27,16 +28,25 @@ export function ClanHome({
   onReload,
   onExit,
   onLeaderboard,
+  onBack,
 }: {
   clan: Clan;
   myId: string;
   onReload: () => Promise<void>;
   onExit: () => void;
   onLeaderboard: () => void;
+  onBack: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [sortByTrophy, setSortByTrophy] = useState(false);
   const iAmLeader = clan.myRole === 'leader';
   const iAmManager = iAmLeader || clan.myRole === 'coleader';
+  const onlineIds = useOnlineIds();
+  const onlineCount = clan.members.filter((m) => onlineIds.has(m.player)).length;
+  // Varsayılan: sunucu sırası (rütbe → katkı → kupa). Değiştir → yalnız kupaya göre.
+  const sortedMembers = sortByTrophy
+    ? [...clan.members].sort((a, b) => b.rating - a.rating)
+    : clan.members;
 
   const run = useCallback(
     async (fn: () => Promise<void>) => {
@@ -101,33 +111,45 @@ export function ClanHome({
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-      {/* Başlık kartı */}
+      {/* Üst bar: sohbete dön */}
+      <View style={styles.topBar}>
+        <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+          <Feather name="arrow-left" size={18} color={colors.text} />
+        </Pressable>
+        <Text style={styles.topTitle}>KLAN</Text>
+        <View style={styles.backBtn} />
+      </View>
+
+      {/* Başlık kartı: amblem + ad + çevrimiçi/üye + açıklama */}
       <View style={styles.headerCard}>
-        <ClanEmblemView emblem={clan.emblem} size={62} />
-        <View style={styles.headerInfo}>
-          <View style={styles.nameRow}>
+        <View style={styles.headerTop}>
+          <ClanEmblemView emblem={clan.emblem} size={62} />
+          <View style={styles.headerInfo}>
             <Text style={styles.name} numberOfLines={1}>{clan.name}</Text>
-            <Text style={styles.tag}>[{clan.tag}]</Text>
-          </View>
-          <View style={styles.metaRow}>
-            <View style={styles.metaChip}>
-              <Feather name="users" size={11} color={colors.cyan} />
-              <Text style={styles.metaText}>{clan.memberCount}/30</Text>
-            </View>
-            <View style={styles.metaChip}>
-              <Feather name="unlock" size={11} color={colors.dim} />
-              <Text style={styles.metaText}>{joinModeLabel(clan.joinMode)}</Text>
-            </View>
-            {clan.minTrophies > 0 ? (
+            <View style={styles.metaRow}>
               <View style={styles.metaChip}>
-                <Feather name="award" size={11} color={colors.amber} />
-                <Text style={styles.metaText}>{clan.minTrophies}+</Text>
+                <Feather name="users" size={11} color={colors.cyan} />
+                <Text style={styles.metaText}>{clan.memberCount}/30</Text>
               </View>
-            ) : null}
+              <View style={styles.metaChip}>
+                <View style={styles.onlineDot} />
+                <Text style={styles.metaText}>{onlineCount} çevrimiçi</Text>
+              </View>
+              <View style={styles.metaChip}>
+                <Feather name="unlock" size={11} color={colors.dim} />
+                <Text style={styles.metaText}>{joinModeLabel(clan.joinMode)}</Text>
+              </View>
+              {clan.minTrophies > 0 ? (
+                <View style={styles.metaChip}>
+                  <Feather name="award" size={11} color={colors.amber} />
+                  <Text style={styles.metaText}>{clan.minTrophies}+</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
+        {clan.description ? <Text style={styles.cardDescription}>{clan.description}</Text> : null}
       </View>
-      {clan.description ? <Text style={styles.description}>{clan.description}</Text> : null}
 
       {/* Sıra + skor → lider tablosu */}
       <Pressable onPress={onLeaderboard} style={styles.rankBanner}>
@@ -150,17 +172,27 @@ export function ClanHome({
 
       {/* Üyeler */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>ÜYELER · {clan.memberCount}/30</Text>
-        {clan.members.map((m) => {
+        <View style={styles.sectionHeadRow}>
+          <Text style={styles.sectionLabel}>ÜYELER · {clan.memberCount}/30</Text>
+          <Pressable onPress={() => setSortByTrophy((v) => !v)} hitSlop={8} style={styles.sortBtn}>
+            <Feather name={sortByTrophy ? 'award' : 'bar-chart-2'} size={12} color={colors.cyan} />
+            <Text style={styles.sortText}>{sortByTrophy ? 'Kupaya göre' : 'Rütbeye göre'}</Text>
+          </Pressable>
+        </View>
+        {sortedMembers.map((m) => {
           const rank = memberRank(m);
           const manageable = iAmManager && m.player !== myId && m.role !== 'leader';
+          const online = onlineIds.has(m.player);
           return (
             <Pressable
               key={m.player}
               onPress={() => openMemberMenu(m)}
               disabled={!manageable}
               style={({ pressed }) => [styles.memberRow, pressed && manageable && styles.memberPressed]}>
-              <Avatar initial={m.username.charAt(0) || '?'} accent={rank.accent} size={38} />
+              <View style={styles.avatarWrap}>
+                <Avatar initial={m.username.charAt(0) || '?'} accent={rank.accent} size={38} />
+                {online ? <View style={styles.onlineBadge} /> : null}
+              </View>
               <View style={styles.memberInfo}>
                 <Text style={styles.memberName} numberOfLines={1}>
                   {m.username}
@@ -223,10 +255,18 @@ function RequestRow({
 
 const styles = StyleSheet.create({
   scroll: { paddingBottom: 28, gap: 14 },
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, gap: 10 },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder,
+  },
+  topTitle: {
+    flex: 1, textAlign: 'center', fontSize: 14, fontWeight: '800', letterSpacing: 3,
+    color: colors.ice, fontFamily: mono,
+  },
   headerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
+    flexDirection: 'column',
+    gap: 12,
     padding: 14,
     borderRadius: 20,
     backgroundColor: colors.glass,
@@ -234,10 +274,9 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
     marginTop: 4,
   },
+  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerInfo: { flex: 1, gap: 8 },
-  nameRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   name: { flexShrink: 1, fontSize: 18, fontWeight: '800', color: colors.ice, fontFamily: mono },
-  tag: { fontSize: 12, fontWeight: '800', color: colors.cyan, fontFamily: mono },
   metaRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   metaChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -245,7 +284,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   metaText: { fontSize: 10, fontWeight: '700', color: colors.text, fontFamily: mono },
-  description: { fontSize: 13, color: colors.dim, lineHeight: 19, paddingHorizontal: 4 },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  cardDescription: { fontSize: 13, color: colors.dim, lineHeight: 19 },
   rankBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 11, paddingHorizontal: 14, borderRadius: 14,
@@ -254,13 +294,24 @@ const styles = StyleSheet.create({
   rankText: { flex: 1, fontSize: 13, color: colors.text, fontFamily: mono, fontWeight: '700' },
   rankNum: { color: colors.amber, fontWeight: '900' },
   section: { gap: 8 },
-  sectionLabel: { fontFamily: mono, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, color: colors.dim, marginBottom: 2 },
+  sectionHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  sectionLabel: { fontFamily: mono, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, color: colors.dim },
+  sortBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10,
+    borderRadius: 20, backgroundColor: withAlpha(colors.cyan, 0.1), borderWidth: 1, borderColor: withAlpha(colors.cyan, 0.28),
+  },
+  sortText: { fontSize: 10, fontWeight: '800', color: colors.cyan, fontFamily: mono, letterSpacing: 0.3 },
   memberRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 9, paddingHorizontal: 12, borderRadius: 14,
     backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder,
   },
   memberPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  avatarWrap: { width: 38, height: 38 },
+  onlineBadge: {
+    position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: 6,
+    backgroundColor: colors.success, borderWidth: 2, borderColor: colors.bgMid,
+  },
   memberInfo: { flex: 1, gap: 2 },
   memberName: { fontSize: 14, fontWeight: '700', color: colors.text },
   you: { color: colors.dim, fontWeight: '600', fontSize: 12 },
