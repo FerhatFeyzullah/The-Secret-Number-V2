@@ -26,11 +26,13 @@ export function ClanHome({
   myId,
   onReload,
   onExit,
+  onLeaderboard,
 }: {
   clan: Clan;
   myId: string;
   onReload: () => Promise<void>;
   onExit: () => void;
+  onLeaderboard: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const iAmLeader = clan.myRole === 'leader';
@@ -126,6 +128,15 @@ export function ClanHome({
         </View>
       </View>
       {clan.description ? <Text style={styles.description}>{clan.description}</Text> : null}
+
+      {/* Sıra + skor → lider tablosu */}
+      <Pressable onPress={onLeaderboard} style={styles.rankBanner}>
+        <Feather name="bar-chart-2" size={16} color={colors.amber} />
+        <Text style={styles.rankText}>
+          Sıra <Text style={styles.rankNum}>#{clan.rank}</Text> · {clan.score} skor
+        </Text>
+        <Feather name="chevron-right" size={16} color={colors.dim} />
+      </Pressable>
 
       {/* Bekleyen istekler (yönetici) */}
       {iAmManager && clan.requests.length > 0 ? (
@@ -235,6 +246,13 @@ const styles = StyleSheet.create({
   },
   metaText: { fontSize: 10, fontWeight: '700', color: colors.text, fontFamily: mono },
   description: { fontSize: 13, color: colors.dim, lineHeight: 19, paddingHorizontal: 4 },
+  rankBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 11, paddingHorizontal: 14, borderRadius: 14,
+    backgroundColor: withAlpha(colors.amber, 0.08), borderWidth: 1, borderColor: withAlpha(colors.amber, 0.28),
+  },
+  rankText: { flex: 1, fontSize: 13, color: colors.text, fontFamily: mono, fontWeight: '700' },
+  rankNum: { color: colors.amber, fontWeight: '900' },
   section: { gap: 8 },
   sectionLabel: { fontFamily: mono, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, color: colors.dim, marginBottom: 2 },
   memberRow: {

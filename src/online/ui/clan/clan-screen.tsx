@@ -18,9 +18,10 @@ import { ChoiceCard } from '../parts';
 import { ClanBrowse } from './clan-browse';
 import { ClanCreate } from './clan-create';
 import { ClanHome } from './clan-home';
+import { ClanLeaderboard } from './clan-leaderboard';
 import { ClanEmblemView } from './emblem';
 
-type SubView = 'none' | 'browse' | 'create';
+type SubView = 'none' | 'browse' | 'create' | 'leaderboard';
 
 /** Klan sekmesi (/clan) — Faz 1 iskelet. Klanda ise ana ekran; değilse kur/gözat. */
 export function ClanScreen() {
@@ -102,6 +103,15 @@ export function ClanScreen() {
     );
   }
 
+  // ── Lider tablosu (klanda olsun olmasın) ──
+  if (view === 'leaderboard') {
+    return (
+      <Screen edges={TAB_EDGES}>
+        <ClanLeaderboard myClanId={clan?.id ?? null} onBack={() => setView('none')} />
+      </Screen>
+    );
+  }
+
   // ── Klandaysa: ana ekran ──
   if (clan) {
     return (
@@ -110,6 +120,7 @@ export function ClanScreen() {
           clan={clan}
           myId={myId}
           onReload={() => load(false)}
+          onLeaderboard={() => setView('leaderboard')}
           onExit={() => {
             setClan(null);
             setView('none');
@@ -172,6 +183,13 @@ export function ClanScreen() {
             title="Klanlara Göz At"
             subtitle="Klan ara ve katıl"
             onPress={() => setView('browse')}
+          />
+          <ChoiceCard
+            icon="bar-chart-2"
+            accent={colors.amber}
+            title="Klan Sıralaması"
+            subtitle="En güçlü klanları gör"
+            onPress={() => setView('leaderboard')}
           />
 
           {myRequests.length > 0 ? (

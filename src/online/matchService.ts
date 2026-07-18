@@ -15,6 +15,7 @@ import type {
   ClanCard,
   ClanEmblem,
   ClanJoinMode,
+  ClanLeaderboardEntry,
   ClanMember,
   ClanRequest,
   ClanRole,
@@ -888,6 +889,8 @@ type ClanRow = {
   member_count: number;
   owner: string;
   my_role: string;
+  score?: number;
+  rank?: number;
   members: ClanMemberRow[];
   requests: ClanRequestRow[];
 };
@@ -948,6 +951,8 @@ function mapClan(c: ClanRow): Clan {
     memberCount: Number(c.member_count ?? 0),
     owner: c.owner,
     myRole: asClanRole(c.my_role),
+    score: Number(c.score ?? 0),
+    rank: Number(c.rank ?? 0),
     members: (c.members ?? []).map(mapClanMember),
     requests: (c.requests ?? []).map(mapClanRequest),
   };
@@ -981,6 +986,30 @@ export async function listClans(query: string): Promise<ClanCard[]> {
 export async function getMyClanRequests(): Promise<ClanCard[]> {
   const p = await callRpc<ClanCardRow[] | null>('get_my_requests');
   return (p ?? []).map(mapClanCard);
+}
+
+type ClanLbRow = {
+  rank: number;
+  id: string;
+  name: string;
+  tag: string;
+  emblem: ClanEmblemRow | null;
+  member_count: number;
+  score: number;
+};
+
+/** Klan lider tablosu (skor = üye Kupa toplamı; global ilk 50). */
+export async function getClanLeaderboard(): Promise<ClanLeaderboardEntry[]> {
+  const p = await callRpc<ClanLbRow[] | null>('get_clan_leaderboard');
+  return (p ?? []).map((c) => ({
+    rank: Number(c.rank),
+    id: c.id,
+    name: c.name,
+    tag: c.tag,
+    emblem: mapEmblem(c.emblem),
+    memberCount: Number(c.member_count ?? 0),
+    score: Number(c.score ?? 0),
+  }));
 }
 
 /** Klan kur (Sv.>=3 + 1000 Veri). Kuran = Operatör. */
