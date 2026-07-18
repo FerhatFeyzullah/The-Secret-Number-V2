@@ -430,9 +430,24 @@ export type Clan = {
   owner: string;
   /** Oturum açan oyuncunun bu klandaki rolü. */
   myRole: ClanRole;
+  /** Klan skoru = üyelerin Kupa toplamı (Faz 2a). */
+  score: number;
+  /** Global klan sıralaması (1 = en yüksek skor) (Faz 2a). */
+  rank: number;
   members: ClanMember[];
   /** Bekleyen istekler — yalnız yönetici (leader/coleader) için dolu; değilse []. */
   requests: ClanRequest[];
+};
+
+/** Klan lider tablosu satırı (get_clan_leaderboard). */
+export type ClanLeaderboardEntry = {
+  rank: number;
+  id: string;
+  name: string;
+  tag: string;
+  emblem: ClanEmblem | null;
+  memberCount: number;
+  score: number;
 };
 
 /** Dizin/arama kartı (list_clans, get_my_requests). */
