@@ -5,6 +5,7 @@ export type {
   ClanJoinMode,
   ClanLeaderboardEntry,
   ClanMember,
+  ClanMessage,
   ClanRequest,
   ClanRole,
   FirstTurnMode,
@@ -54,7 +55,10 @@ export {
   claimTimeout,
   createClan,
   createPrivateRoom,
+  deleteClanMessage,
   disbandClan,
+  fetchClanMemberIds,
+  fetchClanMessages,
   fetchGuesses,
   fetchMatchState,
   fetchPresence,
@@ -87,10 +91,12 @@ export {
   rejectClanRequest,
   resolveProtocolSelect,
   resolveSetupTimeout,
+  sendClanMessage,
   setClanMemberRole,
   setProtocolSelection,
   setSecret,
   setSignalDeck,
+  subscribeClanMessages,
   transferClanLeadership,
   unlockProtocol,
   unlockSignal,
@@ -98,5 +104,5 @@ export {
 export { useMatch, type UseMatchResult } from './useMatch';
 export { useLiveClocks } from './useLiveClocks';
 export { MatchSessionProvider, useMatchSession } from './match-session';
-export { OnlinePresenceProvider, useOnlineCount } from './online-presence';
+export { OnlinePresenceProvider, useOnlineCount, useOnlineIds } from './online-presence';
 export { levelTitle, isEliteLevel, MAX_LEVEL, ELITE_LEVEL } from './progression';

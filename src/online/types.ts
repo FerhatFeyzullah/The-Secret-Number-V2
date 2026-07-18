@@ -420,7 +420,6 @@ export type ClanRequest = {
 export type Clan = {
   id: string;
   name: string;
-  tag: string;
   description: string;
   emblem: ClanEmblem | null;
   joinMode: ClanJoinMode;
@@ -444,7 +443,6 @@ export type ClanLeaderboardEntry = {
   rank: number;
   id: string;
   name: string;
-  tag: string;
   emblem: ClanEmblem | null;
   memberCount: number;
   score: number;
@@ -454,9 +452,17 @@ export type ClanLeaderboardEntry = {
 export type ClanCard = {
   id: string;
   name: string;
-  tag: string;
   emblem: ClanEmblem | null;
   joinMode: ClanJoinMode;
   minTrophies: number;
   memberCount: number;
+};
+
+/** Klan sohbet mesajı (Faz 3). username istemcide üye listesinden çözülür. */
+export type ClanMessage = {
+  id: string;
+  clanId: string;
+  player: string;
+  body: string;
+  createdAt: string;
 };
