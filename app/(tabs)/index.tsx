@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { Keyboard, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ClanScreen, DonanimScreen, StoreScreen } from '@/online/ui';
 import { ComingSoon } from '@/ui/coming-soon';
@@ -37,6 +37,26 @@ export default function TabsPager() {
   // işaretlemesin (çubuk süpürülmesin) → kısa kilit. İlk yerleşimdeki olası sahte
   // x=0 olayını da yutar.
   const lockUntil = useRef(0);
+  // Sayfa yüksekliği pager'ın ölçülen (klavye açılınca küçülen) yüksekliğine EŞLENİR.
+  // Yatay ScrollView, çocukların yüksekliğini tek başına reflow etmiyor → açık
+  // yükseklik ver ki klan sohbeti gibi alt-hizalı input klavyenin üstüne çıksın.
+  const [viewportH, setViewportH] = useState(0);
+  // iOS'te klavye pencereyi küçültmez (Android adjustResize küçültür) → iOS'te
+  // klavye yüksekliğini elle çıkar; Android'de 0 (çift sayım olmasın).
+  const [iosKbH, setIosKbH] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const show = Keyboard.addListener('keyboardWillShow', (e) => setIosKbH(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardWillHide', () => setIosKbH(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const pageH = viewportH > 0 ? Math.max(0, viewportH - iosKbH) : undefined;
+  const onViewportLayout = useCallback((e: LayoutChangeEvent) => {
+    setViewportH(e.nativeEvent.layout.height);
+  }, []);
 
   const setActive = useCallback((i: number) => {
     indexRef.current = i;
@@ -102,11 +122,12 @@ export default function TabsPager() {
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
+          onLayout={onViewportLayout}
           contentOffset={{ x: HOME_INDEX * width, y: 0 }}
           keyboardShouldPersistTaps="handled"
           style={styles.flex}>
           {pages.map((el, i) => (
-            <View key={TAB_ROUTES[i]} style={{ width }}>
+            <View key={TAB_ROUTES[i]} style={{ width, height: pageH }}>
               {el}
             </View>
           ))}
