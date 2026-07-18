@@ -1,12 +1,7 @@
-import { ComingSoon } from '@/ui/coming-soon';
+import { ClanScreen } from '@/online/ui';
 
-/** Klan sekmesi (/clan) — yer tutucu. İçerik sonra netleşecek. */
+/** Klan sekmesi (/clan) — Faz 1: kimlik + üyelik (kur/katıl/ayrıl, roller,
+ *  üye listesi, amblem oluşturucu). Tüm mantık ClanScreen'de. */
 export default function ClanRoute() {
-  return (
-    <ComingSoon
-      icon="shield"
-      title="KLANLAR"
-      subtitle="Arkadaşlarınla takım kur, birlikte tırman ve strateji yap."
-    />
-  );
+  return <ClanScreen />;
 }
