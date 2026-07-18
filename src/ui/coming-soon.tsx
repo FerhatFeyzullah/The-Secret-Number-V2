@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Screen } from './screen';
+import { Screen, TAB_EDGES } from './screen';
 import { colors, mono, withAlpha } from './theme';
 
 type FeatherName = keyof typeof Feather.glyphMap;
@@ -20,7 +20,7 @@ export function ComingSoon({
   accent?: string;
 }) {
   return (
-    <Screen>
+    <Screen edges={TAB_EDGES}>
       <View style={styles.center}>
         <View
           style={[

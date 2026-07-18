@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,17 +16,8 @@ import { getMyRank, OnlineError, unlockSignal, type MyRank } from '@/online';
 import { SIGNALS, type Signal } from '@/signals/catalog';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
-import { Screen } from '@/ui/screen';
+import { Screen, TAB_EDGES } from '@/ui/screen';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
-
-type FeatherName = keyof typeof Feather.glyphMap;
-
-/** Mağaza sekmeleri — şimdilik yalnız Sinyaller dolu; yapı çok-kategorili
- *  (ileride temalar/çerçeveler vb. eklenebilir). */
-type TabKey = 'signals';
-const TABS: { key: TabKey; label: string; icon: FeatherName }[] = [
-  { key: 'signals', label: 'SİNYALLER', icon: 'message-circle' },
-];
 
 const STORE_INTRO: InfoSection[] = [
   {
@@ -45,7 +36,7 @@ const STORE_INTRO: InfoSection[] = [
     icon: 'layers',
     accent: colors.violet,
     title: 'Destene Ekle',
-    body: 'Aldığın sinyalleri “Sinyallerim” destene (en çok 6) ekleyip maç sonunda kullanırsın.',
+    body: 'Aldığın sinyalleri “Donanım” destene (en çok 6) ekleyip maç sonunda kullanırsın.',
   },
 ];
 
@@ -53,19 +44,20 @@ const errMsg = (e: unknown) =>
   e instanceof OnlineError ? e.message : 'İşlem başarısız, tekrar dene.';
 const fmtVeri = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
-/** Sinyal Mağazası: sekmeli, Veri ile satın alma (unlock_signal — sunucu otoriteli). */
+/** Sinyal Mağazası (alt sekme). Veri ile satın alma (unlock_signal — sunucu
+ *  otoriteli). Sekme olduğu için geri ok yok; odaklanınca Veri sessizce tazelenir. */
 export function StoreScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const [data, setData] = useState<MyRank | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>('signals');
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // İlk yükleme (spinner'lı).
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -78,10 +70,25 @@ export function StoreScreen() {
     }
   }, []);
 
+  // Sessiz tazeleme (spinner yok) — sekmeye her dönüşte Veri/sahiplik güncel kalsın.
+  const refresh = useCallback(async () => {
+    try {
+      setData(await getMyRank());
+    } catch {
+      // Sessiz: mevcut veriyi koru.
+    }
+  }, []);
+
   useEffect(() => {
     if (session) void load();
     else setLoading(false);
   }, [session, load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (session) void refresh();
+    }, [session, refresh]),
+  );
 
   // İlk-kez tanıtım (flicker-safe): bayrak gelene kadar açılmaz.
   const [introVisible, setIntroVisible] = useState(false);
@@ -103,6 +110,7 @@ export function StoreScreen() {
 
   const owned = data?.ownedSignals ?? [];
   const veri = data?.veri ?? 0;
+  const ownedCount = SIGNALS.filter((s) => owned.includes(s.id)).length;
   const selected = selectedId ? SIGNALS.find((s) => s.id === selectedId) ?? null : null;
   const selectedOwned = selected ? owned.includes(selected.id) : false;
   const selectedAfford = selected ? veri >= selected.veriCost : false;
@@ -128,20 +136,20 @@ export function StoreScreen() {
 
   const header = (
     <View style={styles.header}>
-      <Pressable onPress={() => router.back()} hitSlop={10} style={styles.iconBtn}>
-        <Feather name="arrow-left" size={18} color={colors.text} />
-      </Pressable>
-      <Text style={styles.title}>MAĞAZA</Text>
+      <View style={styles.titleWrap}>
+        <Feather name="shopping-bag" size={18} color={colors.cyan} />
+        <Text style={styles.title}>MAĞAZA</Text>
+      </View>
       <View style={styles.headerRight}>
-        <Pressable onPress={openIntro} hitSlop={10} style={styles.help}>
-          <Feather name="help-circle" size={17} color={colors.cyan} />
-        </Pressable>
         {session && data ? (
           <View style={styles.veriBalance}>
-            <Feather name="hexagon" size={12} color={colors.teal} />
+            <Feather name="hexagon" size={13} color={colors.teal} />
             <Text style={styles.veriText}>{fmtVeri(veri)}</Text>
           </View>
         ) : null}
+        <Pressable onPress={openIntro} hitSlop={10} style={styles.help}>
+          <Feather name="help-circle" size={17} color={colors.cyan} />
+        </Pressable>
       </View>
     </View>
   );
@@ -151,7 +159,9 @@ export function StoreScreen() {
     body = (
       <View style={styles.centered}>
         <Feather name="lock" size={26} color={colors.dim} />
-        <Text style={styles.centeredText}>Mağaza hesabına bağlıdır.{'\n'}Görmek için giriş yapmalısın.</Text>
+        <Text style={styles.centeredText}>
+          Mağaza hesabına bağlıdır.{'\n'}Görmek için giriş yapmalısın.
+        </Text>
         <Pressable
           onPress={() => router.push({ pathname: '/auth', params: { next: '/store' } })}
           style={styles.signInBtn}>
@@ -178,62 +188,59 @@ export function StoreScreen() {
   } else {
     body = (
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* Sekme çubuğu (çok-kategorili yapı; şimdilik 1 dolu) */}
-        <View style={styles.tabs}>
-          {TABS.map((t) => {
-            const active = t.key === tab;
+        {/* Bölüm başlığı + koleksiyon sayacı (şimdilik tek kategori: Sinyaller). */}
+        <View style={styles.sectionRow}>
+          <Feather name="message-circle" size={13} color={colors.cyan} />
+          <Text style={styles.sectionLabel}>SİNYALLER</Text>
+          <Text style={styles.sectionCount}>
+            {ownedCount}/{SIGNALS.length}
+          </Text>
+        </View>
+
+        <View style={styles.grid}>
+          {SIGNALS.map((s) => {
+            const Icon = s.component;
+            const isOwned = owned.includes(s.id);
+            const afford = veri >= s.veriCost;
+            const locked = !isOwned && !afford;
             return (
               <Pressable
-                key={t.key}
-                onPress={() => setTab(t.key)}
-                style={[styles.tab, active && styles.tabActive]}>
-                <Feather name={t.icon} size={14} color={active ? colors.cyan : colors.dim} />
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+                key={s.id}
+                onPress={() => setSelectedId(s.id)}
+                style={({ pressed }) => [
+                  styles.card,
+                  isOwned && styles.cardOwned,
+                  locked && styles.cardLocked,
+                  pressed && styles.cardPressed,
+                ]}>
+                {/* Izgarada statik (perf); önizlemede tam animasyon */}
+                <Icon size={56} animated={false} />
+                <Text style={styles.cardName} numberOfLines={1}>
+                  {s.name}
+                </Text>
+                {isOwned ? (
+                  <View style={[styles.badge, styles.badgeOwned]}>
+                    <Feather name="check" size={10} color={colors.success} />
+                    <Text style={[styles.badgeText, { color: colors.success }]}>Sahipsin</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.badge, !afford && styles.badgeOff]}>
+                    <Feather name="hexagon" size={9} color={afford ? colors.teal : colors.dim} />
+                    <Text style={[styles.badgeText, { color: afford ? colors.teal : colors.dim }]}>
+                      {s.veriCost}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
             );
           })}
         </View>
-
-        {tab === 'signals' ? (
-          <View style={styles.grid}>
-            {SIGNALS.map((s) => {
-              const Icon = s.component;
-              const isOwned = owned.includes(s.id);
-              const afford = veri >= s.veriCost;
-              return (
-                <Pressable
-                  key={s.id}
-                  onPress={() => setSelectedId(s.id)}
-                  style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
-                  {/* Izgarada statik (perf); önizlemede tam animasyon */}
-                  <Icon size={56} animated={false} />
-                  <Text style={styles.cardName} numberOfLines={1}>
-                    {s.name}
-                  </Text>
-                  {isOwned ? (
-                    <View style={[styles.badge, styles.badgeOwned]}>
-                      <Feather name="check" size={10} color={colors.success} />
-                      <Text style={[styles.badgeText, { color: colors.success }]}>Sahipsin</Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.badge, !afford && styles.badgeOff]}>
-                      <Feather name="hexagon" size={9} color={afford ? colors.teal : colors.dim} />
-                      <Text style={[styles.badgeText, { color: afford ? colors.teal : colors.dim }]}>
-                        {s.veriCost}
-                      </Text>
-                    </View>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
       </ScrollView>
     );
   }
 
   return (
-    <Screen>
+    <Screen edges={TAB_EDGES}>
       {header}
       {body}
 
@@ -334,18 +341,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
     paddingVertical: 12,
   },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
+  titleWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 9,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 3,
+    color: colors.ice,
+    fontFamily: mono,
+    textShadowColor: cyanAlpha(0.5),
+    textShadowRadius: 10,
   },
   headerRight: {
     flexDirection: 'row',
@@ -362,23 +374,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 3,
-    color: colors.ice,
-    fontFamily: mono,
-    textShadowColor: cyanAlpha(0.5),
-    textShadowRadius: 10,
-  },
   veriBalance: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 11,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     borderRadius: 20,
     backgroundColor: withAlpha(colors.teal, 0.1),
     borderWidth: 1,
@@ -386,43 +387,33 @@ const styles = StyleSheet.create({
   },
   veriText: {
     color: colors.teal,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     fontFamily: mono,
   },
   scroll: {
     paddingBottom: 28,
-    gap: 16,
+    gap: 14,
   },
-  tabs: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  tab: {
+  sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    backgroundColor: colors.glass,
+    gap: 8,
+    marginTop: 2,
   },
-  tabActive: {
-    borderColor: cyanAlpha(0.5),
-    backgroundColor: cyanAlpha(0.12),
-  },
-  tabText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    color: colors.dim,
+  sectionLabel: {
     fontFamily: mono,
-  },
-  tabTextActive: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
     color: colors.cyan,
+  },
+  sectionCount: {
+    marginLeft: 'auto',
+    fontFamily: mono,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.dim,
   },
   grid: {
     flexDirection: 'row',
@@ -439,6 +430,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.glassBorder,
+  },
+  cardOwned: {
+    borderColor: withAlpha(colors.success, 0.3),
+    backgroundColor: withAlpha(colors.success, 0.06),
+  },
+  cardLocked: {
+    opacity: 0.5,
   },
   cardPressed: {
     transform: [{ scale: 0.97 }],
