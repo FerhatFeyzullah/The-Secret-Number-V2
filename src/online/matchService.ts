@@ -11,6 +11,7 @@ import {
   type ProtocolUseRow,
 } from './mapping';
 import type {
+  ChallengeFull,
   Clan,
   ClanCard,
   ClanEmblem,
@@ -21,6 +22,7 @@ import type {
   ClanRequest,
   ClanRole,
   FirstTurnMode,
+  IncomingChallenge,
   GuessFeedback,
   GuessOutcome,
   LeaderboardEntry,
@@ -131,6 +133,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   message_too_long: 'Mesaj çok uzun (en çok 300 karakter).',
   too_many_messages: 'Çok hızlı yazıyorsun, biraz bekle.',
   message_not_found: 'Mesaj bulunamadı.',
+  // Klan içi meydan okuma (Faz 2b)
+  cannot_challenge_self: 'Kendine meydan okuyamazsın.',
+  opponent_busy: 'Rakip şu an meşgul.',
+  already_in_match: 'Zaten bir maçtasın.',
+  challenge_not_found: 'Davet bulunamadı.',
+  challenge_not_pending: 'Davet artık geçerli değil.',
+  challenge_expired: 'Davetin süresi doldu.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -1166,6 +1175,134 @@ export function subscribeClanMessages(
         const r = payload.old as { id?: string };
         if (r?.id) handlers.onDelete(r.id);
       },
+    )
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
+// ─── Klan içi meydan okuma (Faz 2b) ────────────────────────────────────────
+
+type IncomingChallengeRow = {
+  id: string;
+  from_player: string;
+  from_username: string;
+  mode: string;
+  clock_ms: number;
+  first_turn: string;
+  word_length: number | null;
+  expires_at: string;
+};
+type ChallengeRow = IncomingChallengeRow & {
+  to_player: string;
+  status: string;
+  reject_message: string | null;
+  match_id: string | null;
+};
+
+function asChallengeMode(m: string): PrivateRoomMode {
+  return m === 'protocol' || m === 'word' ? m : 'quick';
+}
+function asChallengeFirstTurn(f: string): FirstTurnMode {
+  return f === 'creator' ? 'creator' : 'random';
+}
+
+function mapIncomingChallenge(r: IncomingChallengeRow): IncomingChallenge {
+  return {
+    id: r.id,
+    fromPlayer: r.from_player,
+    fromUsername: r.from_username ?? '',
+    mode: asChallengeMode(r.mode),
+    clockMs: Number(r.clock_ms ?? 60000),
+    firstTurn: asChallengeFirstTurn(r.first_turn),
+    wordLength: r.word_length == null ? null : Number(r.word_length),
+    expiresAt: r.expires_at,
+  };
+}
+
+function mapChallengeFull(r: ChallengeRow): ChallengeFull {
+  return {
+    id: r.id,
+    fromPlayer: r.from_player,
+    fromUsername: r.from_username ?? '',
+    toPlayer: r.to_player,
+    mode: asChallengeMode(r.mode),
+    clockMs: Number(r.clock_ms ?? 60000),
+    firstTurn: asChallengeFirstTurn(r.first_turn),
+    wordLength: r.word_length == null ? null : Number(r.word_length),
+    status: r.status as ChallengeFull['status'],
+    rejectMessage: r.reject_message ?? null,
+    matchId: r.match_id ?? null,
+    expiresAt: r.expires_at,
+  };
+}
+
+/** Klan üyesine dostluk maçı daveti gönder (30 sn geçerli). */
+export async function createChallenge(
+  toPlayer: string,
+  mode: PrivateRoomMode,
+  clockMs: number,
+  firstTurn: FirstTurnMode,
+  wordLength: number | null,
+): Promise<{ id: string; expiresAt: string }> {
+  const p = await callRpc<{ id: string; expires_at: string }>('create_challenge', {
+    p_to: toPlayer,
+    p_mode: mode,
+    p_clock_ms: clockMs,
+    p_first_turn: firstTurn,
+    p_word_length: wordLength,
+  });
+  return { id: p.id, expiresAt: p.expires_at };
+}
+
+/** Daveti onayla → dostluk maçı bileti (iki oyuncu hazır). */
+export async function acceptChallenge(id: string): Promise<MatchTicket> {
+  const p = await callRpc<{ match_id: string; role: PlayerRole; status: MatchStatus }>('accept_challenge', {
+    p_id: id,
+  });
+  return { matchId: p.match_id, role: p.role, status: p.status };
+}
+
+/** Daveti reddet (hazır mesajla). */
+export async function rejectChallenge(id: string, message: string): Promise<void> {
+  await callRpc('reject_challenge', { p_id: id, p_message: message });
+}
+
+/** Gönderdiğin daveti iptal et. */
+export async function cancelChallenge(id: string): Promise<void> {
+  await callRpc('cancel_challenge', { p_id: id });
+}
+
+/** Bekleyen gelen davet (yeniden bağlanınca kaçanı yakala). */
+export async function getPendingChallenge(): Promise<IncomingChallenge | null> {
+  const p = await callRpc<IncomingChallengeRow | null>('get_pending_challenge');
+  return p ? mapIncomingChallenge(p) : null;
+}
+
+/** Meydan okuma realtime aboneliği: gelen INSERT + gelen/giden UPDATE. Kapatıcı döner. */
+export function subscribeChallenges(
+  userId: string,
+  onChange: (c: ChallengeFull, event: 'insert' | 'update') => void,
+): () => void {
+  if (!supabase) return () => {};
+  const client = supabase;
+  const channel = client
+    .channel(`clan-challenges-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'clan_challenges', filter: `to_player=eq.${userId}` },
+      (p) => onChange(mapChallengeFull(p.new as ChallengeRow), 'insert'),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'clan_challenges', filter: `to_player=eq.${userId}` },
+      (p) => onChange(mapChallengeFull(p.new as ChallengeRow), 'update'),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'clan_challenges', filter: `from_player=eq.${userId}` },
+      (p) => onChange(mapChallengeFull(p.new as ChallengeRow), 'update'),
     )
     .subscribe();
   return () => {

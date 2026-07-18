@@ -17,6 +17,7 @@ import {
   type ClanRequest,
 } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
+import { useChallenge } from '../challenge/challenge-provider';
 import { Avatar } from '../parts';
 import { ClanEmblemView } from './emblem';
 import { joinModeLabel, memberRank } from './roles';
@@ -43,6 +44,7 @@ export function ClanHome({
   const iAmManager = iAmLeader || clan.myRole === 'coleader';
   const onlineIds = useOnlineIds();
   const onlineCount = clan.members.filter((m) => onlineIds.has(m.player)).length;
+  const { challenge } = useChallenge();
   // Varsayılan: sunucu sırası (rütbe → katkı → kupa). Değiştir → yalnız kupaya göre.
   const sortedMembers = sortByTrophy
     ? [...clan.members].sort((a, b) => b.rating - a.rating)
@@ -204,6 +206,11 @@ export function ClanHome({
                 <Feather name="award" size={11} color={colors.amber} />
                 <Text style={styles.memberRating}>{m.rating}</Text>
               </View>
+              {online && m.player !== myId ? (
+                <Pressable onPress={() => challenge(m.player, m.username)} hitSlop={6} style={styles.challengeBtn}>
+                  <Feather name="zap" size={15} color={colors.amber} />
+                </Pressable>
+              ) : null}
               {manageable ? <Feather name="more-vertical" size={16} color={colors.dim} /> : null}
             </Pressable>
           );
@@ -318,6 +325,10 @@ const styles = StyleSheet.create({
   memberRank: { fontSize: 11, fontWeight: '800', fontFamily: mono, letterSpacing: 0.5 },
   memberRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   memberRating: { fontSize: 12, fontWeight: '800', color: colors.amber, fontFamily: mono },
+  challengeBtn: {
+    width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: withAlpha(colors.amber, 0.12), borderWidth: 1, borderColor: withAlpha(colors.amber, 0.35),
+  },
   requestRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14,

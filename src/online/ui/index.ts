@@ -3,6 +3,7 @@ export { SearchingScreen } from './searching-screen';
 export { NoOpponentScreen } from './no-opponent-screen';
 export { PrivateChoiceScreen } from './private-choice-screen';
 export { ClanScreen } from './clan/clan-screen';
+export { ChallengeProvider, useChallenge } from './challenge/challenge-provider';
 export { DonanimScreen } from './donanim-screen';
 export { StoreScreen } from './store-screen';
 export { ProtocolSelectScreen } from './protocol-select-screen';
