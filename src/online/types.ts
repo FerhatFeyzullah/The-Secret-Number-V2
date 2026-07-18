@@ -466,3 +466,35 @@ export type ClanMessage = {
   body: string;
   createdAt: string;
 };
+
+// ─── Klan içi meydan okuma (Faz 2b) ────────────────────────────────────────
+
+export type ChallengeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired';
+
+/** Karşıya gelen davet (üstten kayan kart için). */
+export type IncomingChallenge = {
+  id: string;
+  fromPlayer: string;
+  fromUsername: string;
+  mode: PrivateRoomMode;
+  clockMs: number;
+  firstTurn: FirstTurnMode;
+  wordLength: number | null;
+  expiresAt: string;
+};
+
+/** Tam davet satırı (realtime; giden/gelen durum takibi). */
+export type ChallengeFull = {
+  id: string;
+  fromPlayer: string;
+  fromUsername: string;
+  toPlayer: string;
+  mode: PrivateRoomMode;
+  clockMs: number;
+  firstTurn: FirstTurnMode;
+  wordLength: number | null;
+  status: ChallengeStatus;
+  rejectMessage: string | null;
+  matchId: string | null;
+  expiresAt: string;
+};

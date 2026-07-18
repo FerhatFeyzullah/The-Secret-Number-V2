@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/auth';
 import { MatchSessionProvider, OnlinePresenceProvider } from '@/online';
+import { ChallengeProvider } from '@/online/ui';
 import { shouldShowOverlay } from '@/updates/update-machine';
 import { UpdateOverlay } from '@/updates/update-overlay';
 import { useUpdateGate } from '@/updates/use-update-gate';
@@ -47,19 +48,23 @@ export default function RootLayout() {
           {/* Merkezi "aktif maç sahibi": maç-ekran kümesi dışına çıkıldığında tek
               leave_match'i bu provider'ın navigasyon izleyicisi tetikler. */}
           <MatchSessionProvider>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.bgTop },
-              }}>
-              {/* Maç-ortası ekranlarda kaydırarak-geri (iOS edge-swipe / Android geri
-                  jesti) KAPALI: kazara çıkıp maçı düşürmek/hükmen kaybetmek engellenir.
-                  Tek çıkış yolu ekrandaki geri butonu → beforeRemove onayı → leave_match.
-                  Diğer route'lar dosya-tabanlı varsayılanla çalışmaya devam eder. */}
-              <Stack.Screen name="protocol-select" options={{ gestureEnabled: false }} />
-              <Stack.Screen name="match-setup" options={{ gestureEnabled: false }} />
-              <Stack.Screen name="match/[id]" options={{ gestureEnabled: false }} />
-            </Stack>
+            {/* Klan içi meydan okuma app-geneli akışı (mod/ayar/yanıt-bekle + gelen
+                kart); Stack'i sarar ki overlay'ler her ekranın üstüne çizilsin. */}
+            <ChallengeProvider>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.bgTop },
+                }}>
+                {/* Maç-ortası ekranlarda kaydırarak-geri (iOS edge-swipe / Android geri
+                    jesti) KAPALI: kazara çıkıp maçı düşürmek/hükmen kaybetmek engellenir.
+                    Tek çıkış yolu ekrandaki geri butonu → beforeRemove onayı → leave_match.
+                    Diğer route'lar dosya-tabanlı varsayılanla çalışmaya devam eder. */}
+                <Stack.Screen name="protocol-select" options={{ gestureEnabled: false }} />
+                <Stack.Screen name="match-setup" options={{ gestureEnabled: false }} />
+                <Stack.Screen name="match/[id]" options={{ gestureEnabled: false }} />
+              </Stack>
+            </ChallengeProvider>
           </MatchSessionProvider>
         </OnlinePresenceProvider>
         <StatusBar style="light" />
