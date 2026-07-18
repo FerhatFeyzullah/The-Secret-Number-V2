@@ -1,13 +1,7 @@
-import { ComingSoon } from '@/ui/coming-soon';
+import { DonanimScreen } from '@/online/ui';
 
-/** Donanım sekmesi (/gear) — yer tutucu. Emoji destesi ve protokol ağacı bir
- *  sonraki adımda buraya iki alt-tab olarak taşınacak. */
+/** Donanım sekmesi (/gear): Emoji (sinyal destesi) + Protokoller tek ekranda,
+ *  iki alt-tab. Tüm mantık DonanimScreen'de (tek getMyRank, saf paneller). */
 export default function GearRoute() {
-  return (
-    <ComingSoon
-      icon="layers"
-      title="DONANIM"
-      subtitle="Emoji desten ve protokollerin yakında burada olacak."
-    />
-  );
+  return <DonanimScreen />;
 }

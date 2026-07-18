@@ -24,7 +24,7 @@ const STORE_INTRO: InfoSection[] = [
     icon: 'message-circle',
     accent: colors.cyan,
     title: 'Sinyal Nedir?',
-    body: 'Maç sonunda rakibine gönderdiğin tepki (kupa, kahkaha, sinsi…). Tamamen kozmetik — oyunu etkilemez.',
+    body: 'Rakibine gönderdiğin tepki (kupa, kahkaha, sinsi…). Hem maç sırasında hem de maç sonunda kullanılır. Tamamen kozmetik — oyunu etkilemez.',
   },
   {
     icon: 'shopping-bag',
@@ -36,7 +36,7 @@ const STORE_INTRO: InfoSection[] = [
     icon: 'layers',
     accent: colors.violet,
     title: 'Destene Ekle',
-    body: 'Aldığın sinyalleri “Donanım” destene (en çok 6) ekleyip maç sonunda kullanırsın.',
+    body: 'Aldığın sinyalleri “Donanım” destene (en çok 6) ekleyip maç sırasında ve sonunda kullanırsın.',
   },
 ];
 
