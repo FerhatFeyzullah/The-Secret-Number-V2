@@ -3,20 +3,28 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { type Edge, SafeAreaView } from 'react-native-safe-area-context';
 
 import { FloatingDigits } from './floating-digits';
 import { colors } from './theme';
 
+/** Alt sekme ekranları için safe-area kenarları: ALT KENAR HARİÇ. Alt sekme
+ *  çubuğu safe-area'yı zaten yönetir; ekran da bottom inset eklerse içerik ile
+ *  bar arasında boşluk oluşur. */
+export const TAB_EDGES: Edge[] = ['top', 'right', 'left'];
+
 /** Tüm ekranlar için ortak zemin: gradyan + süzülen glifler + safe area.
  *  float='letters' → kelime modunda süzülen TR harfler (varsayılan: rakam;
- *  sayı modu ekranları hiç etkilenmez). */
+ *  sayı modu ekranları hiç etkilenmez). edges verilmezse dört kenar da uygulanır
+ *  (tam-ekran route'lar); alt sekme ekranları TAB_EDGES geçer. */
 export function Screen({
   children,
   float = 'digits',
+  edges,
 }: {
   children: ReactNode;
   float?: 'digits' | 'letters';
+  edges?: Edge[];
 }) {
   return (
     <LinearGradient
@@ -39,7 +47,9 @@ export function Screen({
         pointerEvents="none"
       />
       <FloatingDigits key={float} letters={float === 'letters'} />
-      <SafeAreaView style={styles.content}>{children}</SafeAreaView>
+      <SafeAreaView style={styles.content} edges={edges}>
+        {children}
+      </SafeAreaView>
     </LinearGradient>
   );
 }

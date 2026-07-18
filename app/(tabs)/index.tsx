@@ -31,7 +31,7 @@ import { WELCOME_INTRO } from '@/ui/welcome-intro';
 import { WhatsNewModal, WHATSNEW_ID } from '@/ui/whatsnew-modal';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
-import { Screen } from '@/ui/screen';
+import { Screen, TAB_EDGES } from '@/ui/screen';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
 export default function MenuScreen() {
@@ -184,7 +184,7 @@ export default function MenuScreen() {
   };
 
   return (
-    <Screen>
+    <Screen edges={TAB_EDGES}>
       {/* Üst bar: avatar + ad (tıkla → istatistik modalı), kupa (→ lider
           tablosu), sağda ayarlar. Offline istatistik chip'leri kaldırıldı. */}
       <View style={styles.topRow}>
