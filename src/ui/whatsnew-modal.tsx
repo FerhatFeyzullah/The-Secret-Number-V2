@@ -6,20 +6,25 @@ import { colors, cyanAlpha, mono } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'mac-ici-emote';
+export const WHATSNEW_ID = 'menu-klan-2026-07';
 
 type Note = { emoji: string; title: string; body: string };
 
 const WHATSNEW_NOTES: Note[] = [
   {
-    emoji: '😄',
-    title: 'Maç içinde sinyal gönder',
-    body: 'Artık maç sırasında rakibine sahip olduğun animasyonlu sinyalleri gönderebilirsin — kelime, hızlı ve protokol maçlarının hepsinde. Sinyal butonu tahmin/onay alanının hemen yanında.',
+    emoji: '🧭',
+    title: 'Yepyeni menü',
+    body: 'Ana ekran alt sekmelerle yenilendi: Mağaza, Donanım, Klan ve Turnuva sekmelerine tek dokunuşla ulaş. Ekranlar arasında parmağınla sağa-sola kaydırarak da geçebilirsin.',
   },
   {
-    emoji: '💬',
-    title: '6 hazır mesaj',
-    body: 'Sinyal tepsisinde hazır mesajlar da var: "İyi oyunlar!", "Kafanı kullan", "Hadi acele et" ve daha fazlası. Gönderdiğin sinyal ve mesajlar rakibin ekranında kısa süre belirir.',
+    emoji: '🛡️',
+    title: 'Klan sistemi geldi',
+    body: 'Kendi klanını kur ya da bir klana katıl. Rütbeler, amblem oluşturucu, klan sohbeti ve klan lider tablosu seni bekliyor.',
+  },
+  {
+    emoji: '⚔️',
+    title: 'Klan içi meydan okuma',
+    body: 'Çevrimiçi bir klan arkadaşına dostluk maçı daveti gönder: Hızlı, Kelime veya Protokol. Karşındaki onaylayınca eşleşme anında başlar.',
   },
 ];
 
