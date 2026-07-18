@@ -379,3 +379,122 @@ export type RecentMatch = {
   p2RatingDelta: number | null;
   rounds: RecentMatchRound[];
 };
+
+// ─── Klan sistemi (Faz 1) ──────────────────────────────────────────────────
+
+/** Saklanan klan rolü. UI etiketi: leader→Operatör, coleader→Şifreci,
+ *  member→Ajan (kıdemliyse) / Çaylak. */
+export type ClanRole = 'leader' | 'coleader' | 'member';
+
+/** Katılım modu. 'invite' veri modelinde var ama Faz 1'de kurulamaz. */
+export type ClanJoinMode = 'open' | 'approval' | 'invite';
+
+/** Amblem: hazır parçalardan (şekil + ikon + renk). Sunucuda jsonb saklanır. */
+export type ClanEmblem = {
+  shape: string;
+  icon: string;
+  color: string;
+};
+
+/** Klan üyesi (get_my_clan.members). */
+export type ClanMember = {
+  player: string;
+  username: string;
+  role: ClanRole;
+  /** Kupa (rating). */
+  rating: number;
+  /** Katıldıktan sonra kazanılan klan galibiyeti (Ajan türetimi). */
+  contribution: number;
+  joinedAt: string;
+};
+
+/** Bekleyen katılım isteği (yönetici görünümü). */
+export type ClanRequest = {
+  player: string;
+  username: string;
+  rating: number;
+  createdAt: string;
+};
+
+/** Tam klan görünümü (get_my_clan). */
+export type Clan = {
+  id: string;
+  name: string;
+  description: string;
+  emblem: ClanEmblem | null;
+  joinMode: ClanJoinMode;
+  minTrophies: number;
+  memberCount: number;
+  /** Lider (owner) oyuncu id'si. */
+  owner: string;
+  /** Oturum açan oyuncunun bu klandaki rolü. */
+  myRole: ClanRole;
+  /** Klan skoru = üyelerin Kupa toplamı (Faz 2a). */
+  score: number;
+  /** Global klan sıralaması (1 = en yüksek skor) (Faz 2a). */
+  rank: number;
+  members: ClanMember[];
+  /** Bekleyen istekler — yalnız yönetici (leader/coleader) için dolu; değilse []. */
+  requests: ClanRequest[];
+};
+
+/** Klan lider tablosu satırı (get_clan_leaderboard). */
+export type ClanLeaderboardEntry = {
+  rank: number;
+  id: string;
+  name: string;
+  emblem: ClanEmblem | null;
+  memberCount: number;
+  score: number;
+};
+
+/** Dizin/arama kartı (list_clans, get_my_requests). */
+export type ClanCard = {
+  id: string;
+  name: string;
+  emblem: ClanEmblem | null;
+  joinMode: ClanJoinMode;
+  minTrophies: number;
+  memberCount: number;
+};
+
+/** Klan sohbet mesajı (Faz 3). username istemcide üye listesinden çözülür. */
+export type ClanMessage = {
+  id: string;
+  clanId: string;
+  player: string;
+  body: string;
+  createdAt: string;
+};
+
+// ─── Klan içi meydan okuma (Faz 2b) ────────────────────────────────────────
+
+export type ChallengeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired';
+
+/** Karşıya gelen davet (üstten kayan kart için). */
+export type IncomingChallenge = {
+  id: string;
+  fromPlayer: string;
+  fromUsername: string;
+  mode: PrivateRoomMode;
+  clockMs: number;
+  firstTurn: FirstTurnMode;
+  wordLength: number | null;
+  expiresAt: string;
+};
+
+/** Tam davet satırı (realtime; giden/gelen durum takibi). */
+export type ChallengeFull = {
+  id: string;
+  fromPlayer: string;
+  fromUsername: string;
+  toPlayer: string;
+  mode: PrivateRoomMode;
+  clockMs: number;
+  firstTurn: FirstTurnMode;
+  wordLength: number | null;
+  status: ChallengeStatus;
+  rejectMessage: string | null;
+  matchId: string | null;
+  expiresAt: string;
+};

@@ -30,9 +30,9 @@ function modeKey(m: RecentMatch): keyof typeof MODE_META {
 }
 
 function reasonLabel(result: RecentMatch['result']): string {
-  if (result === 'win') return 'doğru tahmin';
-  if (result === 'timeout') return 'süre doldu';
-  if (result === 'forfeit') return 'terk';
+  if (result === 'win') return 'DOĞRU TAHMİN';
+  if (result === 'timeout') return 'SÜRE DOLDU';
+  if (result === 'forfeit') return 'MAÇTAN AYRILDI';
   return '';
 }
 

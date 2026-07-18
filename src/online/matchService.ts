@@ -11,7 +11,18 @@ import {
   type ProtocolUseRow,
 } from './mapping';
 import type {
+  ChallengeFull,
+  Clan,
+  ClanCard,
+  ClanEmblem,
+  ClanJoinMode,
+  ClanLeaderboardEntry,
+  ClanMember,
+  ClanMessage,
+  ClanRequest,
+  ClanRole,
   FirstTurnMode,
+  IncomingChallenge,
   GuessFeedback,
   GuessOutcome,
   LeaderboardEntry,
@@ -101,6 +112,34 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_digits_left: 'Elenecek rakam kalmadı.',
   invalid_payload: 'Geçersiz seçim: rakam 1-9, pozisyon 1-3 olmalı.',
   silenced: 'Susturuldun — bu sıra protokol kullanamazsın.',
+  // Klan sistemi (Faz 1)
+  already_in_clan: 'Zaten bir klandasın.',
+  not_in_clan: 'Bir klanda değilsin.',
+  clan_not_found: 'Klan bulunamadı.',
+  clan_full: 'Klan dolu (30 üye).',
+  invalid_clan_name: 'Klan adı 3–20 karakter olmalı.',
+  invalid_clan_description: 'Açıklama çok uzun (en çok 120 karakter).',
+  invalid_join_mode: 'Geçersiz katılım modu.',
+  invalid_role: 'Geçersiz rol işlemi.',
+  trophies_too_low: 'Kupan bu klan için yetersiz.',
+  leader_must_transfer: 'Ayrılmadan önce liderliği devret ya da klanı dağıt.',
+  not_authorized: 'Bu işlem için yetkin yok.',
+  member_not_found: 'Üye bulunamadı.',
+  cannot_kick_self: 'Kendini atamazsın.',
+  cannot_kick_leader: 'Lideri atamazsın.',
+  request_not_found: 'İstek bulunamadı.',
+  // Klan sohbeti (Faz 3)
+  empty_message: 'Boş mesaj gönderilemez.',
+  message_too_long: 'Mesaj çok uzun (en çok 300 karakter).',
+  too_many_messages: 'Çok hızlı yazıyorsun, biraz bekle.',
+  message_not_found: 'Mesaj bulunamadı.',
+  // Klan içi meydan okuma (Faz 2b)
+  cannot_challenge_self: 'Kendine meydan okuyamazsın.',
+  opponent_busy: 'Rakip şu an meşgul.',
+  already_in_match: 'Zaten bir maçtasın.',
+  challenge_not_found: 'Davet bulunamadı.',
+  challenge_not_pending: 'Davet artık geçerli değil.',
+  challenge_expired: 'Davetin süresi doldu.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -833,4 +872,440 @@ export async function getRecentMatches(): Promise<RecentMatch[]> {
       winner: rd.winner === 1 ? (1 as const) : (2 as const),
     })),
   }));
+}
+
+// ─── Klan sistemi (Faz 1) ──────────────────────────────────────────────────
+
+type ClanEmblemRow = { shape?: unknown; icon?: unknown; color?: unknown };
+type ClanMemberRow = {
+  player: string;
+  username: string | null;
+  role: string;
+  rating: number;
+  contribution: number;
+  joined_at: string;
+};
+type ClanRequestRow = {
+  player: string;
+  username: string | null;
+  rating: number;
+  created_at: string;
+};
+type ClanRow = {
+  id: string;
+  name: string;
+  description: string;
+  emblem: ClanEmblemRow | null;
+  join_mode: string;
+  min_trophies: number;
+  member_count: number;
+  owner: string;
+  my_role: string;
+  score?: number;
+  rank?: number;
+  members: ClanMemberRow[];
+  requests: ClanRequestRow[];
+};
+type ClanCardRow = {
+  id: string;
+  name: string;
+  emblem: ClanEmblemRow | null;
+  join_mode: string;
+  min_trophies: number;
+  member_count: number;
+};
+
+function mapEmblem(e: ClanEmblemRow | null | undefined): ClanEmblem | null {
+  if (e && typeof e.shape === 'string' && typeof e.icon === 'string' && typeof e.color === 'string') {
+    return { shape: e.shape, icon: e.icon, color: e.color };
+  }
+  return null;
+}
+
+function asClanRole(r: string): ClanRole {
+  return r === 'leader' || r === 'coleader' ? r : 'member';
+}
+
+function asJoinMode(m: string): ClanJoinMode {
+  return m === 'approval' || m === 'invite' ? m : 'open';
+}
+
+function mapClanMember(m: ClanMemberRow): ClanMember {
+  return {
+    player: m.player,
+    username: m.username ?? '',
+    role: asClanRole(m.role),
+    rating: Number(m.rating ?? 0),
+    contribution: Number(m.contribution ?? 0),
+    joinedAt: m.joined_at,
+  };
+}
+
+function mapClanRequest(r: ClanRequestRow): ClanRequest {
+  return {
+    player: r.player,
+    username: r.username ?? '',
+    rating: Number(r.rating ?? 0),
+    createdAt: r.created_at,
+  };
+}
+
+function mapClan(c: ClanRow): Clan {
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description ?? '',
+    emblem: mapEmblem(c.emblem),
+    joinMode: asJoinMode(c.join_mode),
+    minTrophies: Number(c.min_trophies ?? 0),
+    memberCount: Number(c.member_count ?? 0),
+    owner: c.owner,
+    myRole: asClanRole(c.my_role),
+    score: Number(c.score ?? 0),
+    rank: Number(c.rank ?? 0),
+    members: (c.members ?? []).map(mapClanMember),
+    requests: (c.requests ?? []).map(mapClanRequest),
+  };
+}
+
+function mapClanCard(c: ClanCardRow): ClanCard {
+  return {
+    id: c.id,
+    name: c.name,
+    emblem: mapEmblem(c.emblem),
+    joinMode: asJoinMode(c.join_mode),
+    minTrophies: Number(c.min_trophies ?? 0),
+    memberCount: Number(c.member_count ?? 0),
+  };
+}
+
+/** Oturum açan oyuncunun klanı (yoksa null). */
+export async function getMyClan(): Promise<Clan | null> {
+  const p = await callRpc<ClanRow | null>('get_my_clan');
+  return p ? mapClan(p) : null;
+}
+
+/** Klan dizini + arama (ad). Boş sorgu → en kalabalık klanlar. */
+export async function listClans(query: string): Promise<ClanCard[]> {
+  const p = await callRpc<ClanCardRow[] | null>('list_clans', { p_query: query });
+  return (p ?? []).map(mapClanCard);
+}
+
+/** Oyuncunun bekleyen katılım istekleri (klanda-değil ekranı). */
+export async function getMyClanRequests(): Promise<ClanCard[]> {
+  const p = await callRpc<ClanCardRow[] | null>('get_my_requests');
+  return (p ?? []).map(mapClanCard);
+}
+
+type ClanLbRow = {
+  rank: number;
+  id: string;
+  name: string;
+  emblem: ClanEmblemRow | null;
+  member_count: number;
+  score: number;
+};
+
+/** Klan lider tablosu (skor = üye Kupa toplamı; global ilk 50). */
+export async function getClanLeaderboard(): Promise<ClanLeaderboardEntry[]> {
+  const p = await callRpc<ClanLbRow[] | null>('get_clan_leaderboard');
+  return (p ?? []).map((c) => ({
+    rank: Number(c.rank),
+    id: c.id,
+    name: c.name,
+    emblem: mapEmblem(c.emblem),
+    memberCount: Number(c.member_count ?? 0),
+    score: Number(c.score ?? 0),
+  }));
+}
+
+/** Verilen klanların üye id'leri (clan_id → player[]). Çevrimiçi sayımı için
+ *  (presence set'iyle kesişim). clan_members RLS'i authenticated okumaya açık. */
+export async function fetchClanMemberIds(clanIds: string[]): Promise<Record<string, string[]>> {
+  if (clanIds.length === 0) return {};
+  const client = requireClient();
+  const { data, error } = await withTimeout(
+    client.from('clan_members').select('clan_id,player').in('clan_id', clanIds),
+  );
+  if (error) throw toOnlineError(error.message);
+  const out: Record<string, string[]> = {};
+  for (const r of (data ?? []) as { clan_id: string; player: string }[]) {
+    (out[r.clan_id] ??= []).push(r.player);
+  }
+  return out;
+}
+
+/** Klan kur (Sv.>=3 + 1000 Veri). Kuran = Operatör. */
+export async function createClan(input: {
+  name: string;
+  description: string;
+  emblem: ClanEmblem;
+  joinMode: ClanJoinMode;
+  minTrophies: number;
+}): Promise<Clan> {
+  const p = await callRpc<ClanRow>('create_clan', {
+    p_name: input.name,
+    p_description: input.description,
+    p_emblem: input.emblem,
+    p_join_mode: input.joinMode,
+    p_min_trophies: input.minTrophies,
+  });
+  return mapClan(p);
+}
+
+/** Klana katıl / istek gönder (moda göre). */
+export async function joinClan(
+  clanId: string,
+): Promise<{ status: 'joined' | 'requested'; clan: Clan | null }> {
+  const p = await callRpc<{ status?: string; clan?: ClanRow | null }>('join_clan', {
+    p_clan_id: clanId,
+  });
+  return {
+    status: p.status === 'requested' ? 'requested' : 'joined',
+    clan: p.clan ? mapClan(p.clan) : null,
+  };
+}
+
+/** Bekleyen isteği iptal et. */
+export async function cancelClanRequest(clanId: string): Promise<void> {
+  await callRpc('cancel_request', { p_clan_id: clanId });
+}
+
+/** Klandan ayrıl (lider + başka üye varsa önce devir gerekir). */
+export async function leaveClan(): Promise<void> {
+  await callRpc('leave_clan');
+}
+
+/** Üye at (lider/yönetici). */
+export async function kickClanMember(player: string): Promise<void> {
+  await callRpc('kick_member', { p_player: player });
+}
+
+/** Rol ata/al: Yönetici (coleader) ↔ Üye (member) — yalnız lider. */
+export async function setClanMemberRole(
+  player: string,
+  role: 'coleader' | 'member',
+): Promise<void> {
+  await callRpc('set_member_role', { p_player: player, p_role: role });
+}
+
+/** Liderliği devret. */
+export async function transferClanLeadership(player: string): Promise<void> {
+  await callRpc('transfer_leadership', { p_player: player });
+}
+
+/** Klanı dağıt (yalnız lider). */
+export async function disbandClan(): Promise<void> {
+  await callRpc('disband_clan');
+}
+
+/** İsteği onayla (yönetici) → güncel klan. */
+export async function acceptClanRequest(player: string): Promise<Clan | null> {
+  const p = await callRpc<{ clan?: ClanRow | null }>('accept_request', { p_player: player });
+  return p.clan ? mapClan(p.clan) : null;
+}
+
+/** İsteği reddet (yönetici). */
+export async function rejectClanRequest(player: string): Promise<void> {
+  await callRpc('reject_request', { p_player: player });
+}
+
+// ─── Klan sohbeti (Faz 3) ──────────────────────────────────────────────────
+
+type ClanMessageRow = {
+  id: string;
+  clan_id: string;
+  player: string;
+  body: string;
+  created_at: string;
+};
+
+function mapClanMessage(m: ClanMessageRow): ClanMessage {
+  return { id: m.id, clanId: m.clan_id, player: m.player, body: m.body, createdAt: m.created_at };
+}
+
+/** Klanın son mesajları (eskiden yeniye sıralı). RLS: yalnız üye okur. */
+export async function fetchClanMessages(clanId: string, limit = 50): Promise<ClanMessage[]> {
+  const client = requireClient();
+  const { data, error } = await withTimeout(
+    client
+      .from('clan_messages')
+      .select('id,clan_id,player,body,created_at')
+      .eq('clan_id', clanId)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  );
+  if (error) throw toOnlineError(error.message);
+  const rows = (data ?? []) as ClanMessageRow[];
+  return rows.map(mapClanMessage).reverse();
+}
+
+/** Mesaj gönder (uzunluk + spam sunucuda uygulanır). */
+export async function sendClanMessage(body: string): Promise<ClanMessage> {
+  const m = await callRpc<ClanMessageRow>('send_clan_message', { p_body: body });
+  return mapClanMessage(m);
+}
+
+/** Mesaj sil (yazar ya da yönetici). */
+export async function deleteClanMessage(id: string): Promise<void> {
+  await callRpc('delete_clan_message', { p_id: id });
+}
+
+/** Klan sohbetine realtime abone ol; INSERT/DELETE olaylarını iletir. Kapatıcı döner. */
+export function subscribeClanMessages(
+  clanId: string,
+  handlers: { onInsert: (m: ClanMessage) => void; onDelete: (id: string) => void },
+): () => void {
+  if (!supabase) return () => {};
+  const client = supabase;
+  const channel = client
+    .channel(`clan-chat-${clanId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'clan_messages', filter: `clan_id=eq.${clanId}` },
+      (payload) => {
+        const r = payload.new as ClanMessageRow;
+        if (r?.id) handlers.onInsert(mapClanMessage(r));
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'clan_messages', filter: `clan_id=eq.${clanId}` },
+      (payload) => {
+        const r = payload.old as { id?: string };
+        if (r?.id) handlers.onDelete(r.id);
+      },
+    )
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
+// ─── Klan içi meydan okuma (Faz 2b) ────────────────────────────────────────
+
+type IncomingChallengeRow = {
+  id: string;
+  from_player: string;
+  from_username: string;
+  mode: string;
+  clock_ms: number;
+  first_turn: string;
+  word_length: number | null;
+  expires_at: string;
+};
+type ChallengeRow = IncomingChallengeRow & {
+  to_player: string;
+  status: string;
+  reject_message: string | null;
+  match_id: string | null;
+};
+
+function asChallengeMode(m: string): PrivateRoomMode {
+  return m === 'protocol' || m === 'word' ? m : 'quick';
+}
+function asChallengeFirstTurn(f: string): FirstTurnMode {
+  return f === 'creator' ? 'creator' : 'random';
+}
+
+function mapIncomingChallenge(r: IncomingChallengeRow): IncomingChallenge {
+  return {
+    id: r.id,
+    fromPlayer: r.from_player,
+    fromUsername: r.from_username ?? '',
+    mode: asChallengeMode(r.mode),
+    clockMs: Number(r.clock_ms ?? 60000),
+    firstTurn: asChallengeFirstTurn(r.first_turn),
+    wordLength: r.word_length == null ? null : Number(r.word_length),
+    expiresAt: r.expires_at,
+  };
+}
+
+function mapChallengeFull(r: ChallengeRow): ChallengeFull {
+  return {
+    id: r.id,
+    fromPlayer: r.from_player,
+    fromUsername: r.from_username ?? '',
+    toPlayer: r.to_player,
+    mode: asChallengeMode(r.mode),
+    clockMs: Number(r.clock_ms ?? 60000),
+    firstTurn: asChallengeFirstTurn(r.first_turn),
+    wordLength: r.word_length == null ? null : Number(r.word_length),
+    status: r.status as ChallengeFull['status'],
+    rejectMessage: r.reject_message ?? null,
+    matchId: r.match_id ?? null,
+    expiresAt: r.expires_at,
+  };
+}
+
+/** Klan üyesine dostluk maçı daveti gönder (30 sn geçerli). */
+export async function createChallenge(
+  toPlayer: string,
+  mode: PrivateRoomMode,
+  clockMs: number,
+  firstTurn: FirstTurnMode,
+  wordLength: number | null,
+): Promise<{ id: string; expiresAt: string }> {
+  const p = await callRpc<{ id: string; expires_at: string }>('create_challenge', {
+    p_to: toPlayer,
+    p_mode: mode,
+    p_clock_ms: clockMs,
+    p_first_turn: firstTurn,
+    p_word_length: wordLength,
+  });
+  return { id: p.id, expiresAt: p.expires_at };
+}
+
+/** Daveti onayla → dostluk maçı bileti (iki oyuncu hazır). */
+export async function acceptChallenge(id: string): Promise<MatchTicket> {
+  const p = await callRpc<{ match_id: string; role: PlayerRole; status: MatchStatus }>('accept_challenge', {
+    p_id: id,
+  });
+  return { matchId: p.match_id, role: p.role, status: p.status };
+}
+
+/** Daveti reddet (hazır mesajla). */
+export async function rejectChallenge(id: string, message: string): Promise<void> {
+  await callRpc('reject_challenge', { p_id: id, p_message: message });
+}
+
+/** Gönderdiğin daveti iptal et. */
+export async function cancelChallenge(id: string): Promise<void> {
+  await callRpc('cancel_challenge', { p_id: id });
+}
+
+/** Bekleyen gelen davet (yeniden bağlanınca kaçanı yakala). */
+export async function getPendingChallenge(): Promise<IncomingChallenge | null> {
+  const p = await callRpc<IncomingChallengeRow | null>('get_pending_challenge');
+  return p ? mapIncomingChallenge(p) : null;
+}
+
+/** Meydan okuma realtime aboneliği: gelen INSERT + gelen/giden UPDATE. Kapatıcı döner. */
+export function subscribeChallenges(
+  userId: string,
+  onChange: (c: ChallengeFull, event: 'insert' | 'update') => void,
+): () => void {
+  if (!supabase) return () => {};
+  const client = supabase;
+  const channel = client
+    .channel(`clan-challenges-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'clan_challenges', filter: `to_player=eq.${userId}` },
+      (p) => onChange(mapChallengeFull(p.new as ChallengeRow), 'insert'),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'clan_challenges', filter: `to_player=eq.${userId}` },
+      (p) => onChange(mapChallengeFull(p.new as ChallengeRow), 'update'),
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'clan_challenges', filter: `from_player=eq.${userId}` },
+      (p) => onChange(mapChallengeFull(p.new as ChallengeRow), 'update'),
+    )
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
 }

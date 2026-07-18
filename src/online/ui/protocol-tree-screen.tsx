@@ -1,6 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -12,43 +11,11 @@ import {
   View,
 } from 'react-native';
 
-import { useAuth } from '@/auth';
-import { getMyRank, OnlineError, unlockProtocol, type MyRank } from '@/online';
+import { OnlineError, unlockProtocol } from '@/online';
 import { PILLAR_LABELS, PROTOCOLS, type Pillar, type Protocol } from '@/protocols/catalog';
-import { getSeen, markSeen } from '@/storage';
-import { InfoModal, type InfoSection } from '@/ui/info-modal';
-import { Screen } from '@/ui/screen';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { type FeatherName } from './parts';
 import { PILLAR_COLOR, protocolIcon } from './protocol-visuals';
-
-/** Protokoller sayfası tanıtımı — protokol nedir, nasıl açılır, maçta kullanım. */
-const PROTOCOLS_PAGE_SECTIONS: InfoSection[] = [
-  {
-    icon: 'cpu',
-    accent: colors.cyan,
-    title: 'Protokol Nedir?',
-    body: 'Protokol Maçı’nda kullanabileceğin özel güçler. 4 kategori: Bilgi, Zaman, Sabotaj, Savunma.',
-  },
-  {
-    icon: 'unlock',
-    accent: colors.teal,
-    title: 'Nasıl Açılır?',
-    body: 'Her protokolün bir Seviye kapısı vardır. Seviyene ulaşınca Veri harcayarak açarsın (bazıları başta açıktır).',
-  },
-  {
-    icon: 'layers',
-    accent: colors.violet,
-    title: 'Maçta Nasıl Kullanılır?',
-    body: 'Açtığın protokoller Protokol Maçı başında “Kader Eli” ile karşına rastgele gelir; seçtiklerini düelloda alt şeritten kullanırsın.',
-  },
-  {
-    icon: 'info',
-    accent: colors.amber,
-    title: 'Detay',
-    body: 'Bir karta dokun → o protokolün tam açıklamasını, seviyesini ve Veri maliyetini gör.',
-  },
-];
 
 const PILLAR_ORDER: Pillar[] = ['info', 'time', 'disrupt', 'defense'];
 
@@ -264,57 +231,23 @@ function DetailDialog({
   );
 }
 
-/* ── Ana ekran ───────────────────────────────────────────── */
-export function ProtocolTreeScreen() {
-  const router = useRouter();
-  const { session } = useAuth();
-  const [data, setData] = useState<MyRank | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+/* ── Protokoller paneli (Donanım · Protokoller sekmesi) ──────
+   Saf/kontrollü: owned/level/veri üst ekrandan gelir; satın alma onBought ile
+   üst ekranın verisini günceller. Kendi Screen/header/durum yönetimi YOK. */
+export function ProtocolTreePanel({
+  owned,
+  level,
+  veri,
+  onBought,
+}: {
+  owned: string[];
+  level: number;
+  veri: number;
+  onBought: (veri: number, owned: string[]) => void;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  // İlk-kez tanıtım modalı (flicker-safe): introVisible BAŞTA false → bayrak
-  // AsyncStorage'dan gelene kadar modal asla açılmaz. Yükleme bitince ve
-  // görülmediyse açılır. "?" başlık butonu ise her zaman açar.
-  const [introVisible, setIntroVisible] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const seen = await getSeen('protocolsPage');
-      if (alive && !seen) setIntroVisible(true);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-  const openIntro = useCallback(() => setIntroVisible(true), []);
-  const closeIntro = useCallback(() => {
-    setIntroVisible(false);
-    void markSeen('protocolsPage');
-  }, []);
-
-  const load = useCallback(async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      setData(await getMyRank());
-    } catch (e) {
-      setError(e instanceof OnlineError ? e.message : 'Protokoller yüklenemedi.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (session) void load();
-    else setLoading(false);
-  }, [session, load]);
-
-  const owned = useMemo(() => data?.owned ?? [], [data]);
-  const level = data?.level ?? 1;
-  const veri = data?.veri ?? 0;
 
   const selected = selectedId ? PROTOCOLS.find((p) => p.id === selectedId) ?? null : null;
   const selectedState = selected ? deriveState(selected, level, owned) : null;
@@ -330,68 +263,20 @@ export function ProtocolTreeScreen() {
     setActionError(null);
     try {
       const res = await unlockProtocol(selected.id);
-      setData((d) => (d ? { ...d, veri: res.veri, owned: res.owned } : d));
+      onBought(res.veri, res.owned);
     } catch (e) {
       setActionError(e instanceof OnlineError ? e.message : 'İşlem başarısız.');
     } finally {
       setBusy(false);
     }
-  }, [selected]);
+  }, [selected, onBought]);
 
-  const header = (
-    <View style={styles.header}>
-      <Pressable onPress={() => router.back()} hitSlop={10} style={styles.back}>
-        <Feather name="arrow-left" size={18} color={colors.text} />
-      </Pressable>
-      <Text style={styles.headerTitle}>PROTOKOLLER</Text>
-      <View style={styles.headerRight}>
-        <Pressable onPress={openIntro} hitSlop={10} style={styles.help}>
-          <Feather name="help-circle" size={17} color={colors.cyan} />
-        </Pressable>
-        {session && data ? (
-          <View style={styles.veriBalance}>
-            <Feather name="hexagon" size={12} color={colors.teal} />
-            <Text style={styles.veriBalanceText}>{fmtVeri(veri)}</Text>
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-
-  let body;
-  if (!session) {
-    body = (
-      <View style={styles.centered}>
-        <Feather name="lock" size={26} color={colors.dim} />
-        <Text style={styles.centeredText}>
-          Protokoller hesabına bağlıdır.{'\n'}Görmek için giriş yapmalısın.
-        </Text>
-        <Pressable
-          onPress={() => router.push({ pathname: '/auth', params: { next: '/protocols' } })}
-          style={styles.signInBtn}>
-          <Text style={styles.signInText}>Giriş Yap</Text>
-        </Pressable>
-      </View>
-    );
-  } else if (loading) {
-    body = (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.cyan} />
-      </View>
-    );
-  } else if (error) {
-    body = (
-      <View style={styles.centered}>
-        <Feather name="alert-circle" size={24} color={colors.danger} />
-        <Text style={styles.errorText} selectable>{error}</Text>
-        <Pressable onPress={() => void load()} style={styles.signInBtn}>
-          <Text style={styles.signInText}>Tekrar Dene</Text>
-        </Pressable>
-      </View>
-    );
-  } else {
-    body = (
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+  return (
+    <>
+      <ScrollView
+        style={styles.flex}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}>
         {/* Seviye + sahip olunan protokol özeti */}
         <View style={styles.summaryRow}>
           <View style={styles.levelChip}>
@@ -401,7 +286,7 @@ export function ProtocolTreeScreen() {
           <View style={styles.ownedChip}>
             <Feather name="package" size={12} color={colors.cyan} />
             <Text style={styles.ownedChipText}>
-              <Text style={{ color: colors.cyan }}>{owned.length}</Text> protokol sahibi
+              <Text style={{ color: colors.cyan }}>{owned.length}</Text> Protokol Sahibi
             </Text>
           </View>
         </View>
@@ -442,15 +327,8 @@ export function ProtocolTreeScreen() {
           })}
         </View>
 
-        <Text style={styles.footerHint}>Her protokole dokun → detay</Text>
       </ScrollView>
-    );
-  }
 
-  return (
-    <Screen>
-      {header}
-      {body}
       {selected && selectedState ? (
         <DetailDialog
           proto={selected}
@@ -463,110 +341,13 @@ export function ProtocolTreeScreen() {
           onBuy={buy}
         />
       ) : null}
-      <InfoModal
-        visible={introVisible}
-        onClose={closeIntro}
-        title="PROTOKOLLER"
-        icon="cpu"
-        accent={colors.cyan}
-        sections={PROTOCOLS_PAGE_SECTIONS}
-      />
-    </Screen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-  },
-  back: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  help: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.cyan, 0.4),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
+  flex: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 3,
-    color: colors.ice,
-    fontFamily: mono,
-    textShadowColor: withAlpha(colors.cyan, 0.5),
-    textShadowRadius: 10,
-  },
-  veriBalance: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 11,
-    borderRadius: 20,
-    backgroundColor: withAlpha(colors.teal, 0.1),
-    borderWidth: 1,
-    borderColor: withAlpha(colors.teal, 0.4),
-  },
-  veriBalanceText: {
-    color: colors.teal,
-    fontSize: 11,
-    fontWeight: '800',
-    fontFamily: mono,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 14,
-    paddingHorizontal: 24,
-  },
-  centeredText: {
-    color: colors.dim,
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  signInBtn: {
-    marginTop: 4,
-    paddingVertical: 11,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.cyan, 0.4),
-    backgroundColor: withAlpha(colors.cyan, 0.12),
-  },
-  signInText: {
-    color: colors.cyan,
-    fontWeight: '700',
-    fontFamily: mono,
-    letterSpacing: 1,
   },
   scroll: {
     paddingBottom: 32,

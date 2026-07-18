@@ -31,10 +31,10 @@ import { WELCOME_INTRO } from '@/ui/welcome-intro';
 import { WhatsNewModal, WHATSNEW_ID } from '@/ui/whatsnew-modal';
 import { ModeSegment } from '@/ui/mode-segment';
 import { PlayButton } from '@/ui/play-button';
-import { Screen } from '@/ui/screen';
+import { Screen, TAB_EDGES } from '@/ui/screen';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 
-export default function MenuScreen() {
+export function HomeMenu() {
   const router = useRouter();
   const { session } = useAuth();
   // Görünen ad TEK kaynaktan (ayarlarla aynı hook):
@@ -184,7 +184,7 @@ export default function MenuScreen() {
   };
 
   return (
-    <Screen>
+    <Screen edges={TAB_EDGES}>
       {/* Üst bar: avatar + ad (tıkla → istatistik modalı), kupa (→ lider
           tablosu), sağda ayarlar. Offline istatistik chip'leri kaldırıldı. */}
       <View style={styles.topRow}>
@@ -256,51 +256,26 @@ export default function MenuScreen() {
             ) : null}
           </View>
         </Pressable>
-        {/* Ayarlar tek başına sağ üstte (değişmedi). */}
-        <Pressable
-          onPress={() => router.push('/settings')}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Ayarlar"
-          style={[styles.headerBtn, styles.settingsBtn]}>
-          <Ionicons name="settings-outline" size={22} color={colors.cyan} />
-        </Pressable>
-      </View>
-
-      {/* Profil isminin altında dikey ikon sütunu: Mağaza → Protokoller → Emoji destesi */}
-      <View style={styles.sideIcons}>
-        <Pressable
-          onPress={() => router.push('/store')}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Mağaza"
-          style={styles.headerBtn}>
-          <Feather name="shopping-bag" size={20} color={colors.cyan} />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/protocols')}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Protokoller"
-          style={styles.headerBtn}>
-          <Feather name="cpu" size={20} color={colors.cyan} />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/signal-deck')}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Emoji destesi"
-          style={styles.headerBtn}>
-          <Feather name="smile" size={20} color={colors.cyan} />
-        </Pressable>
-        <Pressable
-          onPress={() => setRecentOpen(true)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Son Maçlar"
-          style={styles.headerBtn}>
-          <Feather name="activity" size={20} color={colors.cyan} />
-        </Pressable>
+        {/* Sağ üst: Son Maçlar + Ayarlar. Mağaza/Protokol/Emoji ikonları alt
+            sekme çubuğuna taşındığı için buradan kaldırıldı. */}
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => setRecentOpen(true)}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Son Maçlar"
+            style={styles.headerBtn}>
+            <Feather name="activity" size={20} color={colors.cyan} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/settings')}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Ayarlar"
+            style={styles.headerBtn}>
+            <Ionicons name="settings-outline" size={22} color={colors.cyan} />
+          </Pressable>
+        </View>
       </View>
 
       {/* Orta blok: istatistik kartları kalkınca logo + menü dikeyde ortalanır */}
@@ -469,16 +444,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: mono,
   },
-  // Ayarlar tek başına sağ üstte (profil satırının sağına yaslı).
-  settingsBtn: {
+  // Sağ üst aksiyonlar (Son Maçlar + Ayarlar), profil satırının sağına yaslı.
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     marginLeft: 'auto',
-  },
-  // Profil altında dikey ikon sütunu (sola yaslı; çakışma yok).
-  sideIcons: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 4,
   },
   headerBtn: {
     width: 40,
