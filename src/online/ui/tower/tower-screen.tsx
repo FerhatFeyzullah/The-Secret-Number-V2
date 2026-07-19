@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth';
@@ -71,14 +71,6 @@ export function TowerScreen() {
   const [result, setResult] = useState<TowerGuessOutcome | null>(null);
   const [showIntro, setShowIntro] = useState(false);
 
-  // İlk kez giren için tanıtım modalı (bir kez).
-  useEffect(() => {
-    if (!session) return;
-    void getSeen('towerIntro').then((seen) => {
-      if (!seen) setShowIntro(true);
-    });
-  }, [session]);
-
   const load = useCallback(
     async (spinner: boolean) => {
       if (!session) {
@@ -118,6 +110,12 @@ export function TowerScreen() {
 
   const enter = useCallback(async () => {
     if (busy) return;
+    // İlk giriş denemesinde önce tanıtım modalı (henüz Veri ödenmez). Okuyup
+    // kapatınca "Giriş"e tekrar basınca gerçek giriş olur → saat boşa akmaz.
+    if (!(await getSeen('towerIntro'))) {
+      setShowIntro(true);
+      return;
+    }
     if (!(await isOnline())) {
       setError('Turnuva için internet bağlantısı gerekli.');
       return;

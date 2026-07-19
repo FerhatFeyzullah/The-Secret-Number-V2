@@ -6,25 +6,15 @@ import { colors, cyanAlpha, mono } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'menu-klan-2026-07';
+export const WHATSNEW_ID = 'turnuva-kule-2026-07';
 
 type Note = { emoji: string; title: string; body: string };
 
 const WHATSNEW_NOTES: Note[] = [
   {
-    emoji: '🧭',
-    title: 'Yepyeni menü',
-    body: 'Ana ekran alt sekmelerle yenilendi: Mağaza, Donanım, Klan ve Turnuva sekmelerine tek dokunuşla ulaş. Ekranlar arasında parmağınla sağa-sola kaydırarak da geçebilirsin.',
-  },
-  {
-    emoji: '🛡️',
-    title: 'Klan sistemi geldi',
-    body: 'Kendi klanını kur ya da bir klana katıl. Rütbeler, amblem oluşturucu, klan sohbeti ve klan lider tablosu seni bekliyor.',
-  },
-  {
-    emoji: '⚔️',
-    title: 'Klan içi meydan okuma',
-    body: 'Çevrimiçi bir klan arkadaşına dostluk maçı daveti gönder: Hızlı, Kelime veya Protokol. Karşındaki onaylayınca eşleşme anında başlar.',
+    emoji: '🏰',
+    title: 'Turnuva: Gizemli Kule',
+    body: "Turnuva sekmesi açıldı! 10 katlı gizemli kuleye tırman: her kat, boss'un gizli kelimesini süreye karşı çöz. Sis, zaman hırsızı gibi fantastik güçlere karşı 3 canınla ilerle; her kat Veri + Kupa kazandırır. Turnuva 3 günde bir yenilenir.",
   },
 ];
 
