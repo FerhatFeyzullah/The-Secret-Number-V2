@@ -282,6 +282,8 @@ export type TowerStatePayload = {
     floor_no: number;
     word_length: number;
     remaining_ms: number;
+    started?: boolean;
+    cursed_letters?: string[] | null;
     twists: TowerTwist[] | null;
     guesses: { guess: string; marks: string; green_count: number }[] | null;
     solved1: boolean;
@@ -341,6 +343,8 @@ export function mapTowerState(p: TowerStatePayload): TowerState {
           floorNo: Number(p.active.floor_no),
           wordLength: Number(p.active.word_length),
           remainingMs: Number(p.active.remaining_ms ?? 0),
+          started: !!p.active.started,
+          cursedLetters: p.active.cursed_letters ?? [],
           twists: p.active.twists ?? [],
           guesses: (p.active.guesses ?? []).map((g) => ({
             guess: g.guess,

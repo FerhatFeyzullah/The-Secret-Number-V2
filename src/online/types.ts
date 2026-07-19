@@ -504,14 +504,10 @@ export type ChallengeFull = {
 /** Bir katın "fantastik" twist'i. Geri bildirimi bozanlar SUNUCUDA uygulanır;
  *  istemci yalnız rozet/kozmetik ipucu için okur. */
 export type TowerTwistKind =
-  | 'fog' // geri bildirimin N pozisyonu '?' maskelenir
-  | 'time_thief' // yanlış tahminde saatten süre çalınır
-  | 'shuffle' // renkler pozisyonla hizasız permüte edilir
-  | 'cursed' // belirli harfi kullanan tahmin → zaman cezası
-  | 'blind' // bir tahminde geri bildirim tümüyle '?'
-  | 'liar' // seyrek/tek bir geri bildirim yanlış
-  | 'lock' // bir pozisyon kat çözülene dek '?'
-  | 'double'; // iki gizli kelime (v2)
+  | 'fog' // gösterimde yeşil+sarı 'P' maskelenir; gri (X) kalır
+  | 'time_thief' // yanlış tahminde her gri (X) hane için -1sn
+  | 'cursed' // gizlide olmayan 1-2 harf lanetli; guess'te her geçiş -3sn
+  | 'memory'; // sorgular 3sn sonra kaybolur (istemci-taraflı)
 
 export type TowerTwist = {
   kind: TowerTwistKind;
@@ -544,7 +540,8 @@ export type TowerRun = {
   winStreak: number;
 };
 
-/** Aktif kat tahtasındaki bir tahmin satırı (marks GÖSTERİM: 'G'/'Y'/'X'/'?'). */
+/** Aktif kat tahtasındaki bir tahmin satırı (marks GÖSTERİM: 'G'/'Y'/'X'/'P').
+ *  'P' = Sis: kelimede var ama yeşil/sarı gizli. */
 export type TowerBoardGuess = { guess: string; marks: string; greenCount: number };
 
 /** Oyuncunun aktif katı (gizli kelime İÇERMEZ). */
@@ -553,6 +550,10 @@ export type TowerActiveFloor = {
   wordLength: number;
   remainingMs: number;
   twists: TowerTwist[];
+  /** Saat başladı mı? false = ilk-karşılaşma modalı bekleniyor (begin_tower_floor ile başlar). */
+  started: boolean;
+  /** Lanetli harfler (gizlide yok; kullanınca ceza). */
+  cursedLetters: string[];
   guesses: TowerBoardGuess[];
   solved1: boolean;
   solved2: boolean;
@@ -582,7 +583,8 @@ export type TowerOutcomeStatus =
   | 'floor_cleared'
   | 'floor_failed'
   | 'tower_cleared'
-  | 'eliminated';
+  | 'eliminated'
+  | 'left'; // başlamamış kattan serbest çıkış (can gitmez)
 
 /** tower_guess / claim_tower_timeout sonucu. reveal yalnız kat sonuçlanınca. */
 export type TowerGuessOutcome = {

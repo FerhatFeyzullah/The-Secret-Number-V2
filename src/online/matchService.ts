@@ -1351,3 +1351,13 @@ export async function towerGuess(guess: string): Promise<TowerGuessOutcome> {
 export async function claimTowerTimeout(): Promise<TowerGuessOutcome> {
   return mapTowerOutcome(await callRpc('claim_tower_timeout'));
 }
+
+/** Katı BAŞLAT — saat şimdi başlar (ilk-karşılaşma modalı kapanınca). Idempotent. */
+export async function beginTowerFloor(): Promise<TowerState> {
+  return mapTowerState(await callRpc('begin_tower_floor'));
+}
+
+/** Başlamış kattan çık → -1 can (istemci onayı sonrası). Başlamamışsa 'left' (serbest). */
+export async function leaveTowerFloor(): Promise<TowerGuessOutcome> {
+  return mapTowerOutcome(await callRpc('leave_tower_floor'));
+}
