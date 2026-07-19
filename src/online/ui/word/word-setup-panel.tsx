@@ -265,7 +265,13 @@ export function WordSetupPanel({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {notInPoolWord ? (
         <View style={styles.requestRow}>
-          <RequestWordButton word={notInPoolWord} />
+          <RequestWordButton
+            word={notInPoolWord}
+            onSent={() => {
+              setTyped([]);
+              setNotInPoolWord(null);
+            }}
+          />
         </View>
       ) : null}
 

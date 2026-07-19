@@ -14,7 +14,7 @@ type Status = 'idle' | 'sending' | 'submitted' | 'exists' | 'invalid' | 'error';
  * kelime önerilemez. Sunucu (request_word) biçimi ayrıca doğrular. Anon (offline
  * giriş yapmamış) da çağırabilir.
  */
-export function RequestWordButton({ word }: { word: string }) {
+export function RequestWordButton({ word, onSent }: { word: string; onSent?: () => void }) {
   const [status, setStatus] = useState<Status>('idle');
 
   // Yeni kelime → durumu sıfırla (aynı konumda bileşen yeniden kullanılırsa).
@@ -25,11 +25,16 @@ export function RequestWordButton({ word }: { word: string }) {
   const send = async () => {
     if (status === 'sending' || status === 'submitted') return;
     setStatus('sending');
+    let result: Status = 'error';
     try {
-      setStatus(await requestWord(word)); // 'submitted' | 'exists' | 'invalid'
+      result = await requestWord(word); // 'submitted' | 'exists' | 'invalid'
     } catch {
-      setStatus('error');
+      result = 'error';
     }
+    // onSent verildiyse: öneri gönderildi → ebeveyn input'u temizler (buton kalkar).
+    // Verilmediyse eski davranış: sonuç pill'ini göster.
+    if (onSent) onSent();
+    else setStatus(result);
   };
 
   if (status === 'submitted') {

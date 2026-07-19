@@ -17,6 +17,7 @@ import {
   type TowerTwist,
   type TowerTwistKind,
 } from '@/online';
+import { RequestWordButton } from '@/online/ui/word/request-word-button';
 import { TrKeyboard } from '@/online/ui/word/tr-keyboard';
 import { WordConfirmButton } from '@/online/ui/word/word-parts';
 import { getSeen, markSeen, type SeenKey } from '@/storage';
@@ -69,6 +70,7 @@ export function TowerFloor({
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState<string | null>(null);
+  const [notInPoolWord, setNotInPoolWord] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(() =>
     Math.ceil((initialState.active?.remainingMs ?? 0) / 1000),
   );
@@ -177,11 +179,13 @@ export function TowerFloor({
     if (!parsed.ok) return;
     setBusy(true);
     setInvalid(null);
+    setNotInPoolWord(null);
     try {
       const o = await towerGuess(parsed.word);
       handleOutcome(o, parsed.word);
     } catch (e) {
-      setInvalid(e instanceof OnlineError ? e.message : 'Gönderilemedi, tekrar dene.');
+      if (e instanceof OnlineError && e.code === 'word_not_in_pool') setNotInPoolWord(parsed.word);
+      else setInvalid(e instanceof OnlineError ? e.message : 'Gönderilemedi, tekrar dene.');
     } finally {
       setBusy(false);
     }
@@ -237,12 +241,14 @@ export function TowerFloor({
     (k: string) => {
       if (overlay || abilityModal || busy) return;
       setInvalid(null);
+      setNotInPoolWord(null);
       setEntry((g) => (g.length >= wordLength ? g : [...g, k]));
     },
     [overlay, abilityModal, busy, wordLength],
   );
   const deleteLetter = useCallback(() => {
     setInvalid(null);
+    setNotInPoolWord(null);
     setEntry((g) => (g.length === 0 ? g : g.slice(0, -1)));
   }, []);
 
@@ -373,6 +379,18 @@ export function TowerFloor({
           })}
         </View>
         {invalid ? <Text style={styles.invalid}>{invalid}</Text> : null}
+        {notInPoolWord ? (
+          <View style={styles.requestRow}>
+            <Text style={styles.notInPool}>Bu kelime sözlükte yok.</Text>
+            <RequestWordButton
+              word={notInPoolWord}
+              onSent={() => {
+                setEntry([]);
+                setNotInPoolWord(null);
+              }}
+            />
+          </View>
+        ) : null}
       </View>
 
       {/* Klavye */}
@@ -551,6 +569,8 @@ const styles = StyleSheet.create({
   entryTileFilled: { backgroundColor: withAlpha(colors.cyan, 0.18), borderColor: withAlpha(colors.cyan, 0.8) },
   entryTileText: { color: '#E8F0FF', fontSize: 21, fontWeight: '700', fontFamily: mono },
   invalid: { color: colors.danger, fontSize: 12, textAlign: 'center', marginTop: 8 },
+  requestRow: { alignItems: 'center', gap: 6, marginTop: 8 },
+  notInPool: { color: colors.danger, fontSize: 12, textAlign: 'center' },
   kbWrap: {
     marginHorizontal: -20, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6,
     backgroundColor: 'rgba(6,12,26,0.7)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)', gap: 10,
