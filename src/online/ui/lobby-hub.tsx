@@ -109,7 +109,41 @@ const WORD_SECTIONS: InfoSection[] = [
   },
 ];
 
-type Intro = { kind: 'quick' | 'protocol' | 'word'; proceed: boolean };
+/** Kelime Yarışı tanıtımı — bot tek gizli kelime tutar, iki oyuncu eşzamanlı yarışır. */
+const WORD_RACE_SECTIONS: InfoSection[] = [
+  {
+    icon: 'cpu',
+    accent: colors.success,
+    title: 'Bot Bir Kelime Tutar',
+    body: 'Her tur 4, 5 ya da 6 harflik gizli kelimeyi BOT seçer (ikinize de aynı). Kimse önceden belirlemez.',
+  },
+  {
+    icon: 'zap',
+    accent: colors.cyan,
+    title: 'Eşzamanlı Yarış',
+    body: 'Sıra YOK — süre içinde istediğin an, sınırsız tahmin yaparsın. Kelimeyi İLK bulan turu anında alır.',
+  },
+  {
+    icon: 'clock',
+    accent: colors.amber,
+    title: 'Ortak Süre',
+    body: 'Tur başına 3 dakikalık ORTAK geri sayım. Süre dolar da kimse bulamazsa en çok ilerleyen turu alır.',
+  },
+  {
+    icon: 'eye',
+    accent: colors.teal,
+    title: 'Rakip İlerlemesi',
+    body: 'Rakibin yeşil/sarı ilerleme çubuğunu görürsün — ama yalnız SAYI olarak (hangi harf olduğu sızmaz).',
+  },
+  {
+    icon: 'layers',
+    accent: colors.violet,
+    title: 'İki Tur Kazanan Alır',
+    body: 'En çok 3 tur oynanır; önce 2 turu kazanan maçı alır. Kazanınca Kupa, XP ve Veri kazanırsın.',
+  },
+];
+
+type Intro = { kind: 'quick' | 'protocol' | 'word' | 'wordrace'; proceed: boolean };
 
 /** Online lobi ana ekranı: Hızlı Maç (hero) + Protokol Maçı + Özel Oyun.
  *  İlk dokunuşta ilgili tanıtım modalı araya girer (sonra şeffaf); "?" rozeti
@@ -121,6 +155,7 @@ export function LobbyHub({
   onQuick,
   onProtocol,
   onWord,
+  onWordRace,
   onPrivate,
   onHowTo,
   onBack,
@@ -134,6 +169,7 @@ export function LobbyHub({
   onQuick: () => void;
   onProtocol: () => void;
   onWord: () => void;
+  onWordRace: () => void;
   onPrivate: () => void;
   onHowTo: () => void;
   onBack: () => void;
@@ -154,20 +190,32 @@ export function LobbyHub({
     if (await getSeen('wordIntro')) onWord();
     else setIntro({ kind: 'word', proceed: true });
   };
+  const tapWordRace = async () => {
+    if (await getSeen('wordRaceIntro')) onWordRace();
+    else setIntro({ kind: 'wordrace', proceed: true });
+  };
 
   // "?" rozeti: seen'den bağımsız her zaman açar, aramayı BAŞLATMAZ.
   const infoQuick = () => setIntro({ kind: 'quick', proceed: false });
   const infoProtocol = () => setIntro({ kind: 'protocol', proceed: false });
   const infoWord = () => setIntro({ kind: 'word', proceed: false });
+  const infoWordRace = () => setIntro({ kind: 'wordrace', proceed: false });
+
+  // Intro türü → (seen bayrağı, başlatıcı) eşlemesi (kapanışta işaretle + başlat).
+  const introMap = {
+    quick: { seen: 'quickIntro', start: onQuick },
+    protocol: { seen: 'protocolIntro', start: onProtocol },
+    word: { seen: 'wordIntro', start: onWord },
+    wordrace: { seen: 'wordRaceIntro', start: onWordRace },
+  } as const;
 
   const closeIntro = () => {
     const cur = intro;
     setIntro(null);
     if (!cur) return;
-    void markSeen(
-      cur.kind === 'quick' ? 'quickIntro' : cur.kind === 'protocol' ? 'protocolIntro' : 'wordIntro',
-    );
-    if (cur.proceed) (cur.kind === 'quick' ? onQuick : cur.kind === 'protocol' ? onProtocol : onWord)();
+    const m = introMap[cur.kind];
+    void markSeen(m.seen);
+    if (cur.proceed) m.start();
   };
 
   return (
@@ -224,6 +272,15 @@ export function LobbyHub({
         />
 
         <ChoiceCard
+          icon="zap"
+          accent={colors.teal}
+          title="Kelime Yarışı"
+          subtitle="Bot bir kelime tutar, ilk bulan kazanır"
+          onPress={tapWordRace}
+          onInfo={infoWordRace}
+        />
+
+        <ChoiceCard
           icon="lock"
           accent={colors.amber}
           title="Özel Oyun"
@@ -256,6 +313,15 @@ export function LobbyHub({
         icon="type"
         accent={colors.success}
         sections={WORD_SECTIONS}
+        ctaLabel={intro?.proceed ? 'Anladım, Başla' : 'Anladım'}
+      />
+      <InfoModal
+        visible={intro?.kind === 'wordrace'}
+        onClose={closeIntro}
+        title="KELİME YARIŞI"
+        icon="zap"
+        accent={colors.teal}
+        sections={WORD_RACE_SECTIONS}
         ctaLabel={intro?.proceed ? 'Anladım, Başla' : 'Anladım'}
       />
 

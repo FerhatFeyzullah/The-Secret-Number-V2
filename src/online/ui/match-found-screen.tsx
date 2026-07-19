@@ -18,6 +18,7 @@ export function MatchFoundScreen({
   mode,
   isFriendly = false,
   word = false,
+  wordRace = false,
   winTarget = 1,
   clockMs,
   firstTurnMode,
@@ -32,6 +33,8 @@ export function MatchFoundScreen({
   isFriendly?: boolean;
   /** Kelime maçı mı (content_type='word', mode='quick') — etiket farklı. */
   word?: boolean;
+  /** Kelime YARIŞI mı (content_type='wordrace') — etiket "Kelime Yarışı". */
+  wordRace?: boolean;
   /** Galibiyet hedefi: >1 ise Bo3 (3 tur) rozeti gösterilir. Bo3'ün gerçek
    *  kaynağı win_target'tır (mod'dan bağımsız: sayı protokol VE kelime Bo3). */
   winTarget?: number;
@@ -64,7 +67,9 @@ export function MatchFoundScreen({
     transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
   };
 
-  const baseLabel = word
+  const baseLabel = wordRace
+    ? 'Kelime Yarışı'
+    : word
     ? 'Kelime Modu'
     : mode === 'quick'
       ? 'Hızlı Maç'

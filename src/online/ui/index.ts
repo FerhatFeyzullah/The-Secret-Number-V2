@@ -20,3 +20,4 @@ export { ProfileStatsModal } from './profile-stats-modal';
 export { RecentMatchesModal } from './recent-matches-modal';
 export { WordDuelScreen } from './word/word-duel-screen';
 export { WordSecretSetupScreen } from './word/word-setup-screen';
+export { WordRaceScreen } from './wordrace/word-race-screen';

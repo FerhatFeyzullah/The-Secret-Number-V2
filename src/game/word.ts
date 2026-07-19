@@ -232,3 +232,14 @@ export const wordContent: ContentTypeDef = {
     return evaluateWordGuess(secret, guess);
   },
 };
+
+/**
+ * Kelime Yarışı (online mod) içerik tipi. parse/generate/evaluate/uzunluklar
+ * kelime ile BİREBİR aynıdır — yalnız id farklı. Böylece istemci ön-doğrulaması
+ * (assertValidDigits) ve içerik kayıt defterleri kelime kurallarını yeniden
+ * kullanır; mod davranış farkı (eşzamanlı yarış) yalnız online katmanındadır.
+ */
+export const wordRaceContent: ContentTypeDef = {
+  ...wordContent,
+  id: 'wordrace',
+};

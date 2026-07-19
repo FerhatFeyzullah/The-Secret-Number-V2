@@ -16,6 +16,8 @@ import type {
   TowerRunStatus,
   TowerState,
   TowerTwist,
+  WordRaceOutcome,
+  WordRaceTimeoutOutcome,
 } from './types';
 
 /** matches tablosundan/realtime'dan gelen ham satır (snake_case). */
@@ -41,6 +43,11 @@ export type MatchRow = {
   current_round?: number;
   p1_round_wins?: number;
   p2_round_wins?: number;
+  // KELİME YARIŞI: rakip-güvenli toplu ilerleme (harf sızmaz); diğer modlarda yok.
+  p1_best_green?: number;
+  p1_best_yellow?: number;
+  p2_best_green?: number;
+  p2_best_yellow?: number;
   // Konfig (özel oda ayarları); eski satırlarda olmayabilir → mapping default'lar.
   clock_ms?: number;
   first_turn_mode?: FirstTurnMode;
@@ -134,6 +141,10 @@ export function matchRowToState(
     currentRound: row.current_round ?? 1,
     p1RoundWins: row.p1_round_wins ?? 0,
     p2RoundWins: row.p2_round_wins ?? 0,
+    p1BestGreen: row.p1_best_green ?? 0,
+    p1BestYellow: row.p1_best_yellow ?? 0,
+    p2BestGreen: row.p2_best_green ?? 0,
+    p2BestYellow: row.p2_best_yellow ?? 0,
     currentTurn: row.current_turn,
     clock1Ms: row.clock1_ms,
     clock2Ms: row.clock2_ms,
@@ -255,6 +266,56 @@ export function feedbackToGuessResult(feedback: GuessFeedback): GuessResult {
     case 'win':
       return { status: 'win' };
   }
+}
+
+// ─── Kelime Yarışı (RPC jsonb → domain) ──────────────────────────────────────
+
+/** word_race_guess jsonb dönüşü (snake_case). */
+export type WordRaceOutcomePayload = {
+  status: string;
+  marks?: string | null;
+  green_count?: number | null;
+  yellow_count?: number | null;
+  remaining_ms?: number | null;
+  p1_round_wins?: number;
+  p2_round_wins?: number;
+  current_round?: number;
+  reveal?: string | null;
+};
+
+export function mapWordRaceOutcome(p: WordRaceOutcomePayload): WordRaceOutcome {
+  return {
+    status: p.status as WordRaceOutcome['status'],
+    marks: p.marks ?? '',
+    greenCount: Number(p.green_count ?? 0),
+    yellowCount: Number(p.yellow_count ?? 0),
+    remainingMs: Number(p.remaining_ms ?? 0),
+    p1RoundWins: Number(p.p1_round_wins ?? 0),
+    p2RoundWins: Number(p.p2_round_wins ?? 0),
+    currentRound: Number(p.current_round ?? 1),
+    reveal: p.reveal ?? null,
+  };
+}
+
+/** claim_word_race_timeout jsonb dönüşü (snake_case). */
+export type WordRaceTimeoutPayload = {
+  status: string;
+  reveal?: string | null;
+  p1_round_wins?: number;
+  p2_round_wins?: number;
+  current_round?: number;
+  remaining_ms?: number | null;
+};
+
+export function mapWordRaceTimeout(p: WordRaceTimeoutPayload): WordRaceTimeoutOutcome {
+  return {
+    status: p.status as WordRaceTimeoutOutcome['status'],
+    reveal: p.reveal ?? null,
+    p1RoundWins: Number(p.p1_round_wins ?? 0),
+    p2RoundWins: Number(p.p2_round_wins ?? 0),
+    currentRound: Number(p.current_round ?? 1),
+    remainingMs: Number(p.remaining_ms ?? 0),
+  };
 }
 
 // ─── Turnuva: Gizemli Kule (RPC jsonb → domain) ──────────────────────────────
