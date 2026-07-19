@@ -4,6 +4,8 @@ import {
   guessRowToGuess,
   mapTowerOutcome,
   mapTowerState,
+  mapWordRaceOutcome,
+  mapWordRaceTimeout,
   matchRowToState,
   type MatchRow,
 } from './mapping';
@@ -122,6 +124,92 @@ describe('guessRowToGuess', () => {
       feedback: 'partial:2',
       round: 1,
       createdAt: '2026-06-05T10:00:03.000Z',
+    });
+  });
+});
+
+describe('matchRowToState — Kelime Yarışı toplu ilerleme', () => {
+  it('best_green/best_yellow kolonlarını camelCase eşler (yoksa 0)', () => {
+    const state = matchRowToState(
+      row({
+        content_type: 'wordrace',
+        word_length: 5,
+        p1_best_green: 2,
+        p1_best_yellow: 1,
+        p2_best_green: 3,
+      }),
+      P1,
+    )!;
+    expect(state).toMatchObject({
+      contentType: 'wordrace',
+      wordLength: 5,
+      p1BestGreen: 2,
+      p1BestYellow: 1,
+      p2BestGreen: 3,
+      p2BestYellow: 0, // kolon yok → 0
+    });
+  });
+});
+
+describe('mapWordRaceOutcome', () => {
+  it('word_race_guess jsonb dönüşünü camelCase eşler', () => {
+    expect(
+      mapWordRaceOutcome({
+        status: 'round_won',
+        marks: 'GGGGG',
+        green_count: 5,
+        yellow_count: 0,
+        remaining_ms: 91234,
+        p1_round_wins: 1,
+        p2_round_wins: 0,
+        current_round: 2,
+        reveal: 'kitap',
+      }),
+    ).toEqual({
+      status: 'round_won',
+      marks: 'GGGGG',
+      greenCount: 5,
+      yellowCount: 0,
+      remainingMs: 91234,
+      p1RoundWins: 1,
+      p2RoundWins: 0,
+      currentRound: 2,
+      reveal: 'kitap',
+    });
+  });
+
+  it("'playing' dönüşünde reveal null ve eksik alanlar güvenli varsayılana düşer", () => {
+    const out = mapWordRaceOutcome({ status: 'playing', marks: 'GYXXX', green_count: 1 });
+    expect(out).toMatchObject({
+      status: 'playing',
+      marks: 'GYXXX',
+      greenCount: 1,
+      yellowCount: 0,
+      remainingMs: 0,
+      currentRound: 1,
+      reveal: null,
+    });
+  });
+});
+
+describe('mapWordRaceTimeout', () => {
+  it('claim_word_race_timeout jsonb dönüşünü camelCase eşler', () => {
+    expect(
+      mapWordRaceTimeout({
+        status: 'round_won',
+        reveal: 'gece',
+        p1_round_wins: 0,
+        p2_round_wins: 1,
+        current_round: 2,
+        remaining_ms: 0,
+      }),
+    ).toEqual({
+      status: 'round_won',
+      reveal: 'gece',
+      p1RoundWins: 0,
+      p2RoundWins: 1,
+      currentRound: 2,
+      remainingMs: 0,
     });
   });
 });

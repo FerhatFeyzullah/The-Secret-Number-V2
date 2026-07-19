@@ -51,6 +51,7 @@ export function ResultOverlay({
   opponentName,
   opponentInitial,
   contentType = 'number' as const,
+  single = false,
   deck,
   incomingSignal,
   onSendSignal,
@@ -72,6 +73,10 @@ export function ResultOverlay({
   opponentInitial: string;
   /** 'word' → kelime modu etiketleri ve reveal düzeni; varsayılan 'number'. */
   contentType?: 'number' | 'word';
+  /** Kelime Yarışı: iki oyuncu AYNI gizli kelimeyi çözer → tek "GİZLİ KELİME"
+   *  sütunu gösterilir (mySecret = ortak gizli). Varsayılan (false) → iki-sütun.
+   *  Diğer modlar bu prop'u geçmez, davranış aynen korunur. */
+  single?: boolean;
   /** Oyuncunun sinyal destesi (≤6 id) — maç sonu reaksiyon seti. */
   deck: string[];
   incomingSignal: { id: string; nonce: number } | null;
@@ -197,6 +202,18 @@ export function ResultOverlay({
         ) : null}
       </View>
 
+      {single ? (
+        <View style={styles.reveal}>
+          <View style={styles.revealCol}>
+            <Text style={styles.revealLabel}>GİZLİ KELİME</Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.revealWord, { color: colors.cyan, textShadowColor: colors.cyan }]}>
+              {mySecret ? upperTr(mySecret) : '—'}
+            </Text>
+          </View>
+        </View>
+      ) : (
       <View style={styles.reveal}>
         <View style={styles.revealCol}>
           <Text style={styles.revealLabel}>{isWord ? 'SENİN KELİMEN' : 'SENİN SAYIN'}</Text>
@@ -222,6 +239,7 @@ export function ResultOverlay({
           </Text>
         </View>
       </View>
+      )}
 
       {/* Akordeon SİNYAL şeridi (deste; aç/kapa smooth). */}
       <Animated.View style={[styles.accordion, accStyle]}>

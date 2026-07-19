@@ -47,6 +47,8 @@ export type {
   TowerState,
   TowerTwist,
   TowerTwistKind,
+  WordRaceOutcome,
+  WordRaceTimeoutOutcome,
 } from './types';
 export { displayClocks, feedbackToGuessResult } from './mapping';
 export {
@@ -128,6 +130,9 @@ export {
   transferClanLeadership,
   unlockProtocol,
   unlockSignal,
+  wordRaceGuess,
+  claimWordRaceTimeout,
+  wordRaceReveal,
 } from './matchService';
 export { useMatch, type UseMatchResult } from './useMatch';
 export { useLiveClocks } from './useLiveClocks';

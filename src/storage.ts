@@ -91,6 +91,7 @@ export type SeenKey =
   | 'storeIntro' // Sinyal mağazası
   | 'signalDeck' // Sinyal destesi (Sinyallerim)
   | 'wordIntro' // Kelime Modu tanıtımı (çevrimiçi lobi)
+  | 'wordRaceIntro' // Kelime Yarışı tanıtımı (çevrimiçi lobi)
   | 'soloWordIntro' // Tek oyunculu kelime modu tanıtımı
   | 'towerIntro' // Turnuva (Gizemli Kule) tanıtımı
   | 'towerFog' // Kule yetenek: Sis (ilk karşılaşma)
@@ -110,6 +111,7 @@ const SEEN_KEYS: readonly SeenKey[] = [
   'storeIntro',
   'signalDeck',
   'wordIntro',
+  'wordRaceIntro',
   'soloWordIntro',
   'towerIntro',
   'towerFog',

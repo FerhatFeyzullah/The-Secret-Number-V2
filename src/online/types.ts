@@ -82,6 +82,13 @@ export type MatchState = {
   /** player1/player2'nin kazandığı tur sayısı. */
   p1RoundWins: number;
   p2RoundWins: number;
+  /** KELİME YARIŞI: rakibe İNEN tek ilerleme verisi — o oyuncunun BU TURDAKİ en
+   *  iyi yeşil/sarı harf SAYISI (per-harf dizi ASLA taşınmaz; harf sızmaz). Tur
+   *  başında 0'a döner. Diğer modlarda 0 (kullanılmaz). */
+  p1BestGreen: number;
+  p1BestYellow: number;
+  p2BestGreen: number;
+  p2BestYellow: number;
   /** Sırası gelen oyuncunun id'si (active dışında null). */
   currentTurn: string | null;
   clock1Ms: number;
@@ -276,6 +283,41 @@ export type GuessOutcome = {
   guessId?: number;
 };
 
+/** KELİME YARIŞI: word_race_guess dönüşü. 'round_won'/'match_won' YALNIZ turu
+ *  ÇÖZEN oyuncuya döner; kaybeden sonucu realtime maç-satırı değişiminden öğrenir
+ *  (current_round++ / round_wins / status). */
+export type WordRaceOutcome = {
+  status: 'playing' | 'round_won' | 'match_won';
+  /** Bu (çağırana ait) tahminin per-harf Wordle renkleri ('GYXXX'; G=doğru yer,
+   *  Y=yanlış yer, X=yok). Kendi tahtanı boyamak için. */
+  marks: string;
+  /** Bu tahmindeki yeşil (doğru yer) harf sayısı. */
+  greenCount: number;
+  /** Bu tahmindeki sarı (doğru harf, yanlış yer) sayısı. */
+  yellowCount: number;
+  /** Tur ortak geri sayımından kalan (ms) — istemci saatini resync eder. */
+  remainingMs: number;
+  p1RoundWins: number;
+  p2RoundWins: number;
+  /** Güncel tur (tur çözülünce sunucu artırdıysa yeni tur numarası). */
+  currentRound: number;
+  /** Yalnız tur bitince (round_won/match_won) kararlaşan turun gizli kelimesi;
+   *  aksi halde null. */
+  reveal: string | null;
+};
+
+/** KELİME YARIŞI: claim_word_race_timeout dönüşü (süre dolunca ilerlemeye göre
+ *  turu böler). Süre dolmadıysa sunucu 'clock_not_expired' fırlatır. */
+export type WordRaceTimeoutOutcome = {
+  status: 'playing' | 'round_won' | 'match_won';
+  /** Kararlaşan turun gizli kelimesi (dolduysa); zaten çözülmüşse null. */
+  reveal: string | null;
+  p1RoundWins: number;
+  p2RoundWins: number;
+  currentRound: number;
+  remainingMs: number;
+};
+
 /** Maç sonu gizli sayı ifşası (get_match_reveal).
  *  Çağıranın bakış açısından; yalnızca maç finished olunca dolar. */
 export type MatchReveal = {
@@ -365,7 +407,7 @@ export type RecentMatchRound = {
 export type RecentMatch = {
   matchId: string;
   mode: 'quick' | 'protocol';
-  contentType: 'number' | 'word';
+  contentType: 'number' | 'word' | 'wordrace';
   winTarget: number;
   player1Name: string | null;
   player2Name: string | null;

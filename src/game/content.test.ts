@@ -3,11 +3,18 @@ import { evaluateGuess, parseGuess } from './number';
 import type { Secret } from './types';
 
 describe('içerik tipi kayıt defteri', () => {
-  it("üyeler 'number' ve 'word'; number numberContent'in kendisidir", () => {
-    expect(Object.keys(contentTypes).sort()).toEqual(['number', 'word']);
+  it("üyeler 'number', 'word', 'wordrace'; number numberContent'in kendisidir", () => {
+    expect(Object.keys(contentTypes).sort()).toEqual(['number', 'word', 'wordrace']);
     expect(getContentType('number')).toBe(numberContent);
     expect(numberContent.id).toBe('number');
     expect(numberContent.allowedLengths).toEqual([3]);
+  });
+
+  it("wordrace kelime kurallarını yeniden kullanır (aynı uzunluklar/parse), yalnız id farklı", () => {
+    const wr = getContentType('wordrace');
+    expect(wr.id).toBe('wordrace');
+    expect(wr.allowedLengths).toEqual([4, 5, 6]);
+    expect(getContentType('word').parse('kitap')).toEqual(wr.parse('kitap'));
   });
 });
 

@@ -6,15 +6,15 @@ import { colors, cyanAlpha, mono } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'turnuva-kule-2026-07';
+export const WHATSNEW_ID = 'kelime-yarisi-2026-07';
 
 type Note = { emoji: string; title: string; body: string };
 
 const WHATSNEW_NOTES: Note[] = [
   {
-    emoji: '🏰',
-    title: 'Turnuva: Gizemli Kule',
-    body: "Turnuva sekmesi açıldı! 10 katlı gizemli kuleye tırman: her kat, boss'un gizli kelimesini süreye karşı çöz. Sis, zaman hırsızı gibi fantastik güçlere karşı 3 canınla ilerle; her kat Veri + Kupa kazandırır. Turnuva 3 günde bir yenilenir.",
+    emoji: '⚡',
+    title: 'Yeni mod: Kelime Yarışı',
+    body: 'Bot gizli bir kelime tutar; sen ve rakibin aynı kelimeyi yarışır, ilk bulan turu kazanır! Sıra yok — süre dolmadan istediğin an tahmin et, rakibinin ne kadar yaklaştığını üstten gör. 3 tur, 2’yi alan maçı kazanır.',
   },
 ];
 

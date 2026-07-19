@@ -4,6 +4,8 @@ import {
   guessRowToGuess,
   mapTowerOutcome,
   mapTowerState,
+  mapWordRaceOutcome,
+  mapWordRaceTimeout,
   matchRowToState,
   presenceRowToInfo,
   protocolUseRowToUse,
@@ -11,6 +13,8 @@ import {
   type MatchRow,
   type PresenceRow,
   type ProtocolUseRow,
+  type WordRaceOutcomePayload,
+  type WordRaceTimeoutPayload,
 } from './mapping';
 import type {
   ChallengeFull,
@@ -47,6 +51,8 @@ import type {
   RecentMatch,
   TowerGuessOutcome,
   TowerState,
+  WordRaceOutcome,
+  WordRaceTimeoutOutcome,
 } from './types';
 
 /** RPC'lerin fırlattığı, sunucu hata koduna göre Türkçe mesaj taşıyan hata. */
@@ -152,6 +158,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_active_run: 'Aktif turnuva koşun yok.',
   no_active_floor: 'Aktif kat bulunamadı.',
   word_not_in_pool: 'Bu kelime sözlükte yok.',
+  // Kelime Yarışı
+  round_over: 'Turun süresi doldu.',
+  stale_round: 'Tur değişti.',
+  wrong_length: 'Kelime uzunluğu yanlış.',
+  secret_missing: 'Gizli kelime bulunamadı, lütfen tekrar dene.',
+  round_not_revealable: 'Bu turun gizlisi henüz açıklanamaz.',
+  unknown_content_type: 'Bilinmeyen oyun türü.',
+  secret_pool_empty: 'Kelime havuzu boş, lütfen sonra dene.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -207,7 +221,9 @@ async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T
  *  İçerik tipine göre DOĞRU parser kullanılır: sayı → parseGuess (3 rakam),
  *  kelime → parseWord (4-6 TR harf; havuz üyeliği yalnız sunucuda). */
 function assertValidDigits(digits: string, contentType: ContentTypeId = 'number'): void {
-  const ok = contentType === 'word' ? parseWord(digits).ok : parseGuess(digits).ok;
+  // word ve wordrace aynı biçim kuralını (4-6 TR harf) paylaşır → parseWord.
+  const isWord = contentType === 'word' || contentType === 'wordrace';
+  const ok = isWord ? parseWord(digits).ok : parseGuess(digits).ok;
   if (!ok) {
     throw new OnlineError('invalid_digits', ERROR_MESSAGES.invalid_digits);
   }
@@ -481,6 +497,52 @@ export async function getMyMarks(matchId: string): Promise<Record<number, string
   const map: Record<number, string> = {};
   for (const r of rows ?? []) map[r.id] = r.marks;
   return map;
+}
+
+// ─── Kelime Yarışı (word race) ───────────────────────────────────────────────
+// Sunucu-otoriter: gizli kelimeyi istemci görmez (yalnız tur bitince reveal).
+// SIRA YOK — süre içinde sınırsız tahmin; ilk çözen turu anında alır.
+
+/** Kelime Yarışı tahmini (eşzamanlı; sıra yok). Yalnız çağırana ait güvenli
+ *  sonucu döndürür (marks kendi tahtan için; 'round_won'/'match_won' yalnız
+ *  çözene döner — kaybeden realtime maç-satırı değişiminden öğrenir). */
+export async function wordRaceGuess(
+  matchId: string,
+  digits: string,
+  expectedRound?: number,
+): Promise<WordRaceOutcome> {
+  assertValidDigits(digits, 'wordrace');
+  return mapWordRaceOutcome(
+    await callRpc<WordRaceOutcomePayload>('word_race_guess', {
+      p_match_id: matchId,
+      p_digits: digits,
+      // Tur guard: sunucu aktif turu ile eşleşmezse 'stale_round' (rakip az önce
+      // çözdü) → geç tahmin yeni tura sızmaz. null → guard kapalı.
+      p_expected_round: expectedRound ?? null,
+    }),
+  );
+}
+
+/** Ortak geri sayım 0'a inince: sunucu süreyi doğrular → turu "en çok ilerleyen"e
+ *  verir. Süre dolmadıysa 'clock_not_expired' fırlatır. İdempotent (iki istemci de
+ *  güvenle çağırabilir; zaten çözülmüşse no-op 'playing' döner). */
+export async function claimWordRaceTimeout(matchId: string): Promise<WordRaceTimeoutOutcome> {
+  return mapWordRaceTimeout(
+    await callRpc<WordRaceTimeoutPayload>('claim_word_race_timeout', { p_match_id: matchId }),
+  );
+}
+
+/** KARARLAŞMIŞ (geçmiş ya da bitmiş son) turun gizli kelimesi. Aktif/gelecek tur
+ *  istenirse sunucu 'round_not_revealable' fırlatır (canlı gizli sızmaz). */
+export async function wordRaceReveal(
+  matchId: string,
+  round: number,
+): Promise<{ secret: string | null }> {
+  const p = await callRpc<{ secret: string | null }>('word_race_reveal', {
+    p_match_id: matchId,
+    p_round: round,
+  });
+  return { secret: p.secret ?? null };
 }
 
 /** 30 sn'dir kopuk rakibe karşı hükmen galibiyet ister; değilse no-op. */

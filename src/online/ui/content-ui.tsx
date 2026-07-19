@@ -55,6 +55,14 @@ export const contentUI: Record<ContentTypeId, ContentUIDef> = {
     formatValue: (value) => (value ? Array.from(value).join(' ') : '—'),
     describe: describeWordFeedback,
   },
+  // Kelime Yarışı: gizli kelime SUNUCU tarafından seçilir (belirleme YOK), ama
+  // UI parçaları (tahmin klavyesi + gösterim/feedback) kelime ile aynıdır.
+  wordrace: {
+    SetupInput: WordSetupPanel,
+    GuessPad: TrKeyboard,
+    formatValue: (value) => (value ? Array.from(value).join(' ') : '—'),
+    describe: describeWordFeedback,
+  },
 };
 
 export function getContentUI(id: ContentTypeId): ContentUIDef {
