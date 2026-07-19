@@ -1,7 +1,10 @@
 import type { GuessResult, InvalidReason } from './types';
 
-/** Desteklenen gizli içerik tipleri. */
-export type ContentTypeId = 'number' | 'word';
+/** Desteklenen gizli içerik tipleri.
+ *  'wordrace' (Kelime Yarışı) kelime ile AYNI parse/generate/evaluate kurallarını
+ *  kullanır (4-6 harf); yalnız online mod davranışı farklıdır (sunucu tek gizli
+ *  kelime seçer, iki oyuncu eşzamanlı yarışır). */
+export type ContentTypeId = 'number' | 'word' | 'wordrace';
 
 /** İçerik tipinden bağımsız ayrıştırma sonucu. Sınır tipi string'dir;
  *  tipin iç temsili (örn. rakam tuple'ı) dışarı sızmaz. */

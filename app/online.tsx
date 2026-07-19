@@ -201,20 +201,21 @@ export default function OnlineScreen() {
   // Hızlı Maç (quick, tek tur), Protokol Maçı (protocol, Best of 3) ve Kelime
   // Modu (word kuyruğu; sunucuda PROTOKOLSÜZ Bo3) aynı arama akışını paylaşır;
   // yalnızca eşleşme RPC'si/parametresi değişir.
-  const lastModeRef = useRef<'quick' | 'protocol' | 'word'>('quick');
-  // Kelime maçı mı (ekran seçimi + VS etiketi için; maç satırı gelmeden de doğru).
+  const lastModeRef = useRef<'quick' | 'protocol' | 'word' | 'wordrace'>('quick');
+  // Kelime içerikli mi (word/wordrace) — ekran seçimi + VS etiketi + zemin glifi
+  // için (maç satırı gelmeden de doğru).
   const [pendingWord, setPendingWord] = useState(false);
-  const startSearch = useCallback(async (m: 'quick' | 'protocol' | 'word') => {
+  const startSearch = useCallback(async (m: 'quick' | 'protocol' | 'word' | 'wordrace') => {
     lastModeRef.current = m;
     const seq = ++searchSeqRef.current;
     setError(null);
     setNotice(null);
     leavingRef.current = false;
     setMatchId(null);
-    // Kelime maçı sunucuda mode='quick' + win_target=2 doğar (PROTOKOLSÜZ Bo3);
-    // yalnız sayı protokol maçı mode='protocol'. Bo3 rozeti win_target'tan gelir.
+    // Kelime maçı/yarışı sunucuda mode='quick' + win_target=2 doğar (PROTOKOLSÜZ
+    // Bo3); yalnız sayı protokol maçı mode='protocol'. Bo3 rozeti win_target'tan.
     setPendingMode(m === 'protocol' ? 'protocol' : 'quick');
-    setPendingWord(m === 'word');
+    setPendingWord(m === 'word' || m === 'wordrace');
     setPendingFriendly(false);
     setPhase('searching');
     try {
@@ -223,7 +224,9 @@ export default function OnlineScreen() {
           ? findOrCreateProtocolMatch()
           : m === 'word'
             ? findOrCreateQuickMatch('word')
-            : findOrCreateQuickMatch(),
+            : m === 'wordrace'
+              ? findOrCreateQuickMatch('wordrace')
+              : findOrCreateQuickMatch(),
         MATCHMAKE_TIMEOUT_MS,
       );
       if (seq !== searchSeqRef.current) {
@@ -252,6 +255,7 @@ export default function OnlineScreen() {
   const startQuick = useCallback(() => startSearch('quick'), [startSearch]);
   const startProtocol = useCallback(() => startSearch('protocol'), [startSearch]);
   const startWord = useCallback(() => startSearch('word'), [startSearch]);
+  const startWordRace = useCallback(() => startSearch('wordrace'), [startSearch]);
   const retrySearch = useCallback(() => startSearch(lastModeRef.current), [startSearch]);
 
   // Eşzamanlı yeniden-kuyruk uzlaştırması: iki taraf aynı anda "Tekrar Oyna"
@@ -274,15 +278,20 @@ export default function OnlineScreen() {
     return () => clearTimeout(t);
   }, [phase, match?.status, startSearch]);
 
-  // "Tekrar Oyna" ile gelindiğinde (quick=1 / word=1) aramayı bir kez otomatik başlat.
-  const { quick, word } = useLocalSearchParams<{ quick?: string; word?: string }>();
+  // "Tekrar Oyna" ile gelindiğinde (quick=1 / word=1 / wordrace=1) aramayı bir kez
+  // otomatik başlat.
+  const { quick, word, wordrace } = useLocalSearchParams<{
+    quick?: string;
+    word?: string;
+    wordrace?: string;
+  }>();
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if ((quick === '1' || word === '1') && !autoStartedRef.current) {
+    if ((quick === '1' || word === '1' || wordrace === '1') && !autoStartedRef.current) {
       autoStartedRef.current = true;
-      void (word === '1' ? startWord() : startQuick());
+      void (wordrace === '1' ? startWordRace() : word === '1' ? startWord() : startQuick());
     }
-  }, [quick, word, startQuick, startWord]);
+  }, [quick, word, wordrace, startQuick, startWord, startWordRace]);
 
   // Optimistik çıkış: UI ANINDA döner, leave_match arka planda koşar (ağ
   // gecikmesi donma hissi vermez); leavingRef ikinci basışı no-op yapar.
@@ -411,6 +420,14 @@ export default function OnlineScreen() {
   // önce lobiye döndürür (status cancelled bu efekte hiç uğramaz).
   useEffect(() => {
     if (phase !== 'match-found' || !vsHoldDone || !matchId || !match) return;
+    // KELİME YARIŞI: belirleme fazı YOK — sunucu gizliyi seçer, maç doğrudan
+    // 'active' doğar. VS ekranından sonra doğrudan yarış ekranına geç.
+    if (match.contentType === 'wordrace') {
+      if (match.status !== 'active') return;
+      resetToLobby();
+      router.push({ pathname: '/match/[id]', params: { id: matchId, content: 'wordrace' } });
+      return;
+    }
     if (match.status !== 'protocol_select' && match.status !== 'setup') return;
     const content = match.contentType; // kelime maçında setup ekranı kelime olur
     // Kelime maçı PROTOKOLSÜZ → asla protocol_select'e gitmez (savunmacı: sunucu
@@ -499,7 +516,12 @@ export default function OnlineScreen() {
           opponentName={opponentName}
           mode={mode}
           isFriendly={match?.isFriendly ?? pendingFriendly}
-          word={match ? match.contentType === 'word' : pendingWord}
+          word={
+            match ? match.contentType === 'word' || match.contentType === 'wordrace' : pendingWord
+          }
+          wordRace={
+            match ? match.contentType === 'wordrace' : lastModeRef.current === 'wordrace'
+          }
           winTarget={match?.winTarget ?? (pendingWord || pendingMode === 'protocol' ? 2 : 1)}
           clockMs={match?.clockMs ?? 60000}
           firstTurnMode={match?.firstTurnMode ?? 'random'}
@@ -517,6 +539,7 @@ export default function OnlineScreen() {
           onQuick={startQuick}
           onProtocol={startProtocol}
           onWord={startWord}
+          onWordRace={startWordRace}
           onPrivate={() => setPhase('private-choice')}
           onHowTo={() => router.push('/how-to-play')}
           onBack={() => router.back()}
@@ -524,7 +547,9 @@ export default function OnlineScreen() {
       );
   }
 
-  // Kelime akışında (arama/VS) süzülen zemin glifleri harf olur.
-  const wordFlow = match ? match.contentType === 'word' : pendingWord;
+  // Kelime akışında (arama/VS) süzülen zemin glifleri harf olur (word + wordrace).
+  const wordFlow = match
+    ? match.contentType === 'word' || match.contentType === 'wordrace'
+    : pendingWord;
   return <Screen float={wordFlow ? 'letters' : 'digits'}>{content}</Screen>;
 }

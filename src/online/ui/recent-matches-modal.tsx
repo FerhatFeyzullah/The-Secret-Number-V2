@@ -20,10 +20,12 @@ import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
 const MODE_META = {
   hizli: { label: 'Hızlı', color: colors.cyan },
   kelime: { label: 'Kelime', color: colors.amber },
+  yaris: { label: 'Yarış', color: colors.success },
   protokol: { label: 'Protokol', color: colors.violet },
 } as const;
 
 function modeKey(m: RecentMatch): keyof typeof MODE_META {
+  if (m.contentType === 'wordrace') return 'yaris';
   if (m.contentType === 'word') return 'kelime';
   if (m.mode === 'protocol') return 'protokol';
   return 'hizli';
@@ -69,9 +71,12 @@ function Tiles({ value, win, ts }: { value: string | null; win: boolean; ts: Til
   );
 }
 
-function RoundRow({ r, ts }: { r: RecentMatchRound; ts: TileSize }) {
+function RoundRow({ r, ts, shared }: { r: RecentMatchRound; ts: TileSize; shared?: boolean }) {
   const p1Win = r.winner === 1;
   const p2Win = r.winner === 2;
+  // Kelime Yarışı: iki oyuncu AYNI gizli kelimeyi çözer (tek ortak gizli, p2Secret
+  // yok) → aynı kelimeyi iki yanda da göster; kupa turu kazananın tarafında kalır.
+  const s2 = shared ? r.p1Secret : r.p2Secret;
   return (
     <View style={styles.round}>
       <View style={[styles.secret, styles.s1]}>
@@ -80,7 +85,7 @@ function RoundRow({ r, ts }: { r: RecentMatchRound; ts: TileSize }) {
       </View>
       <Text style={styles.turn}>Tur {r.round}</Text>
       <View style={[styles.secret, styles.s2]}>
-        <Tiles value={r.p2Secret} win={p2Win} ts={ts} />
+        <Tiles value={s2} win={p2Win} ts={ts} />
         {p2Win ? <Text style={styles.rt}>🏆</Text> : null}
       </View>
     </View>
@@ -135,7 +140,7 @@ function MatchCard({ m, cardW }: { m: RecentMatch; cardW: number }) {
       </View>
       <View style={styles.reveal}>
         {m.rounds.map((r) => (
-          <RoundRow key={r.round} r={r} ts={ts} />
+          <RoundRow key={r.round} r={r} ts={ts} shared={m.contentType === 'wordrace'} />
         ))}
       </View>
     </View>
