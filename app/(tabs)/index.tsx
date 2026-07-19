@@ -2,26 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Keyboard, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { ClanScreen, DonanimScreen, StoreScreen } from '@/online/ui';
-import { ComingSoon } from '@/ui/coming-soon';
+import { ClanScreen, DonanimScreen, StoreScreen, TowerScreen } from '@/online/ui';
 import { HomeMenu } from '@/ui/home-menu';
 import { TabBar } from '@/ui/tab-bar';
 import { TAB_ROUTES, type TabName, TabsPagerContext } from '@/ui/tabs-pager-context';
 import { colors } from '@/ui/theme';
 
 const HOME_INDEX = TAB_ROUTES.indexOf('index'); // 2 — orta sekme, açılış sayfası
-
-/** Turnuva yer tutucusu (eski cup.tsx route'u pager sayfasına indi). */
-function CupPage() {
-  return (
-    <ComingSoon
-      icon="award"
-      title="TURNUVALAR"
-      subtitle="Haftalık turnuvalarda özel ödüller ve sıralama için yarış."
-      accent={colors.amber}
-    />
-  );
-}
 
 /** Clash Royale tarzı 5'li alt sekme kabuğu — TEK ekran + yatay ScrollView pager.
  *  react-native-pager-view YERİNE core RN ScrollView (pagingEnabled) → native
@@ -103,7 +90,7 @@ export default function TabsPager() {
       <DonanimScreen key="gear" />,
       <HomeMenu key="index" />,
       <ClanScreen key="clan" />,
-      <CupPage key="cup" />,
+      <TowerScreen key="cup" />,
     ],
     [],
   );

@@ -2,6 +2,8 @@ import { parseGuess, parseWord, type ContentTypeId } from '../game';
 import { supabase } from '../supabase';
 import {
   guessRowToGuess,
+  mapTowerOutcome,
+  mapTowerState,
   matchRowToState,
   presenceRowToInfo,
   protocolUseRowToUse,
@@ -43,6 +45,8 @@ import type {
   ProtocolUseOutcome,
   ProtocolUseOutcomeKind,
   RecentMatch,
+  TowerGuessOutcome,
+  TowerState,
 } from './types';
 
 /** RPC'lerin fırlattığı, sunucu hata koduna göre Türkçe mesaj taşıyan hata. */
@@ -140,6 +144,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   challenge_not_found: 'Davet bulunamadı.',
   challenge_not_pending: 'Davet artık geçerli değil.',
   challenge_expired: 'Davetin süresi doldu.',
+  // Turnuva: Gizemli Kule
+  tower_closed: 'Turnuva şu an kapalı.',
+  tower_already_entered: 'Bu hafta turnuvaya zaten girdin.',
+  tower_eliminated: 'Bu hafta elendin. Gelecek hafta tekrar dene.',
+  tower_not_active: 'Turnuva koşun aktif değil.',
+  no_active_run: 'Aktif turnuva koşun yok.',
+  no_active_floor: 'Aktif kat bulunamadı.',
+  word_not_in_pool: 'Bu kelime sözlükte yok.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -1308,4 +1320,34 @@ export function subscribeChallenges(
   return () => {
     void client.removeChannel(channel);
   };
+}
+
+// ─── Turnuva: Gizemli Kule ───────────────────────────────────────────────────
+// Tümü sunucu-otoriter (istemci gizli kelimeyi görmez). Servis yalnız RPC sarar
+// + snake→camel mapping. Ön-doğrulama: towerGuess'te assertValidDigits('word').
+
+/** Turnuvaya gir (300 Veri düşülür, kat 1 açılır). Güncel durumu döner. */
+export async function enterTower(): Promise<TowerState> {
+  return mapTowerState(await callRpc('enter_tower'));
+}
+
+/** Ana ekran/resume: dönem + koşu + 10 kat konfigü + aktif kat. */
+export async function getTowerState(): Promise<TowerState> {
+  return mapTowerState(await callRpc('get_tower_state'));
+}
+
+/** Kat başlat/devam/tekrar dene (idempotent): kelime seçilir, saat kurulur. */
+export async function startTowerFloor(): Promise<TowerState> {
+  return mapTowerState(await callRpc('start_tower_floor'));
+}
+
+/** Aktif kata tahmin gönder. Sunucu değerlendirir + twist'lerle marks'ı bozar. */
+export async function towerGuess(guess: string): Promise<TowerGuessOutcome> {
+  assertValidDigits(guess, 'word');
+  return mapTowerOutcome(await callRpc('tower_guess', { p_guess: guess }));
+}
+
+/** İstemci geri sayımı 0'a inince: sunucu süreyi doğrular → can düş / elenme. */
+export async function claimTowerTimeout(): Promise<TowerGuessOutcome> {
+  return mapTowerOutcome(await callRpc('claim_tower_timeout'));
 }

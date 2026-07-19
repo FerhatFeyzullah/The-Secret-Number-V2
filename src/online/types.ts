@@ -498,3 +498,107 @@ export type ChallengeFull = {
   matchId: string | null;
   expiresAt: string;
 };
+
+// ─── Turnuva: Gizemli Kule (haftalık PvE gauntlet) ───────────────────────────
+
+/** Bir katın "fantastik" twist'i. Geri bildirimi bozanlar SUNUCUDA uygulanır;
+ *  istemci yalnız rozet/kozmetik ipucu için okur. */
+export type TowerTwistKind =
+  | 'fog' // geri bildirimin N pozisyonu '?' maskelenir
+  | 'time_thief' // yanlış tahminde saatten süre çalınır
+  | 'shuffle' // renkler pozisyonla hizasız permüte edilir
+  | 'cursed' // belirli harfi kullanan tahmin → zaman cezası
+  | 'blind' // bir tahminde geri bildirim tümüyle '?'
+  | 'liar' // seyrek/tek bir geri bildirim yanlış
+  | 'lock' // bir pozisyon kat çözülene dek '?'
+  | 'double'; // iki gizli kelime (v2)
+
+export type TowerTwist = {
+  kind: TowerTwistKind;
+  params?: Record<string, number | string>;
+};
+
+/** Boss ödülü olarak verilebilecek varlık (mevcut protokol/sinyal kataloğundan). */
+export type TowerBossItem = { kind: 'protocol' | 'signal'; id: string };
+
+/** Statik kat konfigü (tüm oyuncular aynı; gizli kelime İÇERMEZ). */
+export type TowerFloorConfig = {
+  floorNo: number;
+  wordLength: number;
+  clockMs: number;
+  twists: TowerTwist[];
+  veriReward: number;
+  isBoss: boolean;
+  /** Boss katında ödül önizlemesi (havuzun ilk item'ı); non-boss'ta null. */
+  itemPreview: TowerBossItem | null;
+};
+
+export type TowerRunStatus = 'active' | 'cleared' | 'eliminated';
+
+export type TowerRun = {
+  currentFloor: number;
+  lives: number;
+  status: TowerRunStatus;
+  floorsCleared: number;
+  /** Ardışık geçiş sayacı (kupa için; kayıpta 0). Sıradaki kat kupası = 10 + 2*winStreak. */
+  winStreak: number;
+};
+
+/** Aktif kat tahtasındaki bir tahmin satırı (marks GÖSTERİM: 'G'/'Y'/'X'/'?'). */
+export type TowerBoardGuess = { guess: string; marks: string; greenCount: number };
+
+/** Oyuncunun aktif katı (gizli kelime İÇERMEZ). */
+export type TowerActiveFloor = {
+  floorNo: number;
+  wordLength: number;
+  remainingMs: number;
+  twists: TowerTwist[];
+  guesses: TowerBoardGuess[];
+  solved1: boolean;
+  solved2: boolean;
+};
+
+export type TowerState = {
+  period: { id: number | null; endsAt: string | null };
+  run: TowerRun | null;
+  floors: TowerFloorConfig[];
+  active: TowerActiveFloor | null;
+  veri: number;
+};
+
+/** Bir kat geçilince/boss'ta kazanılan ödül. converted = boss item zaten
+ *  sahipti → Veri'ye çevrildi. */
+export type TowerReward = {
+  veri: number;
+  /** Kat geçişinde kazanılan Kupa (rating). */
+  kupa: number;
+  itemKind: 'protocol' | 'signal' | null;
+  itemId: string | null;
+  converted: boolean;
+};
+
+export type TowerOutcomeStatus =
+  | 'playing'
+  | 'floor_cleared'
+  | 'floor_failed'
+  | 'tower_cleared'
+  | 'eliminated';
+
+/** tower_guess / claim_tower_timeout sonucu. reveal yalnız kat sonuçlanınca. */
+export type TowerGuessOutcome = {
+  status: TowerOutcomeStatus;
+  /** Bu tahminin gösterim marks'ı ('playing'/win). Fail/timeout'ta null. */
+  marks: string | null;
+  /** 'double' twist'i ikinci kelime marks'ı (v2). */
+  marks2?: string | null;
+  greenCount: number;
+  /** 'playing'te kalan süre; sonuçlanınca null. */
+  remainingMs: number | null;
+  lives: number;
+  solved1?: boolean;
+  solved2?: boolean;
+  /** Kat geçilince ödül; aksi halde null. */
+  reward: TowerReward | null;
+  /** Kat sonuçlanınca (fail/timeout/clear) gizli kelime ifşası. */
+  reveal: { secret: string | null; secret2: string | null } | null;
+};
