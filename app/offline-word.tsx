@@ -360,7 +360,13 @@ export default function OfflineWordScreen() {
           {invalidMsg ? <Text style={styles.invalid}>{invalidMsg}</Text> : null}
           {notInPoolWord ? (
             <View style={styles.requestRow}>
-              <RequestWordButton word={notInPoolWord} />
+              <RequestWordButton
+                word={notInPoolWord}
+                onSent={() => {
+                  setEntry([]);
+                  setNotInPoolWord(null);
+                }}
+              />
             </View>
           ) : null}
         </View>

@@ -620,7 +620,13 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
           {notInPoolWord ? (
             <View style={styles.requestRow}>
-              <RequestWordButton word={notInPoolWord} />
+              <RequestWordButton
+                word={notInPoolWord}
+                onSent={() => {
+                  setEntry([]);
+                  setNotInPoolWord(null);
+                }}
+              />
             </View>
           ) : null}
         </View>
