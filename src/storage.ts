@@ -92,7 +92,11 @@ export type SeenKey =
   | 'signalDeck' // Sinyal destesi (Sinyallerim)
   | 'wordIntro' // Kelime Modu tanıtımı (çevrimiçi lobi)
   | 'soloWordIntro' // Tek oyunculu kelime modu tanıtımı
-  | 'towerIntro'; // Turnuva (Gizemli Kule) tanıtımı
+  | 'towerIntro' // Turnuva (Gizemli Kule) tanıtımı
+  | 'towerFog' // Kule yetenek: Sis (ilk karşılaşma)
+  | 'towerTimeThief' // Kule yetenek: Zaman Hırsızı
+  | 'towerCursed' // Kule yetenek: Lanetli Harf
+  | 'towerMemory'; // Kule yetenek: Hafıza Kaybı
 
 /** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
 const SEEN_KEYS: readonly SeenKey[] = [
@@ -108,6 +112,10 @@ const SEEN_KEYS: readonly SeenKey[] = [
   'wordIntro',
   'soloWordIntro',
   'towerIntro',
+  'towerFog',
+  'towerTimeThief',
+  'towerCursed',
+  'towerMemory',
 ];
 
 /** Bayrak okundu mu? AsyncStorage'dan gelene kadar çağıran beklemeli

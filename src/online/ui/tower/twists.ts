@@ -3,27 +3,37 @@ import { getProtocol } from '@/protocols/catalog';
 import { getSignal } from '@/signals/catalog';
 import { colors } from '@/ui/theme';
 
-/** İstemci twist kataloğu — YALNIZ görsel (rozet/ipucu). Bozma mantığı sunucuda.
- *  emoji + kısa ad + tek satır açıklama + vurgu rengi. */
+/** İstemci yetenek kataloğu — rozet + ilk-karşılaşma modalı açıklaması için.
+ *  Mantık (sis/zaman/lanetli) sunucuda; hafıza kaybı istemci-taraflı. */
 export const TOWER_TWISTS: Record<
   TowerTwistKind,
   { emoji: string; name: string; desc: string; color: string }
 > = {
-  fog: { emoji: '🌫️', name: 'Sis', desc: 'Geri bildirimin bir kısmı gizlenir', color: colors.dim },
-  time_thief: { emoji: '⏳', name: 'Zaman Hırsızı', desc: 'Yanlış tahminde süre çalınır', color: colors.amber },
-  shuffle: { emoji: '🔀', name: 'Karıştırıcı', desc: 'Renkler yerinden oynar', color: colors.violet },
-  cursed: { emoji: '🚫', name: 'Lanetli Harf', desc: 'Bir harf zaman cezası getirir', color: colors.danger },
-  blind: { emoji: '👁️', name: 'Kör Tur', desc: 'Bir tahminde geri bildirim yok', color: colors.dim },
-  liar: { emoji: '🎭', name: 'Yalancı', desc: 'Bir geri bildirim yalan olabilir', color: colors.violet },
-  lock: { emoji: '🔒', name: 'Kilit', desc: 'Bir hane sona dek gizli kalır', color: colors.teal },
-  double: { emoji: '👥', name: 'Çift Sır', desc: 'İki kelimeyi de çöz', color: colors.gold },
+  fog: {
+    emoji: '🌫️',
+    name: 'Sis',
+    desc: 'Kelimede olan harflerin yeşil mi sarı mı olduğu gizlenir; kelimede olmayan (gri) haneler normal görünür.',
+    color: colors.violet,
+  },
+  time_thief: {
+    emoji: '⏳',
+    name: 'Zaman Hırsızı',
+    desc: 'Her yanlış tahminde, kelimede olmayan (gri) her hane için sürenden 1 saniye gider.',
+    color: colors.amber,
+  },
+  cursed: {
+    emoji: '🚫',
+    name: 'Lanetli Harf',
+    desc: 'Kelimede olmayan 1-2 harf lanetlidir (baştan gösterilir). Tahminde kullanırsan her seferinde 3 saniye ceza.',
+    color: colors.danger,
+  },
+  memory: {
+    emoji: '🧠',
+    name: 'Hafıza Kaybı',
+    desc: 'Sorgu listesi yok! Yaptığın her tahmin 3 saniye sonra kaybolur; sonuçları aklında tutmalısın.',
+    color: colors.teal,
+  },
 };
-
-/** Lanetli Harf twist'inin params.letter'ı (klavyede işaretlemek için). */
-export function cursedLetter(params: Record<string, number | string> | undefined): string | null {
-  const l = params?.letter;
-  return typeof l === 'string' && l.length > 0 ? l : null;
-}
 
 /** Boss ödülü (protokol/sinyal) için gösterilecek ad. */
 export function towerItemLabel(kind: 'protocol' | 'signal', id: string): string {
