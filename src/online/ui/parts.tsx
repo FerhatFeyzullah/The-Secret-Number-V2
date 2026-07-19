@@ -50,12 +50,15 @@ export function LobbyHeader({
  *  Tasarımdaki kart/giriş ikonu emblemlerinin RN karşılığı. */
 export function Emblem({
   icon,
+  iconNode,
   accent,
   size = 66,
   iconSize = 28,
   fillIcon = false,
 }: {
-  icon: FeatherName;
+  icon?: FeatherName;
+  /** Feather yerine özel bir ikon (ör. SVG logo). Verilirse `icon` yok sayılır. */
+  iconNode?: ReactNode;
   accent: string;
   size?: number;
   iconSize?: number;
@@ -80,12 +83,15 @@ export function Emblem({
           { borderRadius: size * 0.2, borderColor: withAlpha(accent, 0.22) },
         ]}
       />
-      <Feather
-        name={icon}
-        size={iconSize}
-        color={accent}
-        style={fillIcon ? { textShadowColor: accent, textShadowRadius: 8 } : undefined}
-      />
+      {iconNode ??
+        (icon ? (
+          <Feather
+            name={icon}
+            size={iconSize}
+            color={accent}
+            style={fillIcon ? { textShadowColor: accent, textShadowRadius: 8 } : undefined}
+          />
+        ) : null)}
     </View>
   );
 }
@@ -94,6 +100,7 @@ export function Emblem({
  *  İsteğe bağlı `children` (ör. çevrimiçi rozeti/etiketler) başlığın altına eklenir. */
 export function ChoiceCard({
   icon,
+  iconNode,
   accent,
   title,
   subtitle,
@@ -103,7 +110,9 @@ export function ChoiceCard({
   hero = false,
   children,
 }: {
-  icon: FeatherName;
+  icon?: FeatherName;
+  /** Feather yerine özel ikon (ör. SVG logo). */
+  iconNode?: ReactNode;
   accent: string;
   title: string;
   /** Verilmezse alt açıklama satırı çizilmez (ör. lobi mod kartları — sade). */
@@ -130,7 +139,7 @@ export function ChoiceCard({
         },
         pressed && styles.cardPressed,
       ]}>
-      <Emblem icon={icon} accent={accent} size={66} iconSize={26} />
+      <Emblem icon={icon} iconNode={iconNode} accent={accent} size={66} iconSize={26} />
       <View style={styles.cardBody}>
         <Text style={[styles.cardTitle, hero && styles.cardTitleHero, { color: colors.text }]}>
           {title}

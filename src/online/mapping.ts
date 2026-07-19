@@ -9,6 +9,13 @@ import type {
   OnlineGuess,
   PresenceInfo,
   ProtocolUse,
+  TowerBossItem,
+  TowerGuessOutcome,
+  TowerOutcomeStatus,
+  TowerReward,
+  TowerRunStatus,
+  TowerState,
+  TowerTwist,
 } from './types';
 
 /** matches tablosundan/realtime'dan gelen ham satır (snake_case). */
@@ -248,4 +255,133 @@ export function feedbackToGuessResult(feedback: GuessFeedback): GuessResult {
     case 'win':
       return { status: 'win' };
   }
+}
+
+// ─── Turnuva: Gizemli Kule (RPC jsonb → domain) ──────────────────────────────
+
+/** get_tower_state / enter_tower / start_tower_floor / claim_tower_timeout jsonb. */
+export type TowerStatePayload = {
+  period?: { id: number | null; ends_at: string | null } | null;
+  run?: {
+    current_floor: number;
+    lives: number;
+    status: string;
+    floors_cleared: number;
+    win_streak?: number;
+  } | null;
+  floors?: {
+    floor_no: number;
+    word_length: number;
+    clock_ms: number;
+    twists: TowerTwist[] | null;
+    veri_reward: number;
+    is_boss: boolean;
+    item_preview: { kind: string; id: string } | null;
+  }[] | null;
+  active?: {
+    floor_no: number;
+    word_length: number;
+    remaining_ms: number;
+    twists: TowerTwist[] | null;
+    guesses: { guess: string; marks: string; green_count: number }[] | null;
+    solved1: boolean;
+    solved2: boolean;
+  } | null;
+  veri?: number;
+};
+
+/** tower_guess sonucu (ve claim_tower_timeout'un fail dönüşü). */
+export type TowerOutcomePayload = {
+  status: string;
+  marks?: string | null;
+  marks2?: string | null;
+  green_count?: number | null;
+  remaining_ms?: number | null;
+  lives?: number | null;
+  solved1?: boolean;
+  solved2?: boolean;
+  reward?: {
+    veri: number;
+    kupa?: number;
+    item_kind: string | null;
+    item_id: string | null;
+    converted: boolean;
+  } | null;
+  reveal?: { secret: string | null; secret2: string | null } | null;
+};
+
+function mapBossItem(it: { kind: string; id: string } | null | undefined): TowerBossItem | null {
+  if (!it || (it.kind !== 'protocol' && it.kind !== 'signal')) return null;
+  return { kind: it.kind, id: it.id };
+}
+
+export function mapTowerState(p: TowerStatePayload): TowerState {
+  return {
+    period: { id: p.period?.id ?? null, endsAt: p.period?.ends_at ?? null },
+    run: p.run
+      ? {
+          currentFloor: Number(p.run.current_floor),
+          lives: Number(p.run.lives),
+          status: p.run.status as TowerRunStatus,
+          floorsCleared: Number(p.run.floors_cleared ?? 0),
+          winStreak: Number(p.run.win_streak ?? 0),
+        }
+      : null,
+    floors: (p.floors ?? []).map((f) => ({
+      floorNo: Number(f.floor_no),
+      wordLength: Number(f.word_length),
+      clockMs: Number(f.clock_ms),
+      twists: f.twists ?? [],
+      veriReward: Number(f.veri_reward ?? 0),
+      isBoss: !!f.is_boss,
+      itemPreview: mapBossItem(f.item_preview),
+    })),
+    active: p.active
+      ? {
+          floorNo: Number(p.active.floor_no),
+          wordLength: Number(p.active.word_length),
+          remainingMs: Number(p.active.remaining_ms ?? 0),
+          twists: p.active.twists ?? [],
+          guesses: (p.active.guesses ?? []).map((g) => ({
+            guess: g.guess,
+            marks: g.marks,
+            greenCount: Number(g.green_count ?? 0),
+          })),
+          solved1: !!p.active.solved1,
+          solved2: !!p.active.solved2,
+        }
+      : null,
+    veri: Number(p.veri ?? 0),
+  };
+}
+
+function mapTowerReward(
+  r: TowerOutcomePayload['reward'],
+): TowerReward | null {
+  if (!r) return null;
+  const kind = r.item_kind === 'protocol' || r.item_kind === 'signal' ? r.item_kind : null;
+  return {
+    veri: Number(r.veri ?? 0),
+    kupa: Number(r.kupa ?? 0),
+    itemKind: kind,
+    itemId: kind ? r.item_id : null,
+    converted: !!r.converted,
+  };
+}
+
+export function mapTowerOutcome(p: TowerOutcomePayload): TowerGuessOutcome {
+  return {
+    status: p.status as TowerOutcomeStatus,
+    marks: p.marks ?? null,
+    marks2: p.marks2 ?? null,
+    greenCount: Number(p.green_count ?? 0),
+    remainingMs: p.remaining_ms == null ? null : Number(p.remaining_ms),
+    lives: Number(p.lives ?? 0),
+    solved1: p.solved1,
+    solved2: p.solved2,
+    reward: mapTowerReward(p.reward),
+    reveal: p.reveal
+      ? { secret: p.reveal.secret ?? null, secret2: p.reveal.secret2 ?? null }
+      : null,
+  };
 }

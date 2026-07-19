@@ -91,7 +91,8 @@ export type SeenKey =
   | 'storeIntro' // Sinyal mağazası
   | 'signalDeck' // Sinyal destesi (Sinyallerim)
   | 'wordIntro' // Kelime Modu tanıtımı (çevrimiçi lobi)
-  | 'soloWordIntro'; // Tek oyunculu kelime modu tanıtımı
+  | 'soloWordIntro' // Tek oyunculu kelime modu tanıtımı
+  | 'towerIntro'; // Turnuva (Gizemli Kule) tanıtımı
 
 /** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
 const SEEN_KEYS: readonly SeenKey[] = [
@@ -106,6 +107,7 @@ const SEEN_KEYS: readonly SeenKey[] = [
   'signalDeck',
   'wordIntro',
   'soloWordIntro',
+  'towerIntro',
 ];
 
 /** Bayrak okundu mu? AsyncStorage'dan gelene kadar çağıran beklemeli
