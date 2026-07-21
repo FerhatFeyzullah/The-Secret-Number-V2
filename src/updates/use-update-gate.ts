@@ -8,34 +8,47 @@ export type UpdateGate = {
   /** İndirme ilerlemesi 0..1 (yalnızca `downloading`/`ready` fazında anlamlı;
    *  native ilerleme olayı gelmezse `undefined` → UI belirsiz çubuk gösterir). */
   progress: number | undefined;
-  /** "Güncelle" → indirmeyi başlatır. */
-  startDownload: () => void;
-  /** Hata ekranında "Tekrar Dene" → indirmeyi yeniden dener. */
+  /** Hata ekranında "Tekrar Dene" → indirmeyi yeniden dener (otomatik akış hata
+   *  verdiyse elle yeniden başlatmak için). */
   retry: () => void;
-  /** Hata ekranında "Şimdilik Geç" → overlay kapanır, menü açılır. */
+  /** Hata ekranında "Şimdilik Geç" → overlay kapanır, menü açılır (fail-open). */
   skip: () => void;
-  /** "Yeniden Başlat" → yeni sürümü yükleyip uygulamayı taze başlatır. */
-  restart: () => void;
 };
 
 /**
- * Açılışta OTA güncellemesini kontrol eden ve akışı süren kapı (gate).
+ * Açılışta OTA güncellemesini kontrol eden ve akışı OTOMATİK süren kapı (gate).
  *
  * - Mount'ta (intro ile eşzamanlı) arka planda `checkForUpdateAsync` çalışır.
- * - Güncelleme yoksa VEYA kontrol başarısızsa → `none` (fail-open, menü açılır).
+ * - Güncelleme VARSA: kullanıcı "Güncelle" beklemeden OTOMATİK indirilir; indirme
+ *   bitince OTOMATİK `reloadAsync()` ile yeni sürüme geçilir. Kullanıcı yalnızca
+ *   bilgilendirme ekranını (indiriliyor → yeniden başlatılıyor) görür.
+ * - Güncelleme YOKSA VEYA kontrol başarısızsa → `none` (fail-open, menü açılır).
+ * - İndirme koparsa → `error` (elle Tekrar Dene / Şimdilik Geç → fail-open).
  * - Dev / Expo Go'da (`Updates.isEnabled` false) hiç devreye girmez → `none`.
- * - İndirme kullanıcı "Güncelle"ye basınca başlar; ilerleme `useUpdates()`ten okunur.
- * - Bitince `ready`; kullanıcı "Yeniden Başlat"a basınca `reloadAsync()`.
  */
 export function useUpdateGate(): UpdateGate {
   const [state, dispatch] = useReducer(reducer, initialState);
   const startedRef = useRef(false);
+  const restartedRef = useRef(false);
 
-  // Native indirme ilerlemesi (expo-updates olaylarından) — imperatif
+  // Native indirme ilerlemesi (expo-updates olaylarından) — otomatik
   // fetchUpdateAsync sırasında güncellenir.
   const { downloadProgress, isDownloading } = Updates.useUpdates();
 
-  // Açılışta tek sefer kontrol.
+  const startDownload = useCallback(() => {
+    dispatch({ type: 'DOWNLOAD_STARTED' });
+    Updates.fetchUpdateAsync()
+      .then(() => dispatch({ type: 'DOWNLOAD_DONE' }))
+      // İndirme yarıda koptu → error (Tekrar Dene / Şimdilik Geç).
+      .catch(() => dispatch({ type: 'DOWNLOAD_FAILED' }));
+  }, []);
+
+  const restart = useCallback(() => {
+    // reloadAsync başarısız olursa (nadiren) kullanıcı elle yeniden açar.
+    Updates.reloadAsync().catch(() => {});
+  }, []);
+
+  // Açılışta tek sefer kontrol → güncelleme varsa OTOMATİK indirmeyi başlat.
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -48,27 +61,24 @@ export function useUpdateGate(): UpdateGate {
 
     dispatch({ type: 'CHECK_STARTED' });
     Updates.checkForUpdateAsync()
-      .then((res) =>
-        dispatch(res.isAvailable ? { type: 'UPDATE_AVAILABLE' } : { type: 'NO_UPDATE' }),
-      )
+      .then((res) => {
+        // Güncelleme varsa "Güncelle" beklemeden HEMEN indir.
+        if (res.isAvailable) startDownload();
+        else dispatch({ type: 'NO_UPDATE' });
+      })
       // Ağ yok / sunucuya ulaşılamadı → fail-open: kilitleme, menüye al.
       .catch(() => dispatch({ type: 'NO_UPDATE' }));
-  }, []);
+  }, [startDownload]);
 
-  const startDownload = useCallback(() => {
-    dispatch({ type: 'DOWNLOAD_STARTED' });
-    Updates.fetchUpdateAsync()
-      .then(() => dispatch({ type: 'DOWNLOAD_DONE' }))
-      // İndirme yarıda koptu → error (Tekrar Dene / Şimdilik Geç).
-      .catch(() => dispatch({ type: 'DOWNLOAD_FAILED' }));
-  }, []);
+  // İndirme bitince (ready) OTOMATİK yeniden başlat → yeni sürüme geç. Tek sefer.
+  useEffect(() => {
+    if (state.phase === 'ready' && !restartedRef.current) {
+      restartedRef.current = true;
+      restart();
+    }
+  }, [state.phase, restart]);
 
   const skip = useCallback(() => dispatch({ type: 'SKIP' }), []);
-
-  const restart = useCallback(() => {
-    // reloadAsync başarısız olursa (nadiren) kullanıcı elle yeniden açar.
-    Updates.reloadAsync().catch(() => {});
-  }, []);
 
   return {
     phase: state.phase,
@@ -78,9 +88,7 @@ export function useUpdateGate(): UpdateGate {
         : isDownloading
           ? downloadProgress
           : undefined,
-    startDownload,
     retry: startDownload,
     skip,
-    restart,
   };
 }

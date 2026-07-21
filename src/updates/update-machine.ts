@@ -1,10 +1,12 @@
 /**
  * OTA güncelleme akışının SAF durum makinesi (expo-updates'ten bağımsız).
  *
- * Akış (kullanıcı kararlarına göre):
- *   idle → checking → (available → downloading → ready → [reload])
+ * Akış (OTOMATİK — hook sürer, kullanıcı tıklaması beklenmez):
+ *   idle → checking → downloading → ready → [otomatik reload]
  *                   \→ none  (güncelleme yok / kontrol başarısız → fail-open, menü açılır)
  *   downloading → error (indirme koptu) → downloading (tekrar dene) | none (şimdilik geç)
+ * (available fazı artık atlanır: güncelleme bulunur bulunmaz doğrudan indirilir;
+ *  ready'ye ulaşınca hook otomatik reloadAsync çağırır.)
  *
  * Yan etki YOK → jest ile doğrudan test edilebilir. Hook (use-update-gate) bu
  * makineyi expo-updates çağrılarına bağlar.
@@ -13,9 +15,9 @@
 export type UpdatePhase =
   | 'idle' // henüz başlamadı
   | 'checking' // checkForUpdateAsync sürüyor (kullanıcı bir şey görmez, menü açık)
-  | 'available' // güncelleme bulundu, kullanıcı "Güncelle"ye basmayı bekliyor
-  | 'downloading' // fetchUpdateAsync sürüyor
-  | 'ready' // indirildi, "Yeniden Başlat" bekleniyor
+  | 'available' // güncelleme bulundu (geçiş — hemen otomatik indirmeye geçilir)
+  | 'downloading' // fetchUpdateAsync sürüyor (otomatik)
+  | 'ready' // indirildi → hook otomatik reloadAsync çağırır (yeniden başlatılıyor)
   | 'error' // indirme başarısız → Tekrar Dene / Şimdilik Geç
   | 'none'; // güncelleme yok ya da atlandı → overlay yok, menü açılır
 

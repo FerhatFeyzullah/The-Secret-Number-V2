@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth';
-import { getMyRank, OnlineError, setSignalDeck, type MyRank } from '@/online';
+import { OnlineError, setSignalDeck, useRank } from '@/online';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { Screen, TAB_EDGES } from '@/ui/screen';
@@ -78,9 +78,9 @@ const SUBTABS: { key: Tab; label: string; icon: keyof typeof Feather.glyphMap }[
 export function DonanimScreen() {
   const router = useRouter();
   const { session } = useAuth();
-  const [data, setData] = useState<MyRank | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Ortak rank store — TEK doğruluk kaynağı (bkz. RankProvider). Donanım kendi
+  // kopyasını tutmaz: deste/satın alma patch'ler → tüm yüzeyler anında güncel.
+  const { rank: data, error: rankError, refresh, patch } = useRank();
   const [tab, setTab] = useState<Tab>('emoji');
 
   // Deste uyarıları (dolu / en az 1 / kayıt hatası).
@@ -98,42 +98,16 @@ export function DonanimScreen() {
     [],
   );
 
-  const load = useCallback(async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      setData(await getMyRank());
-    } catch (e) {
-      setError(e instanceof OnlineError ? e.message : 'Donanım yüklenemedi.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const refresh = useCallback(async () => {
-    try {
-      setData(await getMyRank());
-    } catch {
-      // Sessiz: mevcut veriyi koru.
-    }
-  }, []);
-
-  // İlk odakta spinner'lı yükle; sonraki odaklarda sessiz tazele (veri güncel kalsın).
-  const loadedRef = useRef(false);
+  // Route'a dönünce tazele (maç/ayar dönüşü). Pager swipe'ında zaten patch ile güncel.
   useFocusEffect(
     useCallback(() => {
-      if (!session) {
-        setLoading(false);
-        return;
-      }
-      if (!loadedRef.current) {
-        loadedRef.current = true;
-        void load();
-      } else {
-        void refresh();
-      }
-    }, [session, load, refresh]),
+      if (session) void refresh();
+    }, [session, refresh]),
   );
+
+  // Rank henüz gelmediyse: hata yoksa spinner, hata varsa tekrar-dene.
+  const loading = session && !data && !rankError;
+  const loadFailed = session && !data && rankError;
 
   // İlk-kez tanıtım: aktif sekmeye göre, YALNIZCA sekme odaktayken (lazy mount'ta
   // arka planda açılmasın). "?" butonu her zaman açar.
@@ -169,15 +143,15 @@ export function DonanimScreen() {
   const applyDeck = useCallback(
     async (next: string[]) => {
       const prev = data?.signalDeck ?? [];
-      setData((d) => (d ? { ...d, signalDeck: next } : d));
+      patch({ signalDeck: next });
       try {
         await setSignalDeck(next);
       } catch (e) {
-        setData((d) => (d ? { ...d, signalDeck: prev } : d));
+        patch({ signalDeck: prev });
         flash(errMsg(e));
       }
     },
-    [data, flash],
+    [data, patch, flash],
   );
   const toggleSignal = useCallback(
     (id: string) => {
@@ -199,9 +173,12 @@ export function DonanimScreen() {
     [data, applyDeck, flash],
   );
 
-  const onBought = useCallback((v: number, owned: string[]) => {
-    setData((d) => (d ? { ...d, veri: v, owned } : d));
-  }, []);
+  const onBought = useCallback(
+    (v: number, owned: string[]) => {
+      patch({ veri: v, owned });
+    },
+    [patch],
+  );
 
   let body;
   if (!session) {
@@ -224,12 +201,12 @@ export function DonanimScreen() {
         <ActivityIndicator color={colors.cyan} />
       </View>
     );
-  } else if (error) {
+  } else if (loadFailed) {
     body = (
       <View style={styles.centered}>
         <Feather name="alert-circle" size={24} color={colors.danger} />
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable onPress={() => void load()} style={styles.signInBtn}>
+        <Text style={styles.errorText}>Donanım yüklenemedi.</Text>
+        <Pressable onPress={() => void refresh()} style={styles.signInBtn}>
           <Text style={styles.signInText}>Tekrar Dene</Text>
         </Pressable>
       </View>
