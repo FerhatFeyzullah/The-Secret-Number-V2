@@ -94,7 +94,7 @@ export function LeagueMapModal({
                           backgroundColor: isCurrent ? withAlpha(l.color, 0.14) : 'rgba(0,0,0,0.18)',
                         },
                       ]}>
-                      <LeagueIcon league={l.key} size={34} animated={isCurrent} />
+                      <LeagueIcon league={l.key} size={46} animated />
                       <View style={styles.rowText}>
                         <Text style={[styles.rowName, { color: l.color }]} numberOfLines={1}>
                           {l.name}
