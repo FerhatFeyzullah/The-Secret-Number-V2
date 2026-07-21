@@ -9,7 +9,7 @@ import { LeagueIcon } from './icons';
  *  ikon (dar yerler/liste). */
 export function LeagueBadge({
   rating,
-  size = 20,
+  size = 26,
   showName = true,
   animated = false,
 }: {
