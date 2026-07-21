@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { opponentKnowledge, parseWord, upperTr, type LetterMark } from '@/game';
+import { knownGreenLetters, opponentKnowledge, parseWord, upperTr, type LetterMark } from '@/game';
 import {
   getMatchReveal,
   getMyMarks,
@@ -197,6 +197,12 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     }
     return map;
   }, [myGuesses, myMarks]);
+
+  // Bilinen yeşiller: input'ta boş pozisyonlara silik ipucu (KENDİ marks'ımdan).
+  const knownGreens = useMemo(
+    () => knownGreenLetters(myGuesses.map((g) => ({ word: g.digits, marks: myMarks[g.id] ?? '' })), wordLength),
+    [myGuesses, myMarks, wordLength],
+  );
 
   // Yeniden bağlanma/ekrana giriş: eksik kalan KENDİ tahminlerimin renklerini
   // sunucudan çek (get_my_marks guesser=auth.uid() ile filtreli → rakibinki
@@ -603,6 +609,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
             {Array.from({ length: wordLength }).map((_, i) => {
               const letter = entry[i];
               const filled = letter !== undefined;
+              const ghost = !filled ? knownGreens[i] : undefined;
               return (
                 <View
                   key={i}
@@ -612,7 +619,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
                     filled && styles.entryTileFilled,
                     locked && styles.entryTileLocked,
                   ]}>
-                  {filled ? <Text style={styles.entryTileText}>{upperTr(letter)}</Text> : null}
+                  {filled ? (
+                    <Text style={styles.entryTileText}>{upperTr(letter)}</Text>
+                  ) : ghost ? (
+                    <Text style={[styles.entryTileText, styles.entryTileGhost]}>{upperTr(ghost)}</Text>
+                  ) : null}
                 </View>
               );
             })}
@@ -1041,6 +1052,11 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '700',
     fontFamily: mono,
+  },
+  // Bilinen yeşil harfin silik ipucu — dikkat dağıtmayacak kadar soluk.
+  entryTileGhost: {
+    color: colors.success,
+    opacity: 0.32,
   },
   actionError: {
     color: colors.danger,

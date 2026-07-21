@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { normalizeTr, parseWord, upperTr, wordMarks, type LetterMark } from '@/game';
+import { knownGreenLetters, normalizeTr, parseWord, upperTr, wordMarks, type LetterMark } from '@/game';
 import { isOnline } from '@/net';
 import { fetchWordPool } from '@/online/word-pool';
 import { WordOrbs } from '@/online/ui/word/orbs';
@@ -193,6 +193,9 @@ export default function OfflineWordScreen() {
     return map;
   }, [history]);
 
+  // Bilinen yeşiller: input'ta boş pozisyonlara silik ipucu olarak gösterilir.
+  const knownGreens = useMemo(() => knownGreenLetters(history, wordLength), [history, wordLength]);
+
   const addLetter = useCallback(
     (k: string) => {
       if (phase !== 'playing') return;
@@ -344,6 +347,7 @@ export default function OfflineWordScreen() {
             {Array.from({ length: wordLength }).map((_, i) => {
               const letter = entry[i];
               const filled = letter !== undefined;
+              const ghost = !filled ? knownGreens[i] : undefined;
               return (
                 <View
                   key={i}
@@ -352,7 +356,11 @@ export default function OfflineWordScreen() {
                     { width: entryTileW, height: Math.round(entryTileW * (50 / 44)) },
                     filled && styles.entryTileFilled,
                   ]}>
-                  {filled ? <Text style={styles.entryTileText}>{upperTr(letter)}</Text> : null}
+                  {filled ? (
+                    <Text style={styles.entryTileText}>{upperTr(letter)}</Text>
+                  ) : ghost ? (
+                    <Text style={[styles.entryTileText, styles.entryTileGhost]}>{upperTr(ghost)}</Text>
+                  ) : null}
                 </View>
               );
             })}
@@ -571,6 +579,11 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '700',
     fontFamily: mono,
+  },
+  // Bilinen yeşil harfin silik ipucu — dikkat dağıtmayacak kadar soluk.
+  entryTileGhost: {
+    color: colors.success,
+    opacity: 0.32,
   },
   invalid: {
     color: colors.danger,

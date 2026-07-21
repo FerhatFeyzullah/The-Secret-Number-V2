@@ -1,6 +1,7 @@
 import { getContentType } from './index';
 import {
   evaluateWordGuess,
+  knownGreenLetters,
   normalizeTr,
   opponentKnowledge,
   parseWord,
@@ -211,6 +212,63 @@ describe('opponentKnowledge — birikimli yeşil/sarı bilgi durumu (multiset)',
 
   it('uzunluğu uyuşmayan tahmin atlanır (çökme yok)', () => {
     expect(opponentKnowledge('kalp', ['abc'])).toEqual({ green: 0, yellow: 0 });
+  });
+});
+
+describe('knownGreenLetters — input silik ipucu için pozisyon-bazlı yeşiller', () => {
+  it('tek tahmindeki yeşiller doğru pozisyonlarda döner', () => {
+    // secret "kalp", guess "kelp": k(G) e(X) l(Y-ish→burada marks verilmiş) p(G)
+    expect(knownGreenLetters([{ word: 'kelp', marks: 'GXXG' }], 4)).toEqual([
+      'k',
+      undefined,
+      undefined,
+      'p',
+    ]);
+  });
+
+  it('marks dizi olarak da kabul edilir (LetterMark[])', () => {
+    expect(knownGreenLetters([{ word: 'kalp', marks: ['G', 'X', 'X', 'X'] }], 4)).toEqual([
+      'k',
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('birden çok tahminin yeşilleri birleşir (union)', () => {
+    const greens = knownGreenLetters(
+      [
+        { word: 'kelp', marks: 'GXXX' },
+        { word: 'salp', marks: 'XXXG' },
+      ],
+      4,
+    );
+    expect(greens).toEqual(['k', undefined, undefined, 'p']);
+  });
+
+  it('hiç yeşil yoksa hepsi undefined', () => {
+    expect(knownGreenLetters([{ word: 'abcd', marks: 'XXXX' }], 4)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(knownGreenLetters([], 5)).toEqual([undefined, undefined, undefined, undefined, undefined]);
+  });
+
+  it('bir konum bir kez yeşilse sabit kalır (ilk bulunan korunur)', () => {
+    const greens = knownGreenLetters(
+      [
+        { word: 'kelp', marks: 'GXXX' },
+        { word: 'kant', marks: 'GXXX' },
+      ],
+      4,
+    );
+    expect(greens[0]).toBe('k');
+  });
+
+  it('Türkçe harfler (ş/ğ/ı) doğru indekslenir', () => {
+    expect(knownGreenLetters([{ word: 'şığ', marks: 'GXG' }], 3)).toEqual(['ş', undefined, 'ğ']);
   });
 });
 
