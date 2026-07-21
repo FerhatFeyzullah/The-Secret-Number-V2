@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from
 
 import { useAuth, useProfile } from '@/auth';
 import { getToggle, setToggle } from '@/storage';
+import { UpdateCheckButton } from '@/updates/update-check-button';
 import { AdminWordPanel } from '@/ui/admin-word-panel';
 import { appVersionLabel } from '@/ui/app-version';
 import { GlassButton, GlassCard } from '@/ui/glass';
@@ -155,6 +156,11 @@ export default function SettingsScreen() {
               />
             </>
           )}
+        </GlassCard>
+
+        <GlassCard>
+          <Text style={styles.sectionTitle}>Uygulama</Text>
+          <UpdateCheckButton />
         </GlassCard>
 
         <Pressable onPress={onVersionTap} hitSlop={8}>
