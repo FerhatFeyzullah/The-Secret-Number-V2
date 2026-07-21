@@ -206,6 +206,32 @@ export function opponentKnowledge(
 }
 
 /**
+ * Oyuncunun KENDİ geçmiş tahminlerinden pozisyon-bazlı bilinen YEŞİL harfleri türetir
+ * (input'ta silik ipucu göstermek için). Girdi `rows`: her satır { word, marks } —
+ * `marks` bir string ('GYXX…') ya da LetterMark dizisi olabilir; ikisi de `[i]` ile
+ * indeklenir. GİZLİ KELİME GEREKMEZ: işaretler zaten oyun/sunucu tarafından verilmiş
+ * (online modda istemcide gizli kelime yoktur, o yüzden yeniden hesaplanamaz).
+ *
+ * Dönüş: `length` uzunluğunda dizi; her pozisyonda o konumda EN AZ BİR tahminde 'G'
+ * görülmüş harf, yoksa `undefined`. Yeşil işaretler dürüst olduğundan aynı konumdaki
+ * harf hep aynıdır; ilk bulunan yeşil sabitlenir.
+ */
+export function knownGreenLetters(
+  rows: readonly { word: string; marks: string | readonly string[] }[],
+  length: number,
+): (string | undefined)[] {
+  const greens: (string | undefined)[] = new Array(length).fill(undefined);
+  for (const row of rows) {
+    const letters = Array.from(row.word);
+    for (let i = 0; i < length; i++) {
+      if (greens[i] !== undefined) continue;
+      if (row.marks[i] === 'G' && letters[i] !== undefined) greens[i] = letters[i];
+    }
+  }
+  return greens;
+}
+
+/**
  * Offline/test yedeği: gerçek gizli havuz sunucudadır (secret_words) ve
  * oyuncu kendi kelimesini SEÇER — generate yalnız offline mod / test için
  * küçük, yaygın bir örneklemden çeker. (Hepsi secret_words havuzundandır.)
