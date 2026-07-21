@@ -64,7 +64,7 @@ function Pod({ entry, place }: { entry: LeaderboardEntry | undefined; place: 1 |
       <Text style={styles.podName} numberOfLines={1}>
         {displayName(entry.username)}
       </Text>
-      <LeagueBadge rating={entry.rating} size={20} showName={false} />
+      <LeagueBadge rating={entry.rating} size={32} showName={false} animated />
       <Rating value={entry.rating} />
       <View style={[styles.podBase, { height: baseH }, place === 1 && styles.podBaseFirst]}>
         <Text style={[styles.podBaseNum, place === 1 && { color: colors.gold }]}>{place}</Text>
@@ -185,7 +185,7 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
                     <Text style={styles.rowName} numberOfLines={1}>
                       {displayName(item.username)}
                     </Text>
-                    <LeagueBadge rating={item.rating} size={20} showName={false} />
+                    <LeagueBadge rating={item.rating} size={30} showName={false} animated />
                     <Rating value={item.rating} />
                   </View>
                 )}
@@ -210,7 +210,7 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
                       onPress={() => setLeagueMapOpen(true)}
                       hitSlop={6}
                       accessibilityLabel="Lig haritası">
-                      <LeagueBadge rating={me.rating} size={20} showName={false} />
+                      <LeagueBadge rating={me.rating} size={32} showName={false} animated />
                     </Pressable>
                     <Rating value={me.rating} />
                   </View>
