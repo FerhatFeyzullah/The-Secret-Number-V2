@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/auth';
-import { getMyRank, OnlineError, unlockSignal, type MyRank } from '@/online';
+import { OnlineError, unlockSignal, useRank } from '@/online';
 import { SIGNALS, type Signal } from '@/signals/catalog';
 import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
@@ -49,46 +49,24 @@ const fmtVeri = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String
 export function StoreScreen() {
   const router = useRouter();
   const { session } = useAuth();
-  const [data, setData] = useState<MyRank | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Ortak rank store — TEK doğruluk kaynağı (bkz. RankProvider). Mağaza artık kendi
+  // kopyasını tutmaz: satın alma patch'ler → Ana Ekran/Donanım ANINDA görür.
+  const { rank: data, error: rankError, refresh, patch } = useRank();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // İlk yükleme (spinner'lı).
-  const load = useCallback(async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      setData(await getMyRank());
-    } catch (e) {
-      setError(e instanceof OnlineError ? e.message : 'Mağaza yüklenemedi.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Sessiz tazeleme (spinner yok) — sekmeye her dönüşte Veri/sahiplik güncel kalsın.
-  const refresh = useCallback(async () => {
-    try {
-      setData(await getMyRank());
-    } catch {
-      // Sessiz: mevcut veriyi koru.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (session) void load();
-    else setLoading(false);
-  }, [session, load]);
-
+  // Route'a dönünce tazele (maç/ayar dönüşü). Pager swipe'ında zaten patch ile güncel.
   useFocusEffect(
     useCallback(() => {
       if (session) void refresh();
     }, [session, refresh]),
   );
+
+  // Rank henüz gelmediyse: hata yoksa spinner, hata varsa tekrar-dene.
+  const loading = session && !data && !rankError;
+  const loadFailed = session && !data && rankError;
 
   // İlk-kez tanıtım (flicker-safe): bayrak gelene kadar açılmaz.
   const [introVisible, setIntroVisible] = useState(false);
@@ -126,13 +104,13 @@ export function StoreScreen() {
     setActionError(null);
     try {
       const res = await unlockSignal(selected.id);
-      setData((d) => (d ? { ...d, veri: res.veri, ownedSignals: res.ownedSignals } : d));
+      patch({ veri: res.veri, ownedSignals: res.ownedSignals });
     } catch (e) {
       setActionError(errMsg(e));
     } finally {
       setBusy(false);
     }
-  }, [selected]);
+  }, [selected, patch]);
 
   const header = (
     <View style={styles.header}>
@@ -175,12 +153,12 @@ export function StoreScreen() {
         <ActivityIndicator color={colors.cyan} />
       </View>
     );
-  } else if (error) {
+  } else if (loadFailed) {
     body = (
       <View style={styles.centered}>
         <Feather name="alert-circle" size={24} color={colors.danger} />
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable onPress={() => void load()} style={styles.signInBtn}>
+        <Text style={styles.errorText}>Mağaza yüklenemedi.</Text>
+        <Pressable onPress={() => void refresh()} style={styles.signInBtn}>
           <Text style={styles.signInText}>Tekrar Dene</Text>
         </Pressable>
       </View>

@@ -19,6 +19,7 @@ import {
   getLeaderboard,
   getMyRank,
   OnlineError,
+  useRank,
   type LeaderboardEntry,
   type MyRank,
 } from '@/online';
@@ -81,6 +82,9 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
   const [error, setError] = useState<string | null>(null);
   const [leagueMapOpen, setLeagueMapOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  // Taze çekilen "benim" rank'ımı ortak store'a da yaz → Ana Ekran Kupa/Veri'si de
+  // güncellenir (modalı açmak tek başına Ana Ekran'ı tazeler; maç sonu bayatlığı biter).
+  const { patch } = useRank();
 
   const pop = useRef(new Animated.Value(0)).current;
 
@@ -90,10 +94,11 @@ export function LeaderboardModal({ visible, onClose }: { visible: boolean; onClo
       const [lb, mine] = await Promise.all([getLeaderboard(), getMyRank()]);
       setBoard(lb);
       setMe(mine);
+      patch(mine);
     } catch (e) {
       setError(e instanceof OnlineError ? e.message : 'Lider tablosu yüklenemedi.');
     }
-  }, []);
+  }, [patch]);
 
   useEffect(() => {
     if (!visible) return;

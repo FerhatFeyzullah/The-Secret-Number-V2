@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/auth';
-import { MatchSessionProvider, OnlinePresenceProvider } from '@/online';
+import { MatchSessionProvider, OnlinePresenceProvider, RankProvider } from '@/online';
 import { ChallengeProvider } from '@/online/ui';
 import { shouldShowOverlay } from '@/updates/update-machine';
 import { UpdateOverlay } from '@/updates/update-overlay';
@@ -37,6 +37,10 @@ export default function RootLayout() {
     // GestureHandlerRootView: alt sekmelerde yatay kaydırma jesti için kök sarmalayıcı.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
+        {/* Rank/Veri/sahiplik için TEK doğruluk kaynağı — Stack'i (tüm sekmeler +
+            modallar) sarar ki her yüzey aynı store'dan okusun/patch'lesin (pager
+            sekmeleri arası bayat Veri sorununu kökten çözer). */}
+        <RankProvider>
         {/* introDone: ekranlar (ör. ana menü welcome modalı) intro bitmeden modal
             açmasın. Native <Modal>, JS-overlay intro'nun üstüne çizilir → intro'ya
             bağlamazsak önüne geçer. */}
@@ -77,6 +81,7 @@ export default function RootLayout() {
           <UpdateOverlay {...updateGate} />
         ) : null}
       </IntroDoneContext.Provider>
+        </RankProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

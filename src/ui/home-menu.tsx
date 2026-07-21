@@ -8,7 +8,7 @@ import { LeagueBadge } from '@/leagues/badge';
 import { LeagueMapModal } from '@/leagues/league-map-modal';
 import { SeasonResetModal } from '@/leagues/season-reset-modal';
 import { isOnline } from '@/net';
-import { getMyRank } from '@/online';
+import { useRank } from '@/online';
 import { LeaderboardModal, LevelUpOverlay, ProfileStatsModal, RecentMatchesModal } from '@/online/ui';
 import {
   getLastMode,
@@ -41,9 +41,12 @@ export function HomeMenu() {
   // oturum açıkken profiles.username, kapalıyken yerel ad.
   const { name, refresh: refreshName } = useProfile();
   const [mode, setMode] = useState<GameMode>('solo');
-  // Kupa puanı yalnızca online'a bağlı: oturum açıkken get_my_rank'tan gelir.
-  const [rating, setRating] = useState<number | null>(null);
-  const [veri, setVeri] = useState<number | null>(null);
+  // Kupa puanı + Veri: ortak rank store'dan (TEK doğruluk kaynağı). Mağaza/donanım
+  // satın alması bu store'u patch'lediği için burada ANINDA güncellenir — pager
+  // sekmesi arasında bayat kalmaz. Oturum yoksa rank null → Kupa/Veri gizli.
+  const { rank, refresh: refreshRank } = useRank();
+  const rating = rank?.rating ?? null;
+  const veri = rank?.veri ?? null;
   const [boardOpen, setBoardOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -120,41 +123,29 @@ export function HomeMenu() {
   useFocusEffect(
     useCallback(() => {
       refreshName();
-      // Oturum yoksa kupa + veri gizli (online'a bağlı).
-      if (!session) {
-        setRating(null);
-        setVeri(null);
-        return;
-      }
+      // Oturum yoksa kupa + veri gizli (online'a bağlı; rank zaten null).
+      if (!session) return;
       let alive = true;
-      void getMyRank()
-        .then(async (r) => {
-          if (!alive) return;
-          setRating(r.rating);
-          setVeri(r.veri);
-          // Seviye atlama: kayıtlı eski seviyeyle karşılaştır (maç sonrası, tek sefer).
-          const prev = await getLastSeenLevel();
-          if (alive && prev != null && r.level > prev) setLevelUp(r.level);
-          await setLastSeenLevel(r.level);
-          // Sezon sıfırlama: yeni season_id görülürse tek sefer modal (flicker-safe:
-          // hem get_my_rank hem kayıtlı sezon çözülmeden gösterilmez). İlk kayıtta
-          // (prev null) sessizce ilkler — yeni kullanıcıya "kupan çekildi" denmez.
-          if (r.seasonId != null) {
-            const prevSeason = await getLastSeenSeason();
-            if (alive && prevSeason != null && r.seasonId > prevSeason) setSeasonResetOpen(true);
-            await setLastSeenSeason(r.seasonId);
-          }
-        })
-        .catch(() => {
-          if (alive) {
-            setRating(null);
-            setVeri(null);
-          }
-        });
+      // Ortak store'u tazele (maçtan/ayardan dönüş); getirilen değerle seviye/sezon tespiti.
+      void refreshRank().then(async (r) => {
+        if (!alive || !r) return;
+        // Seviye atlama: kayıtlı eski seviyeyle karşılaştır (maç sonrası, tek sefer).
+        const prev = await getLastSeenLevel();
+        if (alive && prev != null && r.level > prev) setLevelUp(r.level);
+        await setLastSeenLevel(r.level);
+        // Sezon sıfırlama: yeni season_id görülürse tek sefer modal (flicker-safe:
+        // hem get_my_rank hem kayıtlı sezon çözülmeden gösterilmez). İlk kayıtta
+        // (prev null) sessizce ilkler — yeni kullanıcıya "kupan çekildi" denmez.
+        if (r.seasonId != null) {
+          const prevSeason = await getLastSeenSeason();
+          if (alive && prevSeason != null && r.seasonId > prevSeason) setSeasonResetOpen(true);
+          await setLastSeenSeason(r.seasonId);
+        }
+      });
       return () => {
         alive = false;
       };
-    }, [refreshName, session]),
+    }, [refreshName, session, refreshRank]),
   );
 
   // Online yalnızca burada oturum ister; oturum yoksa giriş ekranına yönlendir.

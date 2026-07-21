@@ -64,7 +64,7 @@ function ProgressBar({ progress }: { progress: number | undefined }) {
 /** Kök seviyede tam ekran, zorunlu OTA güncelleme ekranı. Oyun temasında
  *  (gradient + vignette + neon), fazlara göre içerik değişir. Sunum katmanı:
  *  tüm mantık `useUpdateGate`'te. */
-export function UpdateOverlay({ phase, progress, startDownload, retry, skip, restart }: UpdateGate) {
+export function UpdateOverlay({ phase, progress, retry, skip }: UpdateGate) {
   const opacity = useSharedValue(0);
   useEffect(() => {
     opacity.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
@@ -86,39 +86,20 @@ export function UpdateOverlay({ phase, progress, startDownload, retry, skip, res
   let buttons: ReactNode = null;
 
   switch (phase) {
+    // available normalde atlanır (bulunur bulunmaz otomatik indirmeye geçilir);
+    // olası kısa görünüm için downloading ile aynı bilgilendirmeyi göster.
     case 'available':
-      title = 'YENİ SÜRÜM MEVCUT';
-      subtitle = 'Oyunun daha yeni bir sürümü hazır. Güncellemek yalnızca birkaç saniye sürer.';
-      buttons = (
-        <GlassButton
-          label="Güncelle"
-          variant="fill"
-          accent={colors.cyan}
-          onPress={startDownload}
-          icon={<Feather name="download" size={18} color={colors.cyan} />}
-        />
-      );
-      break;
     case 'downloading':
       title = 'GÜNCELLENİYOR';
-      subtitle = 'Lütfen bekle, yeni sürüm indiriliyor.';
+      subtitle = 'Yeni sürüm indiriliyor — bittiğinde oyun otomatik yeniden başlayacak.';
       showBar = true;
       break;
     case 'ready':
       icon = 'check-circle';
       accent = colors.success;
-      title = 'GÜNCELLEME HAZIR';
-      subtitle = 'Yeni sürüme geçmek için oyunu yeniden başlat.';
+      title = 'YENİDEN BAŞLATILIYOR';
+      subtitle = 'Güncelleme hazır, yeni sürüme geçiliyor…';
       showBar = true;
-      buttons = (
-        <GlassButton
-          label="Yeniden Başlat"
-          variant="fill"
-          accent={colors.success}
-          onPress={restart}
-          icon={<Feather name="refresh-cw" size={18} color={colors.success} />}
-        />
-      );
       break;
     case 'error':
       icon = 'wifi-off';
