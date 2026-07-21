@@ -7,6 +7,7 @@ export type { ContentTypeDef, ContentTypeId, ParseResult } from './content';
 export { evaluateGuess, generateSecret, numberContent, parseGuess } from './number';
 export {
   evaluateWordGuess,
+  knownGreenLetters,
   normalizeTr,
   opponentKnowledge,
   parseWord,

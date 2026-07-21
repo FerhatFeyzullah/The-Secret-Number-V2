@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { parseWord, upperTr, type LetterMark } from '@/game';
+import { knownGreenLetters, parseWord, upperTr, type LetterMark } from '@/game';
 import {
   claimWordRaceTimeout,
   getMatchReveal,
@@ -163,6 +163,14 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
     // myGuesses referansı her render değişir → içerik özeti ile tetikle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myGuesses.map((g) => `${g.id}:${g.feedback}`).join(',')]);
+
+  // Bilinen yeşiller: input'ta boş pozisyonlara silik ipucu (KENDİ feedback'imden).
+  const knownGreens = useMemo(
+    () => knownGreenLetters(myGuesses.map((g) => ({ word: g.digits, marks: g.feedback as string })), wordLength),
+    // Yukarıdaki gibi içerik özeti ile tetikle (myGuesses referansı her render değişir).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [myGuesses.map((g) => `${g.id}:${g.feedback}`).join(','), wordLength],
+  );
 
   // Merkezi maç sahibi (çıkış temizliği için).
   useEffect(() => {
@@ -619,6 +627,7 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
             {Array.from({ length: wordLength }).map((_, i) => {
               const letter = entry[i];
               const filled = letter !== undefined;
+              const ghost = !filled ? knownGreens[i] : undefined;
               return (
                 <View
                   key={i}
@@ -628,7 +637,11 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
                     filled && styles.entryTileFilled,
                     locked && styles.entryTileLocked,
                   ]}>
-                  {filled ? <Text style={styles.entryTileText}>{upperTr(letter)}</Text> : null}
+                  {filled ? (
+                    <Text style={styles.entryTileText}>{upperTr(letter)}</Text>
+                  ) : ghost ? (
+                    <Text style={[styles.entryTileText, styles.entryTileGhost]}>{upperTr(ghost)}</Text>
+                  ) : null}
                 </View>
               );
             })}
@@ -1037,6 +1050,11 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '700',
     fontFamily: mono,
+  },
+  // Bilinen yeşil harfin silik ipucu — dikkat dağıtmayacak kadar soluk.
+  entryTileGhost: {
+    color: colors.success,
+    opacity: 0.32,
   },
   actionError: {
     color: colors.danger,
