@@ -208,7 +208,7 @@ export function ProfileStatsModal({
                 hitSlop={6}
                 accessibilityLabel="Lig haritası"
                 style={styles.leagueRow}>
-                <LeagueBadge rating={data.rating} size={22} />
+                <LeagueBadge rating={data.rating} size={30} animated />
               </Pressable>
             ) : null}
           </View>

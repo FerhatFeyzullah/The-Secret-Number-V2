@@ -201,7 +201,7 @@ export function HomeMenu() {
                     hitSlop={6}
                     accessibilityLabel="Lig haritası"
                     style={styles.leagueChip}>
-                    <LeagueBadge rating={rating} size={18} showName={false} />
+                    <LeagueBadge rating={rating} size={28} showName={false} animated />
                   </Pressable>
                 ) : null}
                 {rating != null ? (
