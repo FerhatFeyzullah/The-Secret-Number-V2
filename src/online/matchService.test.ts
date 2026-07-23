@@ -5,14 +5,18 @@ import {
   claimTimeout,
   fetchMatchState,
   findOrCreateQuickMatch,
+  getMyHand,
+  getMyMarks,
   getMyRank,
   getRecentMatches,
+  getRoundReveal,
   joinPrivateRoom,
   leaveMatch,
   makeGuess,
   OnlineError,
   setSecret,
   unlockProtocol,
+  wordRaceReveal,
 } from './matchService';
 
 jest.mock('../supabase', () => ({
@@ -471,5 +475,73 @@ describe('fetchMatchState skipProfiles (A5)', () => {
     expect(fromMock).not.toHaveBeenCalledWith('profiles');
     expect(state?.player1.username).toBeNull();
     expect(state?.player2?.username).toBeNull();
+  });
+});
+
+// ─── KLAN MAÇ İZLEME (seyirci) ────────────────────────────────────────────
+describe('seyirci: perspektif ve RPC yönlendirmesi', () => {
+  beforeEach(() => {
+    getSessionMock.mockResolvedValue({ data: { session: { user: { id: 'seyirci' } } } });
+  });
+
+  it('fetchMatchState asPlayer: durum İZLENEN oyuncunun rolüyle haritalanır', async () => {
+    fromMock.mockImplementation(() => queryBuilder({ data: MATCH_ROW, error: null }));
+    // Çağıran 'seyirci' — maçın oyuncusu DEĞİL. asPlayer olmadan perspektif yok.
+    await expect(fetchMatchState('m1', { skipProfiles: true })).resolves.toBeNull();
+    // asPlayer='opp' → ekran player2'nin gözünden render olur.
+    const state = await fetchMatchState('m1', { skipProfiles: true, asPlayer: 'opp' });
+    expect(state?.myRole).toBe('player2');
+  });
+
+  it('getMyHand/getMyMarks: spectateAs verilince seyirci RPC + p_player gider', async () => {
+    rpcResolves({ hand: [], selected: [], slots: 2 });
+    await getMyHand('m1', 'ahmet');
+    expect(rpcMock).toHaveBeenCalledWith('get_spectator_hand', {
+      p_match_id: 'm1',
+      p_player: 'ahmet',
+    });
+
+    rpcMock.mockClear();
+    rpcResolves([{ id: 7, marks: 'GYXXX' }]);
+    await expect(getMyMarks('m1', 'ahmet')).resolves.toEqual({ 7: 'GYXXX' });
+    expect(rpcMock).toHaveBeenCalledWith('get_spectator_marks', {
+      p_match_id: 'm1',
+      p_player: 'ahmet',
+    });
+  });
+
+  it('ifşa RPC’leri: seyircide p_player ile seyirci dalına gider', async () => {
+    rpcResolves({ mine: null, opponent: null });
+    await getRoundReveal('m1', 2, 'ahmet');
+    expect(rpcMock).toHaveBeenCalledWith('get_spectator_round_reveal', {
+      p_match_id: 'm1',
+      p_round: 2,
+      p_player: 'ahmet',
+    });
+
+    rpcMock.mockClear();
+    rpcResolves({ secret: 'kalem' });
+    await wordRaceReveal('m1', 1, 'ahmet');
+    expect(rpcMock).toHaveBeenCalledWith('get_spectator_race_reveal', {
+      p_match_id: 'm1',
+      p_round: 1,
+      p_player: 'ahmet',
+    });
+  });
+
+  it('spectateAs YOKSA oyuncu RPC’leri aynen korunur (regresyon)', async () => {
+    rpcResolves({ hand: [], selected: [], slots: 2 });
+    await getMyHand('m1');
+    expect(rpcMock).toHaveBeenCalledWith('get_my_hand', { p_match_id: 'm1' });
+
+    rpcMock.mockClear();
+    rpcResolves({ mine: null, opponent: null });
+    await getRoundReveal('m1', 2);
+    expect(rpcMock).toHaveBeenCalledWith('get_round_reveal', { p_match_id: 'm1', p_round: 2 });
+
+    rpcMock.mockClear();
+    rpcResolves({ secret: null });
+    await wordRaceReveal('m1', 1);
+    expect(rpcMock).toHaveBeenCalledWith('word_race_reveal', { p_match_id: 'm1', p_round: 1 });
   });
 });

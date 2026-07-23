@@ -36,6 +36,7 @@ import { Screen } from '@/ui/screen';
 import { colors, mono } from '@/ui/theme';
 
 import { ResultOverlay } from '../duel/result-overlay';
+import { CheerBar, CheerStream, TribuneBadge } from '../spectate/tribune';
 import { WordOrbs } from './orbs';
 import { EmoteBar, IncomingReaction } from './emote-bar';
 import { RequestWordButton } from './request-word-button';
@@ -70,7 +71,15 @@ const LOW_TIME_VIBRATION = [0, 500, 160, 500];
  *  merkezi sahiplik, çıkış onayı, sonuç overlay'i. Kelime modu PROTOKOLSÜZ
  *  (protokoller yalnız sayı modunda). Rakibin TAHMİNLERİ asla gösterilmez;
  *  yalnız ilerleme/yakınlık. */
-export function WordDuelScreen({ matchId }: { matchId: string }) {
+export function WordDuelScreen({
+  matchId,
+  spectateAs = null,
+}: {
+  matchId: string;
+  /** KLAN MAÇ İZLEME: verilirse ekran bu oyuncunun gözünden salt-okunur açılır. */
+  spectateAs?: string | null;
+}) {
+  const spectator = spectateAs != null;
   const router = useRouter();
   const navigation = useNavigation();
   const session = useMatchSession();
@@ -84,7 +93,10 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     incomingSignal,
     sendText,
     incomingText,
-  } = useMatch(matchId);
+    spectatorCount,
+    sendCheer,
+    incomingCheer,
+  } = useMatch(matchId, { spectateAs });
 
   const [entry, setEntry] = useState<string[]>([]);
   const historyRef = useRef<ScrollView>(null);
@@ -138,7 +150,8 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const finished = status === 'finished';
   const myId = match ? (match.myRole === 'player1' ? match.player1.id : match.player2?.id ?? '') : '';
   const isMine = !!match && status === 'active' && match.currentTurn === myId;
-  const locked = !isMine;
+  // Seyircide klavye/onay HER ZAMAN kilitli.
+  const locked = spectator || !isMine;
   const wordLength = match?.wordLength ?? 5;
 
   const p1 = match?.myRole === 'player1';
@@ -213,7 +226,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     const ids = myGuessKey.split(',').map(Number);
     if (!ids.some((id) => myMarks[id] === undefined)) return;
     let alive = true;
-    getMyMarks(matchId)
+    getMyMarks(matchId, spectateAs)
       .then((m) => alive && setMyMarks((prev) => ({ ...prev, ...m })))
       .catch(() => {});
     return () => {
@@ -221,7 +234,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     };
     // myMarks kasıtlı dep değil (functional update); tetikleyici myGuessKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myGuessKey, matchId, match?.contentType]);
+  }, [myGuessKey, matchId, match?.contentType, spectateAs]);
 
   useEffect(() => {
     if (!isMine) setEntry([]);
@@ -235,9 +248,11 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     prevIsMineRef.current = isMine;
   }, [isMine, buzz]);
 
+  // Seyirci maçı SAHİPLENMEZ (leave/forfeit yolu ona hiç açılmaz).
   useEffect(() => {
+    if (spectator) return;
     session.claim(matchId, 'match');
-  }, [matchId, session]);
+  }, [matchId, session, spectator]);
 
   // Biten turun sonucu (Best of 3 tur arası için) — sayı düellosuyla aynı.
   const prevScoreRef = useRef({ p1: 0, p2: 0 });
@@ -265,18 +280,24 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
       prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
       // Biten turun İKİ kelimesini çek (break ekranı için). Kendi kelimem yerelde
       // varsa anında göster; rakibinki (ve otoriteli kendi) RPC ile gelir.
-      setRoundReveal({ round: prevRound, mine: recallMySecret(matchId, prevRound), opponent: null });
-      getRoundReveal(matchId, prevRound)
+      // Seyircide yerel hafıza YOKTUR (kelime izlenen oyuncunun cihazında) →
+      // ifşa yalnız sunucudan gelir; gelene dek "—".
+      setRoundReveal({
+        round: prevRound,
+        mine: spectator ? null : recallMySecret(matchId, prevRound),
+        opponent: null,
+      });
+      getRoundReveal(matchId, prevRound, spectateAs)
         .then((r) => setRoundReveal({ round: prevRound, ...r }))
         .catch(() => {});
     }
-  }, [match, guesses, p1, myId, matchId]);
+  }, [match, guesses, p1, myId, matchId, spectateAs, spectator]);
 
   // Maç bitince reveal + sinyal destesi (sayı düellosuyla aynı).
   useEffect(() => {
     if (!finished) return;
     let alive = true;
-    getMatchReveal(matchId)
+    getMatchReveal(matchId, spectateAs)
       .then((r) => alive && setReveal(r))
       .catch(
         () =>
@@ -293,7 +314,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     return () => {
       alive = false;
     };
-  }, [finished, matchId]);
+  }, [finished, matchId, spectateAs]);
   // Sinyal destesini maç BAŞINDA yükle (maç-içi emote + maç-sonu reaksiyon için).
   useEffect(() => {
     let alive = true;
@@ -322,9 +343,13 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   const leavingRef = useRef(false);
   const goMenu = useCallback(() => {
     leavingRef.current = true;
+    if (spectator) {
+      router.back(); // tribünden ayrıl → klan ekranına dön
+      return;
+    }
     session.release();
     router.dismissTo('/');
-  }, [router, session]);
+  }, [router, session, spectator]);
   const goRematch = useCallback(() => {
     leavingRef.current = true;
     session.release();
@@ -332,6 +357,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   }, [router, session]);
 
   useEffect(() => {
+    if (spectator) return; // seyirci serbestçe çıkar
     const sub = navigation.addListener('beforeRemove', (e) => {
       if (leavingRef.current || match?.status === 'finished') return;
       e.preventDefault();
@@ -349,7 +375,7 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
       ]);
     });
     return sub;
-  }, [navigation, match?.status, session]);
+  }, [navigation, match?.status, session, spectator]);
 
   // ── Giriş ─────────────────────────────────────────────────────
   const addLetter = useCallback(
@@ -419,7 +445,22 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   );
 
   if (!match) {
-    if (!loading && !error) return <Redirect href="/" />;
+    // Seyircide ana menüye fırlatma YOK: izleme yetkisi yoksa (klan arkadaşı
+    // değil / maç özel oda / maç kayboldu) bilgilendir ve geldiği yere döndür.
+    if (spectator) {
+      if (!loading) {
+        return (
+          <Screen float="letters">
+            <View style={styles.centered}>
+              <Text style={styles.note}>{error ?? 'Bu maç artık izlenemiyor.'}</Text>
+              <Pressable onPress={goMenu} hitSlop={8} style={styles.noteExit}>
+                <Text style={styles.noteExitText}>Geri Dön</Text>
+              </Pressable>
+            </View>
+          </Screen>
+        );
+      }
+    } else if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen float="letters">
         <View style={styles.centered}>
@@ -433,7 +474,31 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
   }
 
   // Turlar arası belirleme (Best of 3): kelime paneli düello ekranı içinde.
+  // Seyircide gizli kelime girişi yoktur → sade bekleme paneli.
   if (status === 'setup') {
+    if (spectator) {
+      return (
+        <Screen float="letters">
+          <WordOrbs />
+          <View style={styles.content}>
+            <View style={styles.headerRow}>
+              {exitButton}
+              <View style={styles.tribuneSlot}>
+                <TribuneBadge count={spectatorCount} />
+              </View>
+            </View>
+            <View style={styles.centered}>
+              <ActivityIndicator color={colors.violet} />
+              <Text style={styles.note}>
+                {`Tur ${match.currentRound} · oyuncular gizli kelimelerini belirliyor…`}
+              </Text>
+            </View>
+            <CheerBar deck={signalDeck} onCheer={sendCheer} />
+          </View>
+          <CheerStream cheer={incomingCheer} />
+        </Screen>
+      );
+    }
     return (
       <Screen float="letters">
         <WordOrbs />
@@ -472,13 +537,14 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
     <Screen float="letters">
       <WordOrbs amberBottom={200} />
       <View style={styles.content}>
-        {/* ÜST: rozet + Bo3 tur noktaları */}
+        {/* ÜST: rozet + Bo3 tur noktaları + tribün sayacı */}
         <View style={styles.headerRow}>
           {exitButton}
           <View style={styles.badge}>
             <View style={styles.badgeDot} />
             <Text style={styles.badgeText}>düello · {wordLength} harf</Text>
           </View>
+          <TribuneBadge count={spectatorCount} />
           <View style={styles.roundDots}>
             <Text style={styles.roundDotsLabel}>tur</Text>
             {[0, 1, 2].map((i) => {
@@ -644,31 +710,38 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
 
         {/* KLAVYE + ONAY BUTONU (belirleme ekranıyla aynı desen): onay tuşu
             klavyeden çıktı; tek aksiyon butonu klavyenin ÜSTÜNDE. */}
-        <View style={styles.kbWrap}>
-          <View style={styles.confirmRow}>
-            <EmoteBar
-              deck={signalDeck}
-              onSendSignal={sendSignal}
-              onSendText={sendText}
-              disabled={finished}
-            />
-            <View style={styles.confirmFill}>
-              <WordConfirmButton
-                label="Kelimeyi Onayla"
-                enabled={entry.length === wordLength && !locked && !submitting}
-                busy={submitting}
-                onPress={submit}
-              />
-            </View>
+        {spectator ? (
+          /* Seyircide klavye/onay YOK — yerine tribün barı. */
+          <View style={styles.kbWrap}>
+            <CheerBar deck={signalDeck} onCheer={sendCheer} />
           </View>
-          <TrKeyboard
-            large
-            onKey={addLetter}
-            onDelete={deleteLetter}
-            locked={locked || submitting}
-            letterStates={keyStates}
-          />
-        </View>
+        ) : (
+          <View style={styles.kbWrap}>
+            <View style={styles.confirmRow}>
+              <EmoteBar
+                deck={signalDeck}
+                onSendSignal={sendSignal}
+                onSendText={sendText}
+                disabled={finished}
+              />
+              <View style={styles.confirmFill}>
+                <WordConfirmButton
+                  label="Kelimeyi Onayla"
+                  enabled={entry.length === wordLength && !locked && !submitting}
+                  busy={submitting}
+                  onPress={submit}
+                />
+              </View>
+            </View>
+            <TrKeyboard
+              large
+              onKey={addLetter}
+              onDelete={deleteLetter}
+              locked={locked || submitting}
+              letterStates={keyStates}
+            />
+          </View>
+        )}
       </View>
 
       {finished ? (
@@ -692,12 +765,15 @@ export function WordDuelScreen({ matchId }: { matchId: string }) {
           opponentInitial={opponentName.charAt(0)}
           deck={signalDeck}
           incomingSignal={incomingSignal}
-          onSendSignal={sendSignal}
+          onSendSignal={spectator ? sendCheer : sendSignal}
           onRematch={goRematch}
           onMenu={goMenu}
+          spectator={spectator}
         />
       ) : null}
 
+      {/* Tribün tezahürat akışı — rakip baloncuğundan bağımsız kanal. */}
+      <CheerStream cheer={incomingCheer} />
     </Screen>
   );
 }
@@ -760,6 +836,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  tribuneSlot: {
+    marginLeft: 'auto',
   },
   exit: {
     width: 34,
