@@ -24,6 +24,7 @@ import {
   OnlineError,
   resolveSetupTimeout,
 } from './matchService';
+import { usePublishMyMatch } from './online-presence';
 import type { MatchState, OnlineGuess, PresenceInfo, ProtocolUse } from './types';
 
 /** Heartbeat aralığı (maç setup/active iken). */
@@ -71,6 +72,25 @@ export type UseMatchResult = {
     outcome: ProtocolUse['outcome'];
     nonce: number;
   } | null;
+  /** KLAN MAÇ İZLEME: bu oturum salt-okunur seyirci mi (spectateAs verildi mi). */
+  isSpectator: boolean;
+  /** Şu an İZLENEN oyuncuyu (perspektif sahibini) izleyen seyirci sayısı.
+   *  Oyuncuda "kaç kişi beni izliyor", seyircide "tribünde kaç kişi var".
+   *  Rakip bu sayıyı GÖRMEZ (kendi perspektifi hedef değildir). */
+  spectatorCount: number;
+  /** Seyircinin tezahürat emojisi (efemeral broadcast; DB'ye yazmaz). Yalnız
+   *  izlenen oyuncunun ve aynı oyuncuyu izleyen seyircilerin ekranında belirir. */
+  sendCheer: (signalId: string) => void;
+  /** Tribünden gelen son tezahürat; nonce her gelişte artar. */
+  incomingCheer: { id: string; nonce: number } | null;
+};
+
+export type UseMatchOptions = {
+  /** KLAN MAÇ İZLEME: verilirse hook salt-okunur seyirci modunda çalışır ve
+   *  tüm durum BU oyuncunun bakış açısından haritalanır (myRole = onun rolü).
+   *  Bu modda heartbeat/zaman-aşımı/kopuş yazımlarının HİÇBİRİ çalışmaz —
+   *  seyirci maçın gidişatına dokunamaz. */
+  spectateAs?: string | null;
 };
 
 /**
@@ -83,7 +103,8 @@ export type UseMatchResult = {
  *   olayları tam refresh ile kapatır.
  * - Unmount'ta kanal/zamanlayıcılar temizlenir; çift abonelik oluşmaz.
  */
-export function useMatch(matchId: string | null): UseMatchResult {
+export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMatchResult {
+  const spectateAs = opts?.spectateAs ?? null;
   const [match, setMatch] = useState<MatchState | null>(null);
   const [guesses, setGuesses] = useState<OnlineGuess[]>([]);
   const [presence, setPresence] = useState<Record<string, PresenceInfo>>({});
@@ -103,8 +124,17 @@ export function useMatch(matchId: string | null): UseMatchResult {
     nonce: number;
   } | null>(null);
   const protoNonceRef = useRef(0);
+  // Tribün (seyirci) durumu: sayaç + gelen tezahürat.
+  const [spectatorCount, setSpectatorCount] = useState(0);
+  const [incomingCheer, setIncomingCheer] = useState<{ id: string; nonce: number } | null>(null);
+  const cheerNonceRef = useRef(0);
 
   const myIdRef = useRef<string | null>(null);
+  // Perspektif sahibi: seyircide İZLENEN oyuncu, oyuncuda kendisi. Realtime
+  // geri çağrımları bayat okumasın diye ref (spectateAs mount boyu sabittir).
+  const spectateAsRef = useRef<string | null>(spectateAs);
+  spectateAsRef.current = spectateAs;
+  const viewId = useCallback(() => spectateAsRef.current ?? myIdRef.current, []);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -209,7 +239,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
       // A4: fetch başlamadan realtime olay sırasını yakala.
       const seqAtStart = matchEventSeqRef.current;
       const [state, guessList, presenceList, useList] = await Promise.all([
-        fetchMatchState(matchId, { skipProfiles }),
+        // Seyircide durum İZLENEN oyuncunun bakışıyla haritalanır.
+        fetchMatchState(matchId, { skipProfiles, asPlayer: spectateAsRef.current }),
         needGuesses ? fetchGuesses(matchId) : Promise.resolve(null),
         fetchPresence(matchId),
         needUses ? fetchProtocolUses(matchId) : Promise.resolve(null),
@@ -342,18 +373,25 @@ export function useMatch(matchId: string | null): UseMatchResult {
       if (disposed) return;
       teardownChannel(); // çift abonelik olmasın
       const channel = client
-        .channel(`match-${matchId}`, { config: { broadcast: { self: false } } })
+        .channel(`match-${matchId}`, {
+          config: {
+            broadcast: { self: false },
+            // Tribün sayacı için presence: anahtar = kullanıcı (aynı kişinin
+            // ikinci cihazı tek sayılır). Yalnız seyirciler track eder.
+            presence: { key: myIdRef.current ?? '' },
+          },
+        })
         .on(
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
           (payload) => {
-            const myId = myIdRef.current;
-            if (!myId) return;
+            const perspective = viewId();
+            if (!perspective) return;
             lastEventAtRef.current = Date.now(); // A3: realtime canlı
             matchEventSeqRef.current += 1; // A4: bayat refresh'i geçersizle
             const row = payload.new as MatchRow;
             setMatch((prev) => {
-              const next = matchRowToState(row, myId);
+              const next = matchRowToState(row, perspective);
               if (!next) return prev;
               // Realtime satırında profil adları yok; eldekinden/cache'ten doldur.
               return {
@@ -417,7 +455,8 @@ export function useMatch(matchId: string | null): UseMatchResult {
             // Bildirim: rakibin canlı kullanımı (her outcome) YA DA kendi
             // protokolünün harcanması (wasted satırı kurbana yazılır). Kendi
             // normal kullanımın RPC dönüşüyle zaten onaylanır.
-            if (use.player !== myIdRef.current || use.outcome === 'wasted') {
+            // (Seyircide "kendi" = izlenen oyuncu → aynı bildirimleri görür.)
+            if (use.player !== viewId() || use.outcome === 'wasted') {
               protoNonceRef.current += 1;
               setIncomingProtocolUse({
                 player: use.player,
@@ -429,23 +468,49 @@ export function useMatch(matchId: string | null): UseMatchResult {
           },
         )
         .on('broadcast', { event: 'signal' }, ({ payload }) => {
-          // Efemeral sinyal: yalnızca rakibinkini göster (kendi yayınını filtrele).
+          // Efemeral sinyal: yalnızca KARŞI tarafınkini göster. Seyircide
+          // "karşı taraf" = izlenen oyuncunun rakibi → ayna birebir korunur.
           const p = payload as { signal?: string; from?: string } | undefined;
-          if (!p?.signal || p.from === myIdRef.current) return;
+          if (!p?.signal || p.from === viewId()) return;
           signalNonceRef.current += 1;
           setIncomingSignal({ id: p.signal, nonce: signalNonceRef.current });
         })
         .on('broadcast', { event: 'text' }, ({ payload }) => {
-          // Efemeral hazır mesaj: yalnızca rakibinkini göster (kendi yayınını filtrele).
+          // Efemeral hazır mesaj: yalnızca karşı tarafınki (aynı kural).
           const p = payload as { text?: string; from?: string } | undefined;
-          if (!p?.text || p.from === myIdRef.current) return;
+          if (!p?.text || p.from === viewId()) return;
           textNonceRef.current += 1;
           setIncomingText({ text: p.text, nonce: textNonceRef.current });
+        })
+        .on('broadcast', { event: 'cheer' }, ({ payload }) => {
+          // Tribün tezahüratı: YALNIZ hedeflenen oyuncunun ve aynı oyuncuyu
+          // izleyen seyircilerin ekranında belirir. Rakibin perspektifi hedef
+          // olmadığı için ona hiç düşmez (ekranı temiz kalır).
+          const p = payload as { signal?: string; target?: string } | undefined;
+          if (!p?.signal || !p.target || p.target !== viewId()) return;
+          cheerNonceRef.current += 1;
+          setIncomingCheer({ id: p.signal, nonce: cheerNonceRef.current });
+        })
+        .on('presence', { event: 'sync' }, () => {
+          // Tribün sayacı: yalnız "beni izleyenler" (target eşleşmesi) sayılır.
+          const perspective = viewId();
+          if (!perspective) return;
+          let n = 0;
+          for (const entries of Object.values(channel.presenceState())) {
+            for (const e of entries as { watching?: string }[]) {
+              if (e.watching === perspective) n += 1;
+            }
+          }
+          setSpectatorCount(n);
         })
         .subscribe((status) => {
           if (disposed) return;
           if (status === 'SUBSCRIBED') {
             reconnectAttemptRef.current = 0;
+            // Seyirci kendini tribüne yazar → izlenen oyuncu sayacı görür.
+            // Oyuncular track ETMEZ (presence'ta yalnız seyirciler durur).
+            const spec = spectateAsRef.current;
+            if (spec) void channel.track({ watching: spec });
             // Abonelik (yeniden) kuruldu: kaçmış olabilecek olayları kapat.
             void refresh();
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -470,12 +535,30 @@ export function useMatch(matchId: string | null): UseMatchResult {
       }
       teardownChannel();
     };
-  }, [matchId, refresh, backfillUsernames]);
+  }, [matchId, refresh, backfillUsernames, viewId]);
 
   const phase = match?.status ?? null;
   // Heartbeat TÜM canlı maç fazlarını kapsar (seçim dahil) → sunucu reap'i her
   // fazda çalışır. (Tur arası status='setup' zaten dahil.)
   const inMatch = phase === 'protocol_select' || phase === 'setup' || phase === 'active';
+
+  // KLAN MAÇ İZLEME girişi: canlı ve EŞLEŞMELİ maçımı presence payload'ına yaz →
+  // klan arkadaşlarımın üye kartında "göz" ikonu belirir. Özel oda/kule/offline
+  // yayınlanmaz; seyirci hiç yayınlamaz (izlediği maçı kendi maçıymış gibi
+  // göstermesin). Ekstra DB sorgusu yok — mevcut presence kanalı taşır.
+  const publishMyMatch = usePublishMyMatch();
+  const mMode = match?.mode ?? null;
+  const mContent = match?.contentType ?? null;
+  useEffect(() => {
+    if (spectateAs || !matchId) return;
+    const spectatable = inMatch && mMode !== null && mMode !== 'private';
+    publishMyMatch(spectatable ? { matchId, content: mContent ?? 'number' } : null);
+    // Cleanup'ta BİLEREK null yayınlanmaz: faz değiştikçe (setup→active) araya
+    // null girip klan kartındaki göz ikonunu titretirdi. Kapanış unmount'ta.
+  }, [matchId, inMatch, mMode, mContent, spectateAs, publishMyMatch]);
+
+  // Maç ekranından ayrılınca yayını kapat (tek kapanış noktası).
+  useEffect(() => () => publishMyMatch(null), [publishMyMatch]);
 
   // Heartbeat: maç CANLI (protocol_select/setup/active) iken ve uygulama öndeyken
   // periyodik gönder. Heartbeat aynı zamanda sunucu reap'ini tetikler (hayatta
@@ -483,7 +566,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // atılır → backgrounded oyuncuya ~15 sn tolerans (kısa bildirim/uygulama
   // değişiminde haksız forfeit olmaz).
   useEffect(() => {
-    if (!matchId || !inMatch) return;
+    if (!matchId || !inMatch || spectateAs) return; // seyirci: heartbeat YOK
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const start = () => {
@@ -514,7 +597,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       stop();
       sub.remove();
     };
-  }, [matchId, inMatch, refresh]);
+  }, [matchId, inMatch, refresh, spectateAs]);
 
   // Otomatik zaman aşımı: sıradaki oyuncunun görsel saati 0'a inince HER iki
   // istemci de claim eder. Karar sunucuda (now() ile doğrular); kaybeden =
@@ -522,7 +605,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // now state'i yerine matchRef okuyan interval → ekran her tikte render OLMAZ.
   const claimedTurnRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!matchId || phase !== 'active') return;
+    if (!matchId || phase !== 'active' || spectateAs) return; // seyirci claim ETMEZ
     const iv = setInterval(() => {
       const m = matchRef.current;
       if (!m || m.status !== 'active' || !m.currentTurn || !m.turnStartedAt) return;
@@ -541,7 +624,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       });
     }, WATCH_MS);
     return () => clearInterval(iv);
-  }, [matchId, phase]);
+  }, [matchId, phase, spectateAs]);
 
   // Tur-arası (Bo3, round ≥ 2) belirleme zaman aşımı: setup_deadline geçince
   // HER iki istemci de resolve eder (idempotent, karar sunucuda). Sırrını giren
@@ -552,7 +635,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // now state'i yerine matchRef okuyan interval → render tetiklemez.
   const resolvedSetupRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!matchId || phase !== 'setup') return;
+    if (!matchId || phase !== 'setup' || spectateAs) return; // seyirci resolve ETMEZ
     const iv = setInterval(() => {
       const m = matchRef.current;
       if (!m || m.status !== 'setup') return;
@@ -570,7 +653,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       });
     }, WATCH_MS);
     return () => clearInterval(iv);
-  }, [matchId, phase]);
+  }, [matchId, phase, spectateAs]);
 
   // Hızlandırıcı: rakip "gitti" eşiğine (15 sn) ulaşınca hemen bir heartbeat at →
   // sunucu reap'i (hayatta olan lehine forfeit) periyodik 5 sn tikini beklemeden
@@ -579,7 +662,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
   // bir kez ateşler, rakip dönünce yeniden tetiklenebilir.
   const goneFiredRef = useRef(false);
   useEffect(() => {
-    if (!matchId || phase !== 'active') return;
+    if (!matchId || phase !== 'active' || spectateAs) return; // seyirci reap tetiklemez
     const iv = setInterval(() => {
       const m = matchRef.current;
       if (!m || m.status !== 'active') return;
@@ -600,7 +683,7 @@ export function useMatch(matchId: string | null): UseMatchResult {
       }
     }, WATCH_MS);
     return () => clearInterval(iv);
-  }, [matchId, phase]);
+  }, [matchId, phase, spectateAs]);
 
   // Efemeral sinyal yayını: kanal üzerinden broadcast (DB'ye yazmaz).
   const sendSignal = useCallback((signalId: string) => {
@@ -624,6 +707,22 @@ export function useMatch(matchId: string | null): UseMatchResult {
     });
   }, []);
 
+  // Tribün tezahüratı (yalnız seyirci gönderir). target = izlenen oyuncu →
+  // rakibin ekranına DÜŞMEZ. Kendi yayını broadcast'te geri gelmediği için
+  // (self:false) gönderen kendi emojisini yerel olarak akışa ekler.
+  const sendCheer = useCallback((signalId: string) => {
+    const ch = channelRef.current;
+    const target = spectateAsRef.current;
+    if (!ch || !target) return;
+    void ch.send({
+      type: 'broadcast',
+      event: 'cheer',
+      payload: { signal: signalId, from: myIdRef.current, target },
+    });
+    cheerNonceRef.current += 1;
+    setIncomingCheer({ id: signalId, nonce: cheerNonceRef.current });
+  }, []);
+
   return {
     match,
     guesses,
@@ -636,5 +735,9 @@ export function useMatch(matchId: string | null): UseMatchResult {
     incomingText,
     protocolUses,
     incomingProtocolUse,
+    isSpectator: spectateAs != null,
+    spectatorCount,
+    sendCheer,
+    incomingCheer,
   };
 }

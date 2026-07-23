@@ -303,8 +303,14 @@ export async function findOrCreateProtocolMatch(): Promise<MatchTicket> {
 }
 
 /** Destiny's Hand: çağıranın dağıtılan eli + seçimi + yuva sayısı + kendi
- *  kullanımları/elenenleri/ipuçları. Rakibinkiler ASLA gelmez (sunucu RLS). */
-export async function getMyHand(matchId: string): Promise<ProtocolHand> {
+ *  kullanımları/elenenleri/ipuçları. Rakibinkiler ASLA gelmez (sunucu RLS).
+ *  spectateAs verilirse (klan maç izleme) İZLENEN oyuncunun eli döner —
+ *  sunucu hedefin çağıranın klan arkadaşı olduğunu doğrular; rakibin eli
+ *  hiçbir koşulda gelmez ('not_spectatable'). */
+export async function getMyHand(
+  matchId: string,
+  spectateAs?: string | null,
+): Promise<ProtocolHand> {
   const p = await callRpc<{
     hand?: string[];
     selected?: string[];
@@ -314,7 +320,10 @@ export async function getMyHand(matchId: string): Promise<ProtocolHand> {
     hints?: Record<string, ProtocolHint[]>;
     shield_armed?: boolean;
     reflect_armed?: boolean;
-  }>('get_my_hand', { p_match_id: matchId });
+  }>(
+    spectateAs ? 'get_spectator_hand' : 'get_my_hand',
+    spectateAs ? { p_match_id: matchId, p_player: spectateAs } : { p_match_id: matchId },
+  );
   return {
     hand: p.hand ?? [],
     selected: p.selected ?? [],
@@ -490,10 +499,14 @@ export async function claimTimeout(matchId: string): Promise<GuessOutcome> {
 /** KELİME modu: ÇAĞIRANIN KENDİ tahminlerinin per-harf renkleri (id → 'GYX').
  *  Sunucu guesser=auth.uid() ile sert filtreler → rakibin marks'ı ASLA gelmez.
  *  İstemci yeniden bağlanınca/ekrana girince kendi tahtasını bundan boyar. */
-export async function getMyMarks(matchId: string): Promise<Record<number, string>> {
-  const rows = await callRpc<{ id: number; marks: string }[]>('get_my_marks', {
-    p_match_id: matchId,
-  });
+export async function getMyMarks(
+  matchId: string,
+  spectateAs?: string | null,
+): Promise<Record<number, string>> {
+  const rows = await callRpc<{ id: number; marks: string }[]>(
+    spectateAs ? 'get_spectator_marks' : 'get_my_marks',
+    spectateAs ? { p_match_id: matchId, p_player: spectateAs } : { p_match_id: matchId },
+  );
   const map: Record<number, string> = {};
   for (const r of rows ?? []) map[r.id] = r.marks;
   return map;
@@ -537,11 +550,14 @@ export async function claimWordRaceTimeout(matchId: string): Promise<WordRaceTim
 export async function wordRaceReveal(
   matchId: string,
   round: number,
+  spectateAs?: string | null,
 ): Promise<{ secret: string | null }> {
-  const p = await callRpc<{ secret: string | null }>('word_race_reveal', {
-    p_match_id: matchId,
-    p_round: round,
-  });
+  const p = await callRpc<{ secret: string | null }>(
+    spectateAs ? 'get_spectator_race_reveal' : 'word_race_reveal',
+    spectateAs
+      ? { p_match_id: matchId, p_round: round, p_player: spectateAs }
+      : { p_match_id: matchId, p_round: round },
+  );
   return { secret: p.secret ?? null };
 }
 
@@ -725,7 +741,10 @@ export async function setSignalDeck(ids: string[]): Promise<{ signalDeck: string
 /** Maç sonu gizli sayı ifşası (yalnızca finished + çağıran oyuncu).
  *  Çağıranın bakış açısından kendi ve rakip sayısı; satır yoksa null.
  *  Maç bitmeden çağrılırsa sunucu 'match_not_finished' fırlatır. */
-export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
+export async function getMatchReveal(
+  matchId: string,
+  spectateAs?: string | null,
+): Promise<MatchReveal> {
   const p = await callRpc<{
     mine: string | null;
     opponent: string | null;
@@ -733,7 +752,10 @@ export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
     rating_delta?: number | null;
     xp_delta?: number | null;
     veri_delta?: number | null;
-  }>('get_match_reveal', { p_match_id: matchId });
+  }>(
+    spectateAs ? 'get_spectator_reveal' : 'get_match_reveal',
+    spectateAs ? { p_match_id: matchId, p_player: spectateAs } : { p_match_id: matchId },
+  );
   return {
     mine: p.mine ?? null,
     opponent: p.opponent ?? null,
@@ -748,11 +770,17 @@ export async function getMatchReveal(matchId: string): Promise<MatchReveal> {
 /** Tur-bazlı gizli ifşa (yalnızca KARARLAŞMIŞ tur + çağıran oyuncu). Tur-arası
  *  break ekranında iki oyuncunun o turdaki gizlisini göstermek için. Canlı tur
  *  istenirse sunucu 'round_not_revealable' fırlatır (rakip kelimesi sızmaz). */
-export async function getRoundReveal(matchId: string, round: number): Promise<RoundReveal> {
-  const p = await callRpc<{ mine: string | null; opponent: string | null }>('get_round_reveal', {
-    p_match_id: matchId,
-    p_round: round,
-  });
+export async function getRoundReveal(
+  matchId: string,
+  round: number,
+  spectateAs?: string | null,
+): Promise<RoundReveal> {
+  const p = await callRpc<{ mine: string | null; opponent: string | null }>(
+    spectateAs ? 'get_spectator_round_reveal' : 'get_round_reveal',
+    spectateAs
+      ? { p_match_id: matchId, p_round: round, p_player: spectateAs }
+      : { p_match_id: matchId, p_round: round },
+  );
   return { mine: p.mine ?? null, opponent: p.opponent ?? null };
 }
 
@@ -844,13 +872,16 @@ async function currentUserId(): Promise<string | null> {
 /** Maçın güvenli durumunu çeker; satır yok/oyuncu değilsen null.
  *  skipProfiles: adlar çağıranda zaten cache'te → profiles sorgusunu atla.
  *  (Emniyet poll'u her turda profiles'ı yeniden çekmesin; adlar caller'da
- *  withNames ile geri doldurulur — matchRowToState boş adla haritalar.) */
+ *  withNames ile geri doldurulur — matchRowToState boş adla haritalar.)
+ *  asPlayer: KLAN MAÇ İZLEME — durum, çağıran yerine İZLENEN oyuncunun
+ *  bakış açısından haritalanır (myRole = onun rolü). Satırı okuma yetkisini
+ *  yine RLS verir (can_spectate_match); yetki yoksa satır gelmez → null. */
 export async function fetchMatchState(
   matchId: string,
-  opts?: { skipProfiles?: boolean },
+  opts?: { skipProfiles?: boolean; asPlayer?: string | null },
 ): Promise<MatchState | null> {
   const client = requireClient();
-  const myId = await currentUserId();
+  const myId = opts?.asPlayer ?? (await currentUserId());
   if (!myId) throw new OnlineError('not_authenticated', ERROR_MESSAGES.not_authenticated);
 
   const { data, error } = await withTimeout(
