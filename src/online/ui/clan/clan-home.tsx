@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -11,6 +12,7 @@ import {
   rejectClanRequest,
   setClanMemberRole,
   transferClanLeadership,
+  useLiveMatches,
   useOnlineIds,
   type Clan,
   type ClanMember,
@@ -45,6 +47,11 @@ export function ClanHome({
   const onlineIds = useOnlineIds();
   const onlineCount = clan.members.filter((m) => onlineIds.has(m.player)).length;
   const { challenge } = useChallenge();
+  const router = useRouter();
+  // Şu an eşleşmeli maçta olan üyeler (presence payload'ından, anlık) →
+  // kartlarında "izle" gözü belirir. Maçtakine meydan okunamadığı için göz,
+  // meydan okuma şimşeğinin YERİNE geçer (satır kalabalıklaşmaz).
+  const liveMatches = useLiveMatches();
   // Varsayılan: sunucu sırası (rütbe → katkı → kupa). Değiştir → yalnız kupaya göre.
   const sortedMembers = sortByTrophy
     ? [...clan.members].sort((a, b) => b.rating - a.rating)
@@ -185,6 +192,7 @@ export function ClanHome({
           const rank = memberRank(m);
           const manageable = iAmManager && m.player !== myId && m.role !== 'leader';
           const online = onlineIds.has(m.player);
+          const live = m.player !== myId ? liveMatches.get(m.player) : undefined;
           return (
             <Pressable
               key={m.player}
@@ -193,20 +201,41 @@ export function ClanHome({
               style={({ pressed }) => [styles.memberRow, pressed && manageable && styles.memberPressed]}>
               <View style={styles.avatarWrap}>
                 <Avatar initial={m.username.charAt(0) || '?'} accent={rank.accent} size={38} />
-                {online ? <View style={styles.onlineBadge} /> : null}
+                {live ? (
+                  <View style={styles.liveBadge}>
+                    <View style={styles.liveDot} />
+                  </View>
+                ) : online ? (
+                  <View style={styles.onlineBadge} />
+                ) : null}
               </View>
               <View style={styles.memberInfo}>
                 <Text style={styles.memberName} numberOfLines={1}>
                   {m.username}
                   {m.player === myId ? <Text style={styles.you}> (sen)</Text> : null}
                 </Text>
-                <Text style={[styles.memberRank, { color: rank.accent }]}>{rank.label}</Text>
+                <Text style={[styles.memberRank, { color: live ? colors.violet : rank.accent }]}>
+                  {live ? 'MAÇTA' : rank.label}
+                </Text>
               </View>
               <View style={styles.memberRight}>
                 <Feather name="award" size={11} color={colors.amber} />
                 <Text style={styles.memberRating}>{m.rating}</Text>
               </View>
-              {online && m.player !== myId ? (
+              {live ? (
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: '/watch/[id]',
+                      params: { id: live.matchId, as: m.player, content: live.content },
+                    })
+                  }
+                  hitSlop={6}
+                  accessibilityLabel={`${m.username} maçını izle`}
+                  style={styles.watchBtn}>
+                  <Feather name="eye" size={15} color={colors.violet} />
+                </Pressable>
+              ) : online && m.player !== myId ? (
                 <Pressable onPress={() => challenge(m.player, m.username)} hitSlop={6} style={styles.challengeBtn}>
                   <Feather name="zap" size={15} color={colors.amber} />
                 </Pressable>
@@ -329,6 +358,17 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
     backgroundColor: withAlpha(colors.amber, 0.12), borderWidth: 1, borderColor: withAlpha(colors.amber, 0.35),
   },
+  watchBtn: {
+    width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: withAlpha(colors.violet, 0.14), borderWidth: 1, borderColor: withAlpha(colors.violet, 0.4),
+  },
+  // "Maçta" göstergesi: çevrimiçi noktasının mor kardeşi (avatar köşesi).
+  liveBadge: {
+    position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.violet, borderWidth: 2, borderColor: colors.bgMid,
+  },
+  liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.ice },
   requestRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14,

@@ -34,6 +34,7 @@ import { Screen } from '@/ui/screen';
 import { colors, mono } from '@/ui/theme';
 
 import { ResultOverlay } from '../duel/result-overlay';
+import { CheerBar, CheerStream, TribuneBadge } from '../spectate/tribune';
 import { EmoteBar, IncomingReaction } from '../word/emote-bar';
 import { WordOrbs } from '../word/orbs';
 import { RequestWordButton } from '../word/request-word-button';
@@ -71,13 +72,32 @@ const ROUND_BREAK_MS = 2800;
  *  fazı yoktur; tur başına ORTAK 180 sn geri sayım. İlk çözen turu anında alır;
  *  süre dolarsa "en çok ilerleyen" alır. Best-of-3. Rakip ilerlemesi yalnız
  *  toplu yeşil/sarı SAYI olarak iner (harf/pozisyon sızmaz). */
-export function WordRaceScreen({ matchId }: { matchId: string }) {
+export function WordRaceScreen({
+  matchId,
+  spectateAs = null,
+}: {
+  matchId: string;
+  /** KLAN MAÇ İZLEME: verilirse ekran bu oyuncunun gözünden salt-okunur açılır. */
+  spectateAs?: string | null;
+}) {
+  const spectator = spectateAs != null;
   const router = useRouter();
   const navigation = useNavigation();
   const session = useMatchSession();
   const { width } = useWindowDimensions();
-  const { match, guesses, loading, error, sendSignal, incomingSignal, sendText, incomingText } =
-    useMatch(matchId);
+  const {
+    match,
+    guesses,
+    loading,
+    error,
+    sendSignal,
+    incomingSignal,
+    sendText,
+    incomingText,
+    spectatorCount,
+    sendCheer,
+    incomingCheer,
+  } = useMatch(matchId, { spectateAs });
 
   const [entry, setEntry] = useState<string[]>([]);
   const historyRef = useRef<ScrollView>(null);
@@ -172,10 +192,11 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
     [myGuesses.map((g) => `${g.id}:${g.feedback}`).join(','), wordLength],
   );
 
-  // Merkezi maç sahibi (çıkış temizliği için).
+  // Merkezi maç sahibi (çıkış temizliği için). Seyirci SAHİPLENMEZ.
   useEffect(() => {
+    if (spectator) return;
     session.claim(matchId, 'match');
-  }, [matchId, session]);
+  }, [matchId, session, spectator]);
 
   // Yeni tur → giriş kutularını temizle (tahta zaten yeni turu filtreler).
   useEffect(() => {
@@ -277,7 +298,7 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!finished || finishedRound == null) return;
     let alive = true;
-    getMatchReveal(matchId)
+    getMatchReveal(matchId, spectateAs)
       .then((r) => alive && setReveal(r))
       .catch(
         () =>
@@ -291,13 +312,13 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
             veriDelta: null,
           }),
       );
-    wordRaceReveal(matchId, finishedRound)
+    wordRaceReveal(matchId, finishedRound, spectateAs)
       .then((r) => alive && setFinalSecret(r.secret))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [finished, matchId, finishedRound]);
+  }, [finished, matchId, finishedRound, spectateAs]);
 
   // Sinyal destesi (maç-içi emote + maç-sonu reaksiyon).
   useEffect(() => {
@@ -332,9 +353,13 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
   const leavingRef = useRef(false);
   const goMenu = useCallback(() => {
     leavingRef.current = true;
+    if (spectator) {
+      router.back(); // tribünden ayrıl → klan ekranına dön
+      return;
+    }
     session.release();
     router.dismissTo('/');
-  }, [router, session]);
+  }, [router, session, spectator]);
   const goRematch = useCallback(() => {
     leavingRef.current = true;
     session.release();
@@ -342,6 +367,7 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
   }, [router, session]);
 
   useEffect(() => {
+    if (spectator) return; // seyirci serbestçe çıkar
     const sub = navigation.addListener('beforeRemove', (e) => {
       if (leavingRef.current || match?.status === 'finished') return;
       e.preventDefault();
@@ -359,11 +385,12 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
       ]);
     });
     return sub;
-  }, [navigation, match?.status, session]);
+  }, [navigation, match?.status, session, spectator]);
 
   // ── Giriş ─────────────────────────────────────────────────────
   // Tur geçişinde/roundEnd sırasında ANINDA kilitle (geç tahmin sızmasın).
-  const locked = !match || status !== 'active' || !!roundEnd || submitting;
+  // Seyircide klavye HER ZAMAN kilitli.
+  const locked = spectator || !match || status !== 'active' || !!roundEnd || submitting;
 
   const addLetter = useCallback(
     (k: string) => {
@@ -440,7 +467,22 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
   );
 
   if (!match) {
-    if (!loading && !error) return <Redirect href="/" />;
+    // Seyircide ana menüye fırlatma YOK: izleme yetkisi yoksa (klan arkadaşı
+    // değil / maç özel oda / maç kayboldu) bilgilendir ve geldiği yere döndür.
+    if (spectator) {
+      if (!loading) {
+        return (
+          <Screen float="letters">
+            <View style={styles.centered}>
+              <Text style={styles.note}>{error ?? 'Bu maç artık izlenemiyor.'}</Text>
+              <Pressable onPress={goMenu} hitSlop={8} style={styles.noteExit}>
+                <Text style={styles.noteExitText}>Geri Dön</Text>
+              </Pressable>
+            </View>
+          </Screen>
+        );
+      }
+    } else if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen float="letters">
         <View style={styles.centered}>
@@ -490,13 +532,14 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
     <Screen float="letters">
       <WordOrbs amberBottom={200} />
       <View style={styles.content}>
-        {/* ÜST: rozet + Bo3 tur noktaları */}
+        {/* ÜST: rozet + Bo3 tur noktaları + tribün sayacı */}
         <View style={styles.headerRow}>
           {exitButton}
           <View style={styles.badge}>
             <View style={styles.badgeDot} />
             <Text style={styles.badgeText}>yarış · {wordLength} harf</Text>
           </View>
+          <TribuneBadge count={spectatorCount} />
           <View style={styles.roundDots}>
             <Text style={styles.roundDotsLabel}>tur</Text>
             {[0, 1, 2].map((i) => {
@@ -660,32 +703,38 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
           ) : null}
         </View>
 
-        {/* KLAVYE + ONAY */}
-        <View style={styles.kbWrap}>
-          <View style={styles.confirmRow}>
-            <EmoteBar
-              deck={signalDeck}
-              onSendSignal={sendSignal}
-              onSendText={sendText}
-              disabled={finished}
-            />
-            <View style={styles.confirmFill}>
-              <WordConfirmButton
-                label="Kelimeyi Onayla"
-                enabled={entry.length === wordLength && !locked}
-                busy={submitting}
-                onPress={submit}
-              />
-            </View>
+        {/* KLAVYE + ONAY (seyircide yok — yerine tribün barı) */}
+        {spectator ? (
+          <View style={styles.kbWrap}>
+            <CheerBar deck={signalDeck} onCheer={sendCheer} />
           </View>
-          <TrKeyboard
-            large
-            onKey={addLetter}
-            onDelete={deleteLetter}
-            locked={locked}
-            letterStates={keyStates}
-          />
-        </View>
+        ) : (
+          <View style={styles.kbWrap}>
+            <View style={styles.confirmRow}>
+              <EmoteBar
+                deck={signalDeck}
+                onSendSignal={sendSignal}
+                onSendText={sendText}
+                disabled={finished}
+              />
+              <View style={styles.confirmFill}>
+                <WordConfirmButton
+                  label="Kelimeyi Onayla"
+                  enabled={entry.length === wordLength && !locked}
+                  busy={submitting}
+                  onPress={submit}
+                />
+              </View>
+            </View>
+            <TrKeyboard
+              large
+              onKey={addLetter}
+              onDelete={deleteLetter}
+              locked={locked}
+              letterStates={keyStates}
+            />
+          </View>
+        )}
       </View>
 
       {/* Tur-sonu ara ekranı (maç bitmediyse) */}
@@ -730,11 +779,15 @@ export function WordRaceScreen({ matchId }: { matchId: string }) {
           opponentInitial={opponentName.charAt(0)}
           deck={signalDeck}
           incomingSignal={incomingSignal}
-          onSendSignal={sendSignal}
+          onSendSignal={spectator ? sendCheer : sendSignal}
           onRematch={goRematch}
           onMenu={goMenu}
+          spectator={spectator}
         />
       ) : null}
+
+      {/* Tribün tezahürat akışı — rakip baloncuğundan bağımsız kanal. */}
+      <CheerStream cheer={incomingCheer} />
     </Screen>
   );
 }

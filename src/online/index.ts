@@ -134,9 +134,16 @@ export {
   claimWordRaceTimeout,
   wordRaceReveal,
 } from './matchService';
-export { useMatch, type UseMatchResult } from './useMatch';
+export { useMatch, type UseMatchOptions, type UseMatchResult } from './useMatch';
 export { useLiveClocks } from './useLiveClocks';
 export { MatchSessionProvider, useMatchSession } from './match-session';
 export { RankProvider, useRank } from './rank-context';
-export { OnlinePresenceProvider, useOnlineCount, useOnlineIds } from './online-presence';
+export {
+  OnlinePresenceProvider,
+  useLiveMatches,
+  useOnlineCount,
+  useOnlineIds,
+  usePublishMyMatch,
+  type LiveMatchInfo,
+} from './online-presence';
 export { levelTitle, isEliteLevel, MAX_LEVEL, ELITE_LEVEL } from './progression';

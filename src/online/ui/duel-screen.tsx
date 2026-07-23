@@ -38,6 +38,7 @@ import { RoundSetup } from './duel/round-setup';
 import { TurnBanner } from './duel/turn-banner';
 import type { FeatherName } from './parts';
 import { OPPONENT_VISIBLE_PROTOCOLS, PILLAR_COLOR, protocolIcon } from './protocol-visuals';
+import { CheerBar, CheerStream, TribuneBadge } from './spectate/tribune';
 import { EmoteBar, IncomingReaction } from './word/emote-bar';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
@@ -46,8 +47,19 @@ const errMsg = (e: unknown) =>
 
 /** Online düello ekranı: useMatch realtime + sunucu RPC'leri (makeGuess /
  *  claimTimeout / leaveMatch / get_match_reveal). Görsel saat sadece gösterim;
- *  her karar sunucuda. Rakip gizli sayısı YALNIZCA maç bitince (overlay) gelir. */
-export function DuelScreen({ matchId }: { matchId: string }) {
+ *  her karar sunucuda. Rakip gizli sayısı YALNIZCA maç bitince (overlay) gelir.
+ *
+ *  spectateAs verilirse KLAN MAÇ İZLEME modu: ekran o oyuncunun gözünden
+ *  render olur (useMatch perspektifi), tüm giriş/aksiyon yolları kapanır ve
+ *  alt tarafta tribün barı (tezahürat) belirir. */
+export function DuelScreen({
+  matchId,
+  spectateAs = null,
+}: {
+  matchId: string;
+  spectateAs?: string | null;
+}) {
+  const spectator = spectateAs != null;
   const router = useRouter();
   const navigation = useNavigation();
   const session = useMatchSession();
@@ -63,7 +75,10 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     incomingText,
     protocolUses,
     incomingProtocolUse,
-  } = useMatch(matchId);
+    spectatorCount,
+    sendCheer,
+    incomingCheer,
+  } = useMatch(matchId, { spectateAs });
 
   const [entry, setEntry] = useState<string[]>([]);
   const [reveal, setReveal] = useState<MatchReveal | null>(null);
@@ -111,10 +126,15 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const finished = status === 'finished';
   const myId = match ? (match.myRole === 'player1' ? match.player1.id : match.player2?.id ?? '') : '';
   const isMine = !!match && status === 'active' && match.currentTurn === myId;
-  const locked = !isMine;
+  // Seyircide giriş HER ZAMAN kilitli — "izlenen oyuncunun sırası" olsa bile.
+  const locked = spectator || !isMine;
 
   const p1 = match?.myRole === 'player1';
-  const myName = name || 'Sen';
+  // Seyircide "ben" = izlenen oyuncu → adı maç durumundan okunur.
+  const watchedName =
+    (match ? (match.myRole === 'player1' ? match.player1.username : match.player2?.username) : null) ??
+    'Oyuncu';
+  const myName = spectator ? watchedName : name || 'Sen';
   const opponentName =
     (match ? (match.myRole === 'player1' ? match.player2?.username : match.player1.username) : null) ??
     'Rakip';
@@ -141,9 +161,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   }, [isMine, buzz]);
 
   // Merkezi maç sahibine kaydol: çıkış temizliği tek yerden (provider izleyici).
+  // Seyirci SAHİPLENMEZ — maçı bırakma/forfeit yolları ona hiç açılmaz.
   useEffect(() => {
+    if (spectator) return;
     session.claim(matchId, 'match');
-  }, [matchId, session]);
+  }, [matchId, session, spectator]);
 
 
   // Bir tur bitip yeni tur belirlemesine geçince, biten turun sonucunu sapta:
@@ -174,11 +196,11 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       prevScoreRef.current = { p1: match.p1RoundWins, p2: match.p2RoundWins };
       // Biten turun İKİ sayısını çek (break ekranı için). Sayı modunda kendi
       // sayım yerelde tutulmaz → ikisi de sunucudan (RPC gelene dek "—").
-      getRoundReveal(matchId, prevRound)
+      getRoundReveal(matchId, prevRound, spectateAs)
         .then((r) => setRoundReveal({ round: prevRound, ...r }))
         .catch(() => {});
     }
-  }, [match, guesses, p1, myId, matchId]);
+  }, [match, guesses, p1, myId, matchId, spectateAs]);
 
   // Not: süre bitince otomatik zaman aşımı artık useMatch içinde merkezî olarak
   // ele alınıyor (her iki istemci de claim eder, idempotent). Burada tetikleme yok.
@@ -202,7 +224,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     (async () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const h = await getMyHand(matchId);
+          const h = await getMyHand(matchId, spectateAs);
           if (!alive) return;
           setMyProtocols(h.selected);
           setEliminations(h.eliminations);
@@ -220,7 +242,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     return () => {
       alive = false;
     };
-  }, [isProtocol, matchId, myProtocols]);
+  }, [isProtocol, matchId, myProtocols, spectateAs]);
 
   // Susturulduysan (rakibin Susturma'sı) sıradaki turun bitene kadar hiçbir
   // protokol kullanamazsın — sunucu zaten reddeder, UI tile'ları pasifler.
@@ -472,7 +494,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!finished) return;
     let alive = true;
-    getMatchReveal(matchId)
+    getMatchReveal(matchId, spectateAs)
       .then((r) => alive && setReveal(r))
       .catch(
         () =>
@@ -489,7 +511,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
     return () => {
       alive = false;
     };
-  }, [finished, matchId]);
+  }, [finished, matchId, spectateAs]);
 
   // Sinyal destesini maç BAŞINDA yükle (maç-içi emote + maç-sonu reaksiyon için).
   useEffect(() => {
@@ -520,9 +542,14 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   const leavingRef = useRef(false);
   const goMenu = useCallback(() => {
     leavingRef.current = true;
+    // Seyirci maçı sahiplenmedi → release/dismiss yok, geldiği yere (klan) döner.
+    if (spectator) {
+      router.back();
+      return;
+    }
     session.release(); // maç bitti (sonuç ekranından) → izleyici leave atmasın
     router.dismissTo('/');
-  }, [router, session]);
+  }, [router, session, spectator]);
 
   // Tekrar Oyna: doğrudan Hızlı Maç arama akışına (lobiye değil). Bu maçın
   // aboneliği/kanalı unmount'ta temizlenir; online ekranı quick paramıyla
@@ -536,6 +563,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   // Çıkış onayı (UX): aktif maçta geri = hükmen kayıp uyarısı. Onaylanınca asıl
   // leave_match'i MERKEZİ sahip yapar (session.leave → forfeit), tek yerden.
   useEffect(() => {
+    if (spectator) return; // seyirci serbestçe çıkar (hükmen kayıp yok)
     const sub = navigation.addListener('beforeRemove', (e) => {
       // Maç bitti ya da çıkışı zaten onayladıysak engelleme.
       if (leavingRef.current || match?.status === 'finished') return;
@@ -558,7 +586,7 @@ export function DuelScreen({ matchId }: { matchId: string }) {
       );
     });
     return sub;
-  }, [navigation, match?.status, session]);
+  }, [navigation, match?.status, session, spectator]);
 
   // ── Giriş aksiyonları ─────────────────────────────────────────
   const addDigit = useCallback(
@@ -619,7 +647,22 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   if (!match) {
     // Yükleme bitti + maç YOK + hata da yok = gerçekten bulunamadı / oyuncu değil
     // → güvenli yönlendirme (<Redirect>). Ağ hatasında mesaj + "Ana Menü" butonu.
-    if (!loading && !error) return <Redirect href="/" />;
+    // Seyircide ana menüye fırlatma YOK: izleme yetkisi yoksa (klan arkadaşı
+    // değil / maç özel oda / maç kayboldu) bilgilendir ve geldiği yere döndür.
+    if (spectator) {
+      if (!loading) {
+        return (
+          <Screen>
+            <View style={styles.centered}>
+              <Text style={styles.note}>{error ?? 'Bu maç artık izlenemiyor.'}</Text>
+              <Pressable onPress={goMenu} hitSlop={8} style={styles.noteExit}>
+                <Text style={styles.noteExitText}>Geri Dön</Text>
+              </Pressable>
+            </View>
+          </Screen>
+        );
+      }
+    } else if (!loading && !error) return <Redirect href="/" />;
     return (
       <Screen>
         <View style={styles.centered}>
@@ -637,7 +680,31 @@ export function DuelScreen({ matchId }: { matchId: string }) {
   }
 
   // Turlar arası belirleme (Best of 3, round ≥ 2): düello ekranı içinde.
+  // Seyircide gizli sayı girişi YOKTUR (aynalanacak bir şey de yok — oyuncunun
+  // o fazdaki tek içeriği kendi girişi) → sade bekleme paneli gösterilir.
   if (status === 'setup') {
+    if (spectator) {
+      return (
+        <Screen>
+          <View style={styles.content}>
+            <View style={styles.topRow}>
+              {exitButton}
+              <View style={styles.badgeSlot}>
+                <TribuneBadge count={spectatorCount} />
+              </View>
+            </View>
+            <View style={styles.centered}>
+              <ActivityIndicator color={colors.violet} />
+              <Text style={styles.note}>
+                {`Tur ${match.currentRound} · oyuncular gizli sayılarını belirliyor…`}
+              </Text>
+            </View>
+            <CheerBar deck={signalDeck} onCheer={sendCheer} />
+          </View>
+          <CheerStream cheer={incomingCheer} />
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <View style={styles.content}>
@@ -694,6 +761,10 @@ export function DuelScreen({ matchId }: { matchId: string }) {
               </Text>
             </View>
           ) : null}
+          {/* Tribün rozeti: "kaç kişi izliyor". Rakibin ekranında ÇIKMAZ. */}
+          <View style={isProtocol ? undefined : styles.badgeSlot}>
+            <TribuneBadge count={spectatorCount} />
+          </View>
           {/* Gelen emote/mesaj — üst barın altında, sağa yaslı (banner metni ortada
               → sağ boş; tur çipinin altında). ~2.6 sn pop'lar, UI'yı itmez. */}
           {!finished ? (
@@ -722,18 +793,32 @@ export function DuelScreen({ matchId }: { matchId: string }) {
             ) : null
           }
           emoteSlot={
-            <EmoteBar deck={signalDeck} onSendSignal={sendSignal} onSendText={sendText} />
+            spectator ? null : (
+              <EmoteBar deck={signalDeck} onSendSignal={sendSignal} onSendText={sendText} />
+            )
           }
         />
 
         {/* Protokol şeridi: yalnız Protokol Maçı'nda ve seçim varsa yer kaplar
-            (quick/offline'da render edilmez → alt boşluk oluşmaz). */}
+            (quick/offline'da render edilmez → alt boşluk oluşmaz).
+            Seyircide ayna olarak görünür ama dokunuş etkisizdir. */}
         {protocolTiles.length > 0 ? (
-          <ProtocolStrip tiles={protocolTiles} onUse={onUseProtocol} silenced={silencedMe} />
+          <ProtocolStrip
+            tiles={protocolTiles}
+            onUse={spectator ? () => {} : onUseProtocol}
+            silenced={silencedMe}
+          />
         ) : null}
+
+        {/* Tribün barı: yalnız seyircide — tek dokunuşla tezahürat. */}
+        {spectator ? <CheerBar deck={signalDeck} onCheer={sendCheer} /> : null}
 
         <ProtocolNotice notice={notices[0] ?? null} onDone={dismissNotice} />
       </View>
+
+      {/* Tribün tezahürat akışı: rakip baloncuğundan bağımsız kanal —
+          küçük, çoklu, aşağıdan yukarı süzülür. */}
+      <CheerStream cheer={incomingCheer} />
 
       {/* Konum Testi girişi (info_postest): rakam + pozisyon → use_protocol. */}
       <PostestPrompt
@@ -766,9 +851,10 @@ export function DuelScreen({ matchId }: { matchId: string }) {
           opponentInitial={opponentName.charAt(0)}
           deck={signalDeck}
           incomingSignal={incomingSignal}
-          onSendSignal={sendSignal}
+          onSendSignal={spectator ? sendCheer : sendSignal}
           onRematch={goRematch}
           onMenu={goMenu}
+          spectator={spectator}
         />
       ) : null}
     </Screen>
@@ -817,6 +903,9 @@ const styles = StyleSheet.create({
     color: colors.ice,
     fontFamily: mono,
     letterSpacing: 0.5,
+  },
+  badgeSlot: {
+    marginLeft: 'auto',
   },
   exit: {
     width: 38,

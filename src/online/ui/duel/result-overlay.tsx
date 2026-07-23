@@ -57,6 +57,7 @@ export function ResultOverlay({
   onSendSignal,
   onRematch,
   onMenu,
+  spectator = false,
 }: {
   win: boolean;
   /** Bitiş sebebi (win/timeout/forfeit) — perspektife göre etiket. */
@@ -83,6 +84,9 @@ export function ResultOverlay({
   onSendSignal: (signalId: string) => void;
   onRematch: () => void;
   onMenu: () => void;
+  /** KLAN MAÇ İZLEME: seyirci görünümü — "Tekrar Oyna" gizlenir, çıkış tribünden
+   *  ayrılmaya döner. Sinyal şeridi kalır (tezahürat olarak gönderilir). */
+  spectator?: boolean;
 }) {
   const v = useRef(new Animated.Value(0)).current;
   const [open, setOpen] = useState(false);
@@ -261,17 +265,22 @@ export function ResultOverlay({
       </Animated.View>
       <Text style={[styles.sentHint, !sent && styles.sentHintHidden]}>Gönderildi ✓</Text>
 
-      {/* Buton satırı: Tekrar Oyna · Ana Menü · sinyal aç/kapa */}
+      {/* Buton satırı: Tekrar Oyna · Ana Menü · sinyal aç/kapa
+          (seyircide yalnız "Tribünden Ayrıl" — maça giriş yolu yok) */}
       <View style={styles.buttonRow}>
-        <Pressable
-          onPress={onRematch}
-          style={[styles.cta, styles.ctaPrimary, { borderColor: withAlpha(colors.cyan, 0.5), backgroundColor: withAlpha(colors.cyan, 0.22) }]}>
-          <Feather name="rotate-cw" size={14} color={colors.ice} />
-          <Text style={[styles.ctaText, { color: colors.ice }]}>Tekrar Oyna</Text>
-        </Pressable>
+        {spectator ? null : (
+          <Pressable
+            onPress={onRematch}
+            style={[styles.cta, styles.ctaPrimary, { borderColor: withAlpha(colors.cyan, 0.5), backgroundColor: withAlpha(colors.cyan, 0.22) }]}>
+            <Feather name="rotate-cw" size={14} color={colors.ice} />
+            <Text style={[styles.ctaText, { color: colors.ice }]}>Tekrar Oyna</Text>
+          </Pressable>
+        )}
         <Pressable onPress={onMenu} style={[styles.cta, styles.ctaPrimary, styles.ctaGlass]}>
-          <Feather name="home" size={14} color={colors.text} />
-          <Text style={[styles.ctaText, { color: colors.text }]}>Ana Menü</Text>
+          <Feather name={spectator ? 'log-out' : 'home'} size={14} color={colors.text} />
+          <Text style={[styles.ctaText, { color: colors.text }]}>
+            {spectator ? 'Tribünden Ayrıl' : 'Ana Menü'}
+          </Text>
         </Pressable>
         <Pressable
           onPress={() => setOpen((o) => !o)}
