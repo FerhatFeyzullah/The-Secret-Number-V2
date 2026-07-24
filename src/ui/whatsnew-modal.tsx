@@ -1,15 +1,45 @@
 import { Feather } from '@expo/vector-icons';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, cyanAlpha, mono } from './theme';
+import { colors, cyanAlpha, mono, withAlpha } from './theme';
 
-/** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek duyuru varsa) BUMP et →
+/** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ana ekran ilk açılışında BİR KEZ görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'gizem-cagi-mod-2026-07';
+export const WHATSNEW_ID = 'gizem-cagi-v3b-2026-07';
 
-/** Güncelleme sonrası ana ekran ilk açılışında BİR KEZ görünen duyuru pankartı:
- *  başlık + tam görsel (çerçeveli) + sağ üstte kapatma ×. Sadece yeni mod duyurusu. */
+type Note = { icon: React.ComponentProps<typeof Feather>['name']; accent: string; title: string; body: string };
+
+/** Bu sürümün notları (Gizem Çağı v3b — öğretici + kale kademeleri + cila). */
+const NOTES: Note[] = [
+  {
+    icon: 'compass',
+    accent: colors.violet,
+    title: 'Maç öncesi öğretici',
+    body: 'Gizem Çağı’na girmeden örnek harita üzerinde nasıl oynandığını öğren. Turnuva kartındaki “?” ile istediğin zaman tekrar aç.',
+  },
+  {
+    icon: 'flag',
+    accent: colors.gold,
+    title: 'Kale kademeleri',
+    body: 'Kaleler artık harf sayısına göre farklı görünüyor — 4 / 5 / 6 harf dışarıdan bir bakışta ayırt ediliyor.',
+  },
+  {
+    icon: 'activity',
+    accent: colors.cyan,
+    title: 'Son Maçlar’da Gizem Çağı',
+    body: 'Gizem Çağı maçları Son Maçlar sekmesine eklendi: kim kaç kale/kule aldı ve kaç puan topladı.',
+  },
+  {
+    icon: 'zap',
+    accent: colors.teal,
+    title: 'Daha akıcı, daha net',
+    body: 'Savunmada denemelerin geri bildirimiyle listeleniyor, kelimede klavye renkleniyor; süre sayacı, faz duyurusu ve oyuncu renkleri iyileştirildi.',
+  },
+];
+
+/** Güncelleme sonrası ana ekran ilk açılışında BİR KEZ görünen "Yenilikler" notları:
+ *  başlık + kısa madde listesi + sağ üstte kapatma ×. */
 export function WhatsNewModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   return (
@@ -17,7 +47,6 @@ export function WhatsNewModal({ visible, onClose }: { visible: boolean; onClose:
       <View style={[styles.root, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.card}>
-          {/* üst enerji şeridi */}
           <View style={styles.beam} />
 
           <Pressable onPress={onClose} hitSlop={12} style={styles.close}>
@@ -25,18 +54,27 @@ export function WhatsNewModal({ visible, onClose }: { visible: boolean; onClose:
           </Pressable>
 
           <View style={styles.head}>
-            <Text style={styles.kicker}>YENİ MOD</Text>
-            <Text style={styles.title}>GİZEM ÇAĞI</Text>
-            <Text style={styles.tag}>Üç hükümdar, tek diyar.</Text>
+            <Text style={styles.kicker}>GÜNCELLEME · GİZEM ÇAĞI</Text>
+            <Text style={styles.title}>YENİLİKLER</Text>
           </View>
 
-          <View style={styles.frame}>
-            <Image
-              source={require('../../assets/images/whatsnew-gizem-cagi.png')}
-              style={styles.img}
-              resizeMode="cover"
-            />
-          </View>
+          <ScrollView style={styles.list} contentContainerStyle={styles.listBody} showsVerticalScrollIndicator={false}>
+            {NOTES.map((n) => (
+              <View key={n.title} style={styles.note}>
+                <View style={[styles.noteIcon, { borderColor: withAlpha(n.accent, 0.5), backgroundColor: withAlpha(n.accent, 0.14) }]}>
+                  <Feather name={n.icon} size={16} color={n.accent} />
+                </View>
+                <View style={styles.noteText}>
+                  <Text style={styles.noteTitle}>{n.title}</Text>
+                  <Text style={styles.noteBody}>{n.body}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          <Pressable onPress={onClose} style={styles.cta}>
+            <Text style={styles.ctaText}>Tamam</Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -54,12 +92,13 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
+    maxHeight: '86%',
     backgroundColor: colors.bgMid,
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: cyanAlpha(0.4),
     paddingTop: 20,
-    paddingBottom: 18,
+    paddingBottom: 16,
     paddingHorizontal: 16,
     overflow: 'hidden',
     boxShadow: `0 18px 48px rgba(0,0,0,0.55), 0 0 30px ${cyanAlpha(0.14)}`,
@@ -90,7 +129,7 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
   },
   head: { alignItems: 'center', gap: 4, marginBottom: 14, paddingHorizontal: 30 },
-  kicker: { fontFamily: mono, fontSize: 10, letterSpacing: 4, color: colors.cyan },
+  kicker: { fontFamily: mono, fontSize: 10, letterSpacing: 3, color: colors.cyan },
   title: {
     fontFamily: mono,
     fontSize: 24,
@@ -101,15 +140,29 @@ const styles = StyleSheet.create({
     textShadowRadius: 16,
     textAlign: 'center',
   },
-  tag: { fontSize: 12.5, color: colors.dim, textAlign: 'center' },
-  frame: {
-    width: '100%',
-    aspectRatio: 1376 / 768,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: cyanAlpha(0.35),
-    backgroundColor: '#0a1220',
+  list: { flexGrow: 0, flexShrink: 1 },
+  listBody: { gap: 12, paddingBottom: 4 },
+  note: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  noteIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    marginTop: 1,
   },
-  img: { width: '100%', height: '100%' },
+  noteText: { flex: 1, gap: 3 },
+  noteTitle: { fontFamily: mono, fontSize: 14, fontWeight: '800', color: colors.ice },
+  noteBody: { fontFamily: 'Comfortaa', fontSize: 12.5, color: colors.dim, lineHeight: 18 },
+  cta: {
+    marginTop: 14,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: cyanAlpha(0.55),
+    backgroundColor: cyanAlpha(0.16),
+  },
+  ctaText: { fontFamily: mono, fontSize: 13, fontWeight: '800', color: colors.ice, letterSpacing: 1 },
 });
