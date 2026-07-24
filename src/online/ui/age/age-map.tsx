@@ -1,12 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 
 import type { AgeState, AgeTerritory } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { AGE, ageColors, ownerColor } from './age-colors';
-import { AgeCastle, AgeTower } from './age-icons';
+import { AgeCastle, AgeSiege, AgeTower } from './age-icons';
 
 /** Harita mantıksal boyutu (düğümler yüzde, bağlantılar bu viewBox). */
 const VB_W = 360;
@@ -54,16 +54,30 @@ function fmt(ms: number) {
  *  alarmı. Etkileşim callback'lerle üst akışa (orkestratör) taşınır. */
 export function AgeMap({
   state,
+  veri,
   onTapNode,
   onDefend,
 }: {
   state: AgeState;
+  /** Kalan maç‑içi Sefer Verisi (undefined → sayaç gizli). */
+  veri?: number;
   onTapNode: (t: AgeTerritory) => void;
   onDefend: (attackId: string, territoryId: string) => void;
 }) {
   const now = useNow(state.phase === 'prep' || state.phase === 'war');
+  // Bağlantı SVG'sine sayısal boyut (absoluteFill stil-only Android'de çizmiyor).
+  const [mapSize, setMapSize] = useState({ w: 0, h: 0 });
+  const onMapLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setMapSize((prev) => (prev.w === width && prev.h === height ? prev : { w: width, h: height }));
+  };
   const colorMap = ageColors(state.players, state.me);
   const byId = Object.fromEntries(state.territories.map((t) => [t.id, t]));
+  // Toplam prestij puanı (kule 2 · kale seviye×5 — _age_finish ile aynı).
+  const pointsOf = (pid: string) =>
+    state.territories
+      .filter((t) => t.owner === pid)
+      .reduce((sum, t) => sum + (t.kind === 'castle' ? t.level * 5 : 2), 0);
   // Herkesin aktif saldırısı: territory → saldıran rengi (harita işareti).
   const attackerColor: Record<string, string> = {};
   for (const pa of state.attacksPublic) attackerColor[pa.territoryId] = colorMap[pa.attacker] ?? AGE.gray;
@@ -81,6 +95,12 @@ export function AgeMap({
         <View style={styles.phaseBox}>
           <Text style={styles.phaseLabel}>{state.phase === 'prep' ? 'HAZIRLIK' : 'SAVAŞ'}</Text>
           <Text style={styles.phaseTime}>{fmt(remaining)}</Text>
+          {veri != null ? (
+            <View style={styles.veriChip}>
+              <Feather name="hexagon" size={9} color={colors.teal} />
+              <Text style={styles.veriText}>{veri}</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.standings}>
           {state.players.map((p) => {
@@ -88,11 +108,12 @@ export function AgeMap({
             const me = p.player === state.me;
             return (
               <View key={p.player} style={[styles.team, me && { borderColor: withAlpha(c, 0.6) }]}>
-                <View style={[styles.crest, { backgroundColor: c }]}>
-                  <Text style={styles.crestText}>{(p.username?.charAt(0) || '?').toUpperCase()}</Text>
-                </View>
-                <Text style={styles.teamCount} numberOfLines={1}>
-                  {p.eliminated ? 'elendi' : p.territories}
+                <View style={[styles.dot, { backgroundColor: c }]} />
+                <Text style={styles.teamName} numberOfLines={1}>
+                  {me ? 'Sen' : p.username ?? 'Oyuncu'}
+                </Text>
+                <Text style={[styles.teamCount, p.eliminated && { color: colors.dim }]}>
+                  {p.eliminated ? '✕' : pointsOf(p.player)}
                 </Text>
               </View>
             );
@@ -116,32 +137,52 @@ export function AgeMap({
       ) : null}
 
       {/* HARİTA */}
-      <View style={styles.mapArea}>
+      <View style={styles.mapArea} onLayout={onMapLayout}>
         {/* bağlantılar */}
-        <Svg style={StyleSheet.absoluteFill} viewBox={`0 0 ${VB_W} ${VB_H}`} preserveAspectRatio="none">
+        {mapSize.w > 0 && mapSize.h > 0 ? (
+        <Svg
+          style={StyleSheet.absoluteFill}
+          width={mapSize.w}
+          height={mapSize.h}
+          viewBox={`0 0 ${VB_W} ${VB_H}`}
+          preserveAspectRatio="none">
           {state.territories
             .filter((t) => t.kind === 'tower' && t.castleId)
             .map((t) => {
-              const [tx, ty] = nodePos(t);
               const castle = byId[t.castleId!];
               if (!castle) return null;
+              const [tx, ty] = nodePos(t);
               const [cx, cy] = nodePos(castle);
-              const mine = t.owner === state.me;
-              return (
+              // Kule kalesiyle AYNI kişideyse (bağlı): düz, kale sahibinin renginde.
+              // Değilse (boş/başkası): kesik gri çizgi (yapı görünsün).
+              const bound = !!castle.owner && t.owner === castle.owner;
+              return bound ? (
                 <Line
                   key={t.id}
                   x1={tx}
                   y1={ty}
                   x2={cx}
                   y2={cy}
-                  stroke={mine ? AGE.blue : 'rgba(214,244,255,0.14)'}
-                  strokeWidth={mine ? 2 : 1.2}
-                  strokeDasharray={mine ? undefined : '3 5'}
-                  opacity={mine ? 0.8 : 0.6}
+                  stroke={colorMap[castle.owner!] ?? AGE.gray}
+                  strokeWidth={2}
+                  opacity={0.85}
+                />
+              ) : (
+                <Line
+                  key={t.id}
+                  x1={tx}
+                  y1={ty}
+                  x2={cx}
+                  y2={cy}
+                  stroke={AGE.gray}
+                  strokeWidth={1.2}
+                  strokeDasharray="3 6"
+                  opacity={0.5}
                 />
               );
             })}
         </Svg>
+        ) : null}
 
         {/* düğümler (yüzde konumlu Pressable) */}
         {state.territories.map((t) => {
@@ -149,6 +190,7 @@ export function AgeMap({
           const c = ownerColor(t.owner, colorMap);
           const atkC = attackerColor[t.id];
           const size = t.kind === 'castle' ? 50 : 32;
+          const badge = Math.round(size * 0.62);
           return (
             <Pressable
               key={t.id}
@@ -162,26 +204,19 @@ export function AgeMap({
                   marginTop: -size / 2,
                 },
               ]}>
-              {atkC ? <View style={[styles.ring, { borderColor: atkC }]} /> : null}
               {t.kind === 'castle' ? <AgeCastle size={size} color={c} /> : <AgeTower size={size} color={c} />}
+              {atkC ? (
+                <View
+                  style={[
+                    styles.siege,
+                    { width: badge, height: badge, borderRadius: badge / 2, top: -badge * 0.3, right: -badge * 0.3, borderColor: atkC },
+                  ]}>
+                  <AgeSiege size={Math.round(badge * 0.72)} color={atkC} />
+                </View>
+              ) : null}
             </Pressable>
           );
         })}
-
-        <View style={styles.legend}>
-          {state.players.map((p) => (
-            <View key={p.player} style={styles.legRow}>
-              <View style={[styles.legDot, { backgroundColor: colorMap[p.player] ?? AGE.gray }]} />
-              <Text style={styles.legText} numberOfLines={1}>
-                {p.player === state.me ? 'Sen' : p.username ?? 'Oyuncu'}
-              </Text>
-            </View>
-          ))}
-          <View style={styles.legRow}>
-            <View style={[styles.legDot, { backgroundColor: AGE.gray }]} />
-            <Text style={styles.legText}>Fethedilmemiş</Text>
-          </View>
-        </View>
       </View>
     </View>
   );
@@ -190,17 +225,22 @@ export function AgeMap({
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
   hud: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4, paddingBottom: 8 },
-  phaseBox: { alignItems: 'center', paddingHorizontal: 6 },
+  phaseBox: { alignItems: 'center', paddingHorizontal: 6, gap: 3 },
   phaseLabel: { fontFamily: mono, fontSize: 9, letterSpacing: 2, color: '#d08a52' },
   phaseTime: { fontFamily: mono, fontSize: 15, fontWeight: '800', color: colors.ice },
-  standings: { flex: 1, flexDirection: 'row', gap: 6, justifyContent: 'flex-end' },
+  veriChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 2, paddingHorizontal: 7,
+    borderRadius: 999, borderWidth: 1, borderColor: withAlpha(colors.teal, 0.4), backgroundColor: withAlpha(colors.teal, 0.1),
+  },
+  veriText: { fontFamily: mono, fontSize: 11, fontWeight: '800', color: colors.teal },
+  standings: { flex: 1, flexDirection: 'row', gap: 6 },
   team: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5, paddingHorizontal: 8,
+    flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 8,
     borderRadius: 11, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder,
   },
-  crest: { width: 20, height: 20, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  crestText: { fontFamily: mono, fontSize: 10, fontWeight: '800', color: '#0a1526' },
-  teamCount: { fontFamily: mono, fontSize: 12, fontWeight: '800', color: colors.ice, minWidth: 14, textAlign: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  teamName: { flexShrink: 1, fontFamily: mono, fontSize: 11, fontWeight: '700', color: colors.text },
+  teamCount: { fontFamily: mono, fontSize: 12, fontWeight: '800', color: colors.ice, minWidth: 12, textAlign: 'center' },
   alarm: {
     flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6,
     borderRadius: 12, borderWidth: 1, borderColor: withAlpha(AGE.red, 0.45), backgroundColor: withAlpha(AGE.red, 0.1),
@@ -213,14 +253,8 @@ const styles = StyleSheet.create({
   },
   mapArea: { flex: 1, position: 'relative' },
   node: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  ring: {
-    position: 'absolute', width: '150%', height: '150%', borderRadius: 999, borderWidth: 2, opacity: 0.7,
+  siege: {
+    position: 'absolute', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(11,20,40,0.92)', borderWidth: 1.5,
   },
-  legend: {
-    position: 'absolute', left: 6, bottom: 6, gap: 4, padding: 8, borderRadius: 10,
-    backgroundColor: 'rgba(7,15,34,0.55)', borderWidth: 1, borderColor: colors.glassBorder,
-  },
-  legRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legDot: { width: 8, height: 8, borderRadius: 2 },
-  legText: { fontFamily: mono, fontSize: 9, color: colors.dim },
 });

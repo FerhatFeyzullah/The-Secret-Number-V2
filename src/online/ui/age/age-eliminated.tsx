@@ -18,7 +18,7 @@ export function AgeEliminated({ state, onMenu }: { state: AgeState; onMenu: () =
         <View style={styles.badge}>
           <Feather name="flag" size={22} color="#d08a52" />
         </View>
-        <Text style={[styles.name, { color: colorMap[state.me] ?? AGE.blue }]} numberOfLines={1}>
+        <Text style={[styles.name, { color: colorMap[state.me] ?? AGE.you }]} numberOfLines={1}>
           {meName}
         </Text>
         <Text style={styles.verdict}>ELENDİN · SONUNCU</Text>

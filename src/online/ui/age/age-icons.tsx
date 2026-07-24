@@ -13,6 +13,27 @@ export function AgeCrown({ size = 46 }: { size?: number }) {
   );
 }
 
+/** "Kuşatma altında" işareti — düğüm köşesine rozet olarak konur. Çapraz kılıç
+ *  (flaticon 861908 tarzı, dolu/solid) — referanstan esinlenilmiş ÖZGÜN çizim
+ *  (asset gömülmedi → lisans/atıf gerekmez). Tek renk. */
+export function AgeSiege({ size = 18, color }: { size?: number; color: string }) {
+  const sword = (
+    <>
+      <Path d="M12 1 L10.4 4.2 L13.6 4.2 Z" fill={color} />
+      <Rect x={10.9} y={4} width={2.2} height={11} fill={color} />
+      <Rect x={8} y={14.6} width={8} height={1.9} rx={0.6} fill={color} />
+      <Rect x={11} y={16.4} width={2} height={3.4} fill={color} />
+      <Circle cx={12} cy={20.7} r={1.5} fill={color} />
+    </>
+  );
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <G transform="rotate(45 12 12)">{sword}</G>
+      <G transform="rotate(-45 12 12)">{sword}</G>
+    </Svg>
+  );
+}
+
 /** Gizem Çağı turnuva ikonu — Gizemli Kule diliyle tek-renk SANCAKLI HİSAR
  *  (mazgallı iki yan kule + keep + kemerli kapı/pencere + arrow-slit + pennant).
  *  evenodd oyuklar; tek fill accent. 24 viewBox. */

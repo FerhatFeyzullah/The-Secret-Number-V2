@@ -33,7 +33,7 @@ const errMsg = (e: unknown) =>
 
 type Sheet =
   | { t: 'attack'; territoryId: string; kind: AgeKind; level: number; targetName: string; defended: boolean }
-  | { t: 'defense'; attackId: string; territoryId: string; start: AgeDefenseStart; solvedCount: number }
+  | { t: 'defense'; attackId: string; territoryId: string; start: AgeDefenseStart; solvedCount: number; premiumUsed: number }
   | { t: 'setcode'; territoryId: string; kind: AgeKind; level: number; deadline: string | null }
   | { t: 'refresh'; territoryId: string; kind: AgeKind; level: number }
   | null;
@@ -59,8 +59,9 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
   const me = state?.me ?? '';
   const meElim = !!state?.players.find((p) => p.player === me)?.eliminated;
   const byId = state ? Object.fromEntries(state.territories.map((t) => [t.id, t])) : {};
+  // Sahip adı; nötr (fethedilmemiş) bölge için boş (UI'da "Bot" göstermeyiz).
   const nameOf = (pid: string | null) =>
-    (pid && state?.players.find((p) => p.player === pid)?.username) || 'Bot';
+    (pid && state?.players.find((p) => p.player === pid)?.username) || '';
 
   // Elenince açık paneli kapat (artık etkileşim yok).
   useEffect(() => {
@@ -128,7 +129,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
       if (t.kind === 'castle') {
         setSheet({ t: 'refresh', territoryId: t.id, kind: 'castle', level: t.level });
       } else {
-        Alert.alert('Kule şifresini yenile', 'Bu kulenin şifresini yenile? Saldırganın ilerlemesi sıfırlanır (40 Veri).', [
+        Alert.alert('Kule şifresini yenile', 'Bu kulenin şifresini yenile? Saldırganın ilerlemesi sıfırlanır (40 Sefer Verisi).', [
           { text: 'Vazgeç', style: 'cancel' },
           { text: 'Yenile', onPress: () => void run(async () => { await ageRefreshCode(t.id); showToast('Şifre yenilendi.'); await refresh(); }) },
         ]);
@@ -188,7 +189,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
   const onDefend = (attackId: string, territoryId: string) => {
     void run(async () => {
       const start = await ageStartDefense(attackId);
-      setSheet({ t: 'defense', attackId, territoryId, start, solvedCount: start.solvedCount });
+      setSheet({ t: 'defense', attackId, territoryId, start, solvedCount: start.solvedCount, premiumUsed: 0 });
       await refresh();
     });
   };
@@ -198,14 +199,25 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
     void run(async () => {
       const out = await ageDefenseGuess(aid, value, sabotage);
       if (out.status === 'solved') {
-        setSheet((s) => (s?.t === 'defense' ? { ...s, solvedCount: out.solvedCount } : s));
+        setSheet((s) =>
+          s?.t === 'defense'
+            ? { ...s, solvedCount: out.solvedCount, premiumUsed: s.premiumUsed + (sabotage === 'time' ? 0 : 1) }
+            : s,
+        );
         showToast(sabotage === 'time' ? 'Çözdün — saldırgan −15 sn!' : sabotage === 'fog' ? 'Sis uygulandı.' : 'Zaman Hırsızı uygulandı.');
+      } else if (out.status === 'continue') {
+        showToast('Yanlış — tekrar dene.');
       } else if (out.status === 'attack_gone') {
         setSheet(null);
         showToast('Saldırı bitti.');
       }
       await refresh();
     });
+  };
+  // NOT: 60 sn hak-süresi şu an istemci-tarafı (backend enforcement bekliyor — v3).
+  const onDefenseTimeout = () => {
+    setSheet((s) => (s?.t === 'defense' ? { ...s, solvedCount: Math.min(s.solvedCount + 1, s.start.slots) } : s));
+    showToast('Süre doldu — bu savunma hakkı yandı.');
   };
 
   // ── Şifre belirleme ──
@@ -268,7 +280,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
     sheet?.t === 'defense' ? state.incoming.find((i) => i.attackId === sheet.attackId) : undefined;
 
   return (
-    <AgeBackground>
+    <AgeBackground hex={state.phase === 'queue'}>
       <View style={styles.wrap}>
         {state.phase === 'finished' ? (
           <AgeResult state={state} onRequeue={requeue} onMenu={() => router.back()} />
@@ -277,7 +289,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
         ) : state.phase === 'queue' ? (
           <AgeQueue players={state.players} onCancel={leaveToMenu} />
         ) : (
-          <AgeMap state={state} onTapNode={onTapNode} onDefend={onDefend} />
+          <AgeMap state={state} veri={state.myVeri} onTapNode={onTapNode} onDefend={onDefend} />
         )}
       </View>
 
@@ -299,8 +311,11 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           incoming={incoming}
           start={sheet.start}
           solvedCount={sheet.solvedCount}
+          premiumLeft={Math.max(0, sheet.start.slots - 1 - sheet.premiumUsed)}
+          veri={state.myVeri}
           busy={busy}
           onSolve={onDefenseSolve}
+          onTimeout={onDefenseTimeout}
           onClose={() => setSheet(null)}
         />
       ) : null}
@@ -311,6 +326,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           level={sheet.level}
           deadline={sheet.deadline}
           mode="set"
+          veri={state.myVeri}
           busy={busy}
           onSet={onSetCode}
           onRandom={closeSetCode}
@@ -323,6 +339,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           level={sheet.level}
           deadline={null}
           mode="refresh"
+          veri={state.myVeri}
           busy={busy}
           onSet={onRefreshCastle}
           onRandom={() => setSheet(null)}
