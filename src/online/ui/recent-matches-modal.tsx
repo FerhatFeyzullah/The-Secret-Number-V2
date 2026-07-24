@@ -14,8 +14,21 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { upperTr } from '@/game';
-import { getRecentMatches, OnlineError, type RecentMatch, type RecentMatchRound } from '@/online';
+import {
+  getRecentAgeMatches,
+  getRecentMatches,
+  OnlineError,
+  type AgeRecentMatch,
+  type RecentMatch,
+  type RecentMatchRound,
+} from '@/online';
 import { colors, cyanAlpha, mono, withAlpha } from '@/ui/theme';
+
+type Tab = 'match' | 'age';
+const AGE_ACCENT = '#9b8cff'; // Gizem Çağı aksanı (mor)
+const MEDAL = ['#f5c451', '#cdd6e4', '#d08a52'];
+const MEDAL_DARK = ['#a9781c', '#8b96a8', '#8a5326'];
+const ROMAN = ['I', 'II', 'III'];
 
 const MODE_META = {
   hizli: { label: 'Hızlı', color: colors.cyan },
@@ -147,9 +160,49 @@ function MatchCard({ m, cardW }: { m: RecentMatch; cardW: number }) {
   );
 }
 
+/** Bir Gizem Çağı maçının 3 hükümdar özeti (sıralama + kale/kule + puan + kupa). */
+function AgeMatchCard({ m }: { m: AgeRecentMatch }) {
+  const rows = [...m.standings].sort((a, b) => a.rank - b.rank);
+  return (
+    <View style={styles.match}>
+      <View style={styles.ageHead}>
+        <View style={styles.ageBadge}>
+          <Feather name="map" size={13} color={AGE_ACCENT} />
+        </View>
+        <Text style={styles.ageTitle}>GİZEM ÇAĞI</Text>
+        <Text style={styles.ageTag}>3 hükümdar</Text>
+      </View>
+      <View style={styles.ageRows}>
+        {rows.map((s) => {
+          const idx = Math.min(Math.max(s.rank - 1, 0), 2);
+          return (
+            <View key={s.rank} style={styles.ageRow}>
+              <View style={[styles.medal, { backgroundColor: MEDAL[idx], borderColor: MEDAL_DARK[idx] }]}>
+                <Text style={styles.medalText}>{ROMAN[idx]}</Text>
+              </View>
+              <View style={styles.ageInfo}>
+                <Text style={styles.ageName} numberOfLines={1}>{s.name ?? 'Oyuncu'}</Text>
+                <Text style={styles.ageHold}>{s.castles} kale · {s.towers} kule</Text>
+              </View>
+              <View style={styles.ageStat}>
+                <Text style={styles.agePoints}>{s.points} puan</Text>
+                <Text style={[styles.ageKupa, s.kupaDelta >= 0 ? styles.deltaUp : styles.deltaDown]}>
+                  {s.kupaDelta >= 0 ? '+' : '−'}{Math.abs(s.kupaDelta)} 🏆
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 /** Global "Son Maçlar" akışı — ana menü butonundan açılan liderlik-tarzı modal. */
 export function RecentMatchesModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const [matches, setMatches] = useState<RecentMatch[] | null>(null);
+  const [ageMatches, setAgeMatches] = useState<AgeRecentMatch[] | null>(null);
+  const [tab, setTab] = useState<Tab>('match');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,11 +215,12 @@ export function RecentMatchesModal({ visible, onClose }: { visible: boolean; onC
 
   const load = useCallback(async () => {
     setError(null);
-    try {
-      setMatches(await getRecentMatches());
-    } catch (e) {
-      setError(e instanceof OnlineError ? e.message : 'Son maçlar yüklenemedi.');
-    }
+    // İki akış bağımsız: biri patlarsa diğeri yine dolsun (Gizem Çağı yeni; boş olabilir).
+    const [rm, am] = await Promise.allSettled([getRecentMatches(), getRecentAgeMatches()]);
+    if (rm.status === 'fulfilled') setMatches(rm.value);
+    else setError(rm.reason instanceof OnlineError ? rm.reason.message : 'Son maçlar yüklenemedi.');
+    if (am.status === 'fulfilled') setAgeMatches(am.value);
+    else setAgeMatches([]);
   }, []);
 
   useEffect(() => {
@@ -206,12 +260,26 @@ export function RecentMatchesModal({ visible, onClose }: { visible: boolean; onC
             </Pressable>
           </View>
 
+          {/* Akış seçimi: Eşleşmeli (1v1) / Gizem Çağı (3 oyunculu) */}
+          <View style={styles.tabs}>
+            <Pressable
+              onPress={() => setTab('match')}
+              style={[styles.tab, tab === 'match' && { borderColor: cyanAlpha(0.5), backgroundColor: cyanAlpha(0.13) }]}>
+              <Text style={[styles.tabText, tab === 'match' && { color: colors.cyan }]}>Eşleşmeli</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setTab('age')}
+              style={[styles.tab, tab === 'age' && { borderColor: withAlpha(AGE_ACCENT, 0.5), backgroundColor: withAlpha(AGE_ACCENT, 0.15) }]}>
+              <Text style={[styles.tabText, tab === 'age' && { color: AGE_ACCENT }]}>Gizem Çağı</Text>
+            </Pressable>
+          </View>
+
           {loading ? (
             <View style={styles.centerBox}>
               <ActivityIndicator color={colors.cyan} />
               <Text style={styles.muted}>Yükleniyor…</Text>
             </View>
-          ) : error ? (
+          ) : tab === 'match' && error ? (
             <View style={styles.centerBox}>
               <Feather name="alert-circle" size={22} color={colors.danger} />
               <Text style={styles.errorText} selectable>
@@ -226,16 +294,33 @@ export function RecentMatchesModal({ visible, onClose }: { visible: boolean; onC
                 <Text style={styles.retryText}>Tekrar Dene</Text>
               </Pressable>
             </View>
-          ) : (matches?.length ?? 0) === 0 ? (
+          ) : tab === 'match' ? (
+            (matches?.length ?? 0) === 0 ? (
+              <View style={styles.centerBox}>
+                <Text style={styles.muted}>Henüz maç oynanmadı.</Text>
+              </View>
+            ) : (
+              <FlatList
+                style={styles.list}
+                data={matches ?? []}
+                keyExtractor={(m) => m.matchId}
+                renderItem={({ item }) => <MatchCard m={item} cardW={cardW} />}
+                contentContainerStyle={styles.listBody}
+                showsVerticalScrollIndicator={false}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+              />
+            )
+          ) : (ageMatches?.length ?? 0) === 0 ? (
             <View style={styles.centerBox}>
-              <Text style={styles.muted}>Henüz maç oynanmadı.</Text>
+              <Text style={styles.muted}>Henüz Gizem Çağı maçı oynanmadı.</Text>
             </View>
           ) : (
             <FlatList
               style={styles.list}
-              data={matches ?? []}
+              data={ageMatches ?? []}
               keyExtractor={(m) => m.matchId}
-              renderItem={({ item }) => <MatchCard m={item} cardW={cardW} />}
+              renderItem={({ item }) => <AgeMatchCard m={item} />}
               contentContainerStyle={styles.listBody}
               showsVerticalScrollIndicator={false}
               refreshing={refreshing}
@@ -292,6 +377,12 @@ const styles = StyleSheet.create({
   },
   title: { flex: 1, color: colors.ice, fontSize: 14, fontWeight: '800', letterSpacing: 2.5, fontFamily: mono },
   close: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 12 },
+  tab: {
+    flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 11,
+    borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glass,
+  },
+  tabText: { fontFamily: mono, fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: colors.dim },
   centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
   muted: { color: colors.dim, fontSize: 13, fontFamily: mono },
   errorText: { color: colors.danger, fontSize: 13, textAlign: 'center', lineHeight: 18 },
@@ -371,4 +462,23 @@ const styles = StyleSheet.create({
   tileWin: { borderColor: withAlpha(colors.gold, 0.55), backgroundColor: withAlpha(colors.gold, 0.1) },
   tileText: { fontWeight: '800', color: colors.dim, fontFamily: mono },
   tileTextWin: { color: colors.ice },
+
+  // ── Gizem Çağı kartı (3 hükümdar sıralaması) ──
+  ageHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 10 },
+  ageBadge: {
+    width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: withAlpha(AGE_ACCENT, 0.14), borderWidth: 1, borderColor: withAlpha(AGE_ACCENT, 0.4),
+  },
+  ageTitle: { flex: 1, fontFamily: mono, fontSize: 12, fontWeight: '800', letterSpacing: 1.5, color: colors.ice },
+  ageTag: { fontFamily: mono, fontSize: 9.5, color: AGE_ACCENT, letterSpacing: 0.5, textTransform: 'uppercase' },
+  ageRows: { gap: 7, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)', borderStyle: 'dashed', paddingTop: 10 },
+  ageRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  medal: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  medalText: { fontFamily: mono, fontSize: 10, fontWeight: '900', color: '#0a1526' },
+  ageInfo: { flex: 1, minWidth: 0, gap: 2 },
+  ageName: { fontFamily: mono, fontSize: 13, fontWeight: '700', color: colors.ice },
+  ageHold: { fontFamily: mono, fontSize: 10.5, color: colors.dim },
+  ageStat: { alignItems: 'flex-end', gap: 2 },
+  agePoints: { fontFamily: mono, fontSize: 12, fontWeight: '800', color: colors.text },
+  ageKupa: { fontFamily: mono, fontSize: 10.5, fontWeight: '800' },
 });

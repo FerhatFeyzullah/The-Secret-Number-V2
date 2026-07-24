@@ -24,8 +24,8 @@ export function AgeEliminated({ state, onMenu }: { state: AgeState; onMenu: () =
         <Text style={styles.verdict}>ELENDİN · SONUNCU</Text>
         <Text style={styles.sub}>Toprakların düştü. Bu maçta 3. oldun.</Text>
         <View style={styles.rewardChip}>
-          <Feather name="award" size={13} color={colors.danger} />
-          <Text style={styles.rewardText}>−15 kupa</Text>
+          <Feather name="award" size={13} color={colors.gold} />
+          <Text style={styles.rewardText}>+15 kupa</Text>
         </View>
       </View>
 
@@ -64,9 +64,9 @@ const styles = StyleSheet.create({
   sub: { color: colors.dim, fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 300, fontFamily: 'Comfortaa' },
   rewardChip: {
     flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: 999, borderWidth: 1, borderColor: withAlpha(colors.danger, 0.4), backgroundColor: colors.glass, marginTop: 6,
+    borderRadius: 999, borderWidth: 1, borderColor: withAlpha(colors.gold, 0.4), backgroundColor: colors.glass, marginTop: 6,
   },
-  rewardText: { fontFamily: mono, fontSize: 13, fontWeight: '800', color: colors.danger },
+  rewardText: { fontFamily: mono, fontSize: 13, fontWeight: '800', color: colors.gold },
   lab: { fontFamily: mono, fontSize: 10, letterSpacing: 2.5, color: colors.dim, marginTop: 14, marginBottom: 8, textAlign: 'center' },
   rows: { gap: 8 },
   row: {

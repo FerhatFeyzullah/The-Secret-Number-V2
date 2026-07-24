@@ -59,30 +59,98 @@ export function AgeEmblem({ size = 32, color }: { size?: number; color: string }
   );
 }
 
-/** Harita düğümü — detaylı KALE (yan kuleler + keep + kapı/pencere + sancak +
- *  gölge/banding). color = sahip rengi (nötr için gri). */
-export function AgeCastle({ size = 56, color }: { size?: number; color: string }) {
+/** Mazgal (crenellation) yol üreteci — [x0,x1] arası n eşit diş. Mevcut keep
+ *  mazgalını birebir üretir (n=4, taban / taban-8 / taban-3). */
+function cren(x0: number, x1: number, yBase: number, yTooth: number, yNotch: number, n: number): string {
+  const seg = (x1 - x0) / (2 * n - 1);
+  let x = x0;
+  let d = `M${x0} ${yBase} L${x0} ${yTooth}`;
+  for (let i = 0; i < 2 * n - 1; i++) {
+    const nx = x + seg;
+    if (i % 2 === 0) d += ` L${nx.toFixed(2)} ${yTooth}`;
+    else d += ` L${x.toFixed(2)} ${yNotch} L${nx.toFixed(2)} ${yNotch} L${nx.toFixed(2)} ${yTooth}`;
+    x = nx;
+  }
+  return d + ` L${x1} ${yBase} Z`;
+}
+
+/** Harita düğümü — detaylı KALE. `level` (harf sayısı, 4/5/6) dış görünümü
+ *  belirler: 4 = mevcut (dar, tek sancak); 5 = yayvan + yüksek + burç kulesi;
+ *  6 = en geniş + en yüksek + taç (taht). color = sahip rengi (nötr için gri). */
+export function AgeCastle({ size = 56, color, level = 4 }: { size?: number; color: string; level?: number }) {
+  // 4 (veya belirsiz) → mevcut ikon (birebir).
+  if (level < 5) {
+    return (
+      <Svg width={size} height={(size * 74) / 72} viewBox="-36 -40 72 74">
+        <Ellipse cx={0} cy={30} rx={34} ry={8} fill={color} opacity={0.16} />
+        <Path d="M-30 30 L-30 -4 L-18 -4 L-18 30 Z" fill={color} />
+        <Path d="M-30 -4 L-30 -11 L-27 -11 L-27 -7 L-24 -7 L-24 -11 L-21 -11 L-21 -7 L-18 -7 L-18 -4 Z" fill={color} />
+        <Path d="M18 30 L18 -4 L30 -4 L30 30 Z" fill={color} />
+        <Path d="M18 -4 L18 -11 L21 -11 L21 -7 L24 -7 L24 -11 L27 -11 L27 -7 L30 -7 L30 -11 L30 -4 Z" fill={color} />
+        <Path d="M-14 30 L-14 -16 L14 -16 L14 30 Z" fill={color} />
+        <Path d="M-14 -16 L-14 -24 L-10 -24 L-10 -19 L-6 -19 L-6 -24 L-2 -24 L-2 -19 L2 -19 L2 -24 L6 -24 L6 -19 L10 -19 L10 -24 L14 -24 L14 -16 Z" fill={color} />
+        <Path d="M0 -16 L14 -16 L14 30 L0 30 Z" fill="#000" opacity={0.16} />
+        <Path d="M18 -4 L30 -4 L30 30 L18 30 Z" fill="#000" opacity={0.14} />
+        <G stroke="#000" strokeWidth={1} opacity={0.12}>
+          <Line x1={-14} y1={-4} x2={14} y2={-4} />
+          <Line x1={-14} y1={8} x2={14} y2={8} />
+          <Line x1={-14} y1={20} x2={14} y2={20} />
+        </G>
+        <Path d="M-6 30 L-6 4 Q0 -3 6 4 L6 30 Z" fill="#050c18" opacity={0.92} />
+        <Path d="M-3 -9 L-3 -13 Q0 -16 3 -13 L3 -9 Z" fill="#050c18" opacity={0.9} />
+        <Line x1={0} y1={-24} x2={0} y2={-38} stroke={color} strokeWidth={1.6} />
+        <Path d="M0 -37 L13 -33 L0 -29 Z" fill={color} />
+        <Path d="M0 -37 L13 -33 L0 -29 Z" fill="#fff" opacity={0.18} />
+      </Svg>
+    );
+  }
+
+  // 5 / 6 → hem yukarı hem yana büyür (artifact ile aynı ölçüler).
+  const P =
+    level === 5
+      ? { outer: 32, inner: 17, kh: 16, kTop: -19, tTop: -6, tuH: 8, tuBase: -27, tuTop: -33 }
+      : { outer: 35, inner: 18, kh: 18, kTop: -22, tTop: -8, tuH: 9, tuBase: -30, tuTop: -35 };
   return (
     <Svg width={size} height={(size * 74) / 72} viewBox="-36 -40 72 74">
-      <Ellipse cx={0} cy={30} rx={34} ry={8} fill={color} opacity={0.16} />
-      <Path d="M-30 30 L-30 -4 L-18 -4 L-18 30 Z" fill={color} />
-      <Path d="M-30 -4 L-30 -11 L-27 -11 L-27 -7 L-24 -7 L-24 -11 L-21 -11 L-21 -7 L-18 -7 L-18 -4 Z" fill={color} />
-      <Path d="M18 30 L18 -4 L30 -4 L30 30 Z" fill={color} />
-      <Path d="M18 -4 L18 -11 L21 -11 L21 -7 L24 -7 L24 -11 L27 -11 L27 -7 L30 -7 L30 -11 L30 -4 Z" fill={color} />
-      <Path d="M-14 30 L-14 -16 L14 -16 L14 30 Z" fill={color} />
-      <Path d="M-14 -16 L-14 -24 L-10 -24 L-10 -19 L-6 -19 L-6 -24 L-2 -24 L-2 -19 L2 -19 L2 -24 L6 -24 L6 -19 L10 -19 L10 -24 L14 -24 L14 -16 Z" fill={color} />
-      <Path d="M0 -16 L14 -16 L14 30 L0 30 Z" fill="#000" opacity={0.16} />
-      <Path d="M18 -4 L30 -4 L30 30 L18 30 Z" fill="#000" opacity={0.14} />
+      <Ellipse cx={0} cy={30} rx={P.outer} ry={8} fill={color} opacity={0.16} />
+      {/* yan kuleler (dışa yayvan) */}
+      <Path d={`M${-P.outer} 30 L${-P.outer} ${P.tTop} L${-P.inner} ${P.tTop} L${-P.inner} 30 Z`} fill={color} />
+      <Path d={cren(-P.outer, -P.inner, P.tTop, P.tTop - 7, P.tTop - 3, 3)} fill={color} />
+      <Path d={`M${P.inner} 30 L${P.inner} ${P.tTop} L${P.outer} ${P.tTop} L${P.outer} 30 Z`} fill={color} />
+      <Path d={cren(P.inner, P.outer, P.tTop, P.tTop - 7, P.tTop - 3, 3)} fill={color} />
+      {/* keep (geniş) */}
+      <Path d={`M${-P.kh} 30 L${-P.kh} ${P.kTop} L${P.kh} ${P.kTop} L${P.kh} 30 Z`} fill={color} />
+      <Path d={cren(-P.kh, P.kh, P.kTop, P.kTop - 8, P.kTop - 3, 5)} fill={color} />
+      {/* gölge katmanları */}
+      <Path d={`M0 ${P.kTop} L${P.kh} ${P.kTop} L${P.kh} 30 L0 30 Z`} fill="#000" opacity={0.16} />
+      <Path d={`M${P.inner} ${P.tTop} L${P.outer} ${P.tTop} L${P.outer} 30 L${P.inner} 30 Z`} fill="#000" opacity={0.14} />
+      {/* banding */}
       <G stroke="#000" strokeWidth={1} opacity={0.12}>
-        <Line x1={-14} y1={-4} x2={14} y2={-4} />
-        <Line x1={-14} y1={8} x2={14} y2={8} />
-        <Line x1={-14} y1={20} x2={14} y2={20} />
+        <Line x1={-P.kh} y1={P.kTop + 12} x2={P.kh} y2={P.kTop + 12} />
+        <Line x1={-P.kh} y1={P.kTop + 22} x2={P.kh} y2={P.kTop + 22} />
+        <Line x1={-P.kh} y1={P.kTop + 32} x2={P.kh} y2={P.kTop + 32} />
       </G>
-      <Path d="M-6 30 L-6 4 Q0 -3 6 4 L6 30 Z" fill="#050c18" opacity={0.92} />
-      <Path d="M-3 -9 L-3 -13 Q0 -16 3 -13 L3 -9 Z" fill="#050c18" opacity={0.9} />
-      <Line x1={0} y1={-24} x2={0} y2={-38} stroke={color} strokeWidth={1.6} />
-      <Path d="M0 -37 L13 -33 L0 -29 Z" fill={color} />
-      <Path d="M0 -37 L13 -33 L0 -29 Z" fill="#fff" opacity={0.18} />
+      {/* kapı + pencere */}
+      <Path d="M-7 30 L-7 5 Q0 -3 7 5 L7 30 Z" fill="#050c18" opacity={0.92} />
+      <Path d={`M-3 ${P.kTop + 7} L-3 ${P.kTop + 3} Q0 ${P.kTop} 3 ${P.kTop + 3} L3 ${P.kTop + 7} Z`} fill="#050c18" opacity={0.9} />
+      {/* tepe burç kulesi */}
+      <Path d={`M${-P.tuH} ${P.tuBase} L${-P.tuH} ${P.tuTop} L${P.tuH} ${P.tuTop} L${P.tuH} ${P.tuBase} Z`} fill={color} />
+      <Path d={`M0 ${P.tuBase} L${P.tuH} ${P.tuBase} L${P.tuH} ${P.tuTop} L0 ${P.tuTop} Z`} fill="#000" opacity={0.13} />
+      {/* tepe süsü: 5 → sancak · 6 → taç */}
+      {level === 5 ? (
+        <>
+          <Line x1={0} y1={P.tuTop} x2={0} y2={-40} stroke={color} strokeWidth={1.6} />
+          <Path d="M0 -39 L11 -36 L0 -33 Z" fill={color} />
+          <Path d="M0 -39 L11 -36 L0 -33 Z" fill="#fff" opacity={0.18} />
+        </>
+      ) : (
+        <>
+          <Path d={`M-6 ${P.tuTop} L-6 -38 L-3 -36 L0 -40 L3 -36 L6 -38 L6 ${P.tuTop} Z`} fill={color} />
+          <Circle cx={-3.6} cy={-37} r={0.9} fill="#fff" opacity={0.55} />
+          <Circle cx={0} cy={-38.6} r={1.1} fill="#fff" opacity={0.65} />
+          <Circle cx={3.6} cy={-37} r={0.9} fill="#fff" opacity={0.55} />
+        </>
+      )}
     </Svg>
   );
 }
