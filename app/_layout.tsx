@@ -1,3 +1,4 @@
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -26,6 +27,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   // Her soğuk başlangıçta yayıncı intro'su (route DEĞİL, overlay → nav yığını temiz).
   const [introDone, setIntroDone] = useState(false);
+  // Gizem Çağı yumuşak başlık fontu (Comfortaa). Engellemez — intro açılışı
+  // kapsar, yüklenene dek sistem fontuna düşer (kısa). Diğer modlar mono kullanır.
+  useFonts({
+    Comfortaa: require('../assets/fonts/Comfortaa-Regular.otf'),
+    'Comfortaa-SemiBold': require('../assets/fonts/Comfortaa-SemiBold.otf'),
+  });
   // OTA güncelleme kapısı: açılışta (intro ile eşzamanlı) arka planda kontrol eder.
   const updateGate = useUpdateGate();
   useEffect(() => {

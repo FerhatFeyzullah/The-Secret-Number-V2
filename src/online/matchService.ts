@@ -166,6 +166,29 @@ const ERROR_MESSAGES: Record<string, string> = {
   round_not_revealable: 'Bu turun gizlisi henüz açıklanamaz.',
   unknown_content_type: 'Bilinmeyen oyun türü.',
   secret_pool_empty: 'Kelime havuzu boş, lütfen sonra dene.',
+  // Turnuva: Gizem Çağı (3 oyunculu harita fethi)
+  wrong_phase: 'Bu işlem bu fazda yapılamaz.',
+  eliminated: 'Elendin — artık hamle yapamazsın.',
+  territory_not_found: 'Bölge bulunamadı.',
+  already_yours: 'Burası zaten senin.',
+  already_conquered: 'Burası çoktan ele geçirildi.',
+  gate_closed: 'Önce kalenin iki nöbet kulesini almalısın.',
+  no_active_attack: 'Aktif bir kuşatman yok.',
+  invalid_guess: 'Geçersiz tahmin.',
+  code_window_closed: 'Şifre belirleme süresi doldu.',
+  not_owner: 'Burası senin değil.',
+  invalid_code: 'Geçersiz şifre.',
+  attack_not_found: 'Saldırı bulunamadı.',
+  not_your_territory: 'Bu bölge senin değil.',
+  only_castle_defense: 'Yalnız kaleler aktif savunulabilir.',
+  attack_not_active: 'Saldırı aktif değil.',
+  no_defense: 'Savunma oturumu yok.',
+  not_defender: 'Bu savunmanın sahibi değilsin.',
+  defense_slots_full: 'Savunma hakkın doldu.',
+  solve_first: 'Önce botun sayısını çözmelisin.',
+  unknown_sabotage: 'Geçersiz sabotaj.',
+  target_busy: 'Bu hedefe şu an başka bir saldırgan var.',
+  war_ending: 'Savaş bitiyor — yeni saldırı başlatılamaz.',
 };
 
 function toOnlineError(serverMessage: string | null | undefined): OnlineError {
@@ -204,7 +227,7 @@ function withTimeout<T>(p: PromiseLike<T>, ms = REQUEST_TIMEOUT_MS): Promise<T> 
   });
 }
 
-async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
+export async function callRpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
   const client = requireClient();
   const { data, error } = await withTimeout(client.rpc(fn, args));
   if (error) {

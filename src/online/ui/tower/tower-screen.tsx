@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useAuth } from '@/auth';
 import { isOnline } from '@/net';
 import {
+  ageFindMatch,
   enterTower,
   getTowerState,
   OnlineError,
@@ -58,6 +59,46 @@ const INTRO: InfoSection[] = [
   },
 ];
 
+/** Gizem Çağı ilk giriş tanıtımı (getSeen('ageIntro') ile bir kez). */
+const AGE_INTRO: InfoSection[] = [
+  {
+    icon: 'map',
+    title: 'ÜÇ HÜKÜMDAR',
+    body: 'Gizem Çağı 3 oyunculu bir harita fetih turnuvasıdır. Diyar 5 kale ve her kalenin 3 nöbet kulesinden oluşur (20 bölge). Kuleler 3 haneli sayıyla, kaleler kelimeyle korunur.',
+    accent: colors.violet,
+  },
+  {
+    icon: 'clock',
+    title: 'HAZIRLIK → SAVAŞ',
+    body: '5 dk hazırlıkta boş bölgeleri fethet — herkes aynı anda; aynı hedefe girenler yarışır, ilk çözen alır. 10 dk savaşta rakiplerin topraklarına saldır; her bölgeye aynı anda tek saldırgan girer.',
+    accent: colors.cyan,
+  },
+  {
+    icon: 'key',
+    title: 'KAPI KURALI',
+    body: 'Bir kaleye saldırmak için o kalenin en az bir kulesi sende olmalı. Fethettiğin yerin şifresini kendin kurarsın; kaleye 30 sn içinde kelime koymazsan savunmasız kalır ve tek hamlede düşer.',
+    accent: colors.amber,
+  },
+  {
+    icon: 'shield',
+    title: 'SAVUNMA',
+    body: 'Kalene saldırı gelince savun: önce avantajı seç, 60 sn içinde gizli sayıyı çöz — çözersen avantaj saldırgana uygulanır. Hakkın = 1 (ana kale) + sahip olduğun kule sayısı (en fazla 3).',
+    accent: colors.success,
+  },
+  {
+    icon: 'wind',
+    title: 'AVANTAJLAR & SEFER VERİSİ',
+    body: 'Süre −15 (ücretsiz), Sis (◈50), Zaman Hırsızı (◈60). Herkes maça eşit Sefer Verisi ile başlar — bu kese cüzdanına dokunmaz; kazanan, verisini iyi yöneten olur.',
+    accent: colors.teal,
+  },
+  {
+    icon: 'award',
+    title: 'PUAN & ÖDÜL',
+    body: 'Prestij: kule 2, kale seviye×5 puan. Sıralama puana göre — 1. +25 kupa +60 Veri, 2. +5/+20, 3. −15 kupa. Son toprağını kaybeden elenir; iki eleme olunca maç erken biter.',
+    accent: colors.gold,
+  },
+];
+
 /** Turnuva sekmesi (/cup) — Gizemli Kule. Merdiven ↔ oynanış ↔ sonuç. */
 export function TowerScreen() {
   const router = useRouter();
@@ -70,6 +111,7 @@ export function TowerScreen() {
   const [view, setView] = useState<View4>('list');
   const [result, setResult] = useState<TowerGuessOutcome | null>(null);
   const [showIntro, setShowIntro] = useState(false);
+  const [showAgeIntro, setShowAgeIntro] = useState(false);
 
   const load = useCallback(
     async (spinner: boolean) => {
@@ -132,6 +174,30 @@ export function TowerScreen() {
       setBusy(false);
     }
   }, [busy]);
+
+  // Gizem Çağı: kuyruğa gir (ya da aktif maçı sürdür) → maç route'una git.
+  const enterAge = useCallback(async () => {
+    if (busy) return;
+    // İlk giriş denemesinde önce tanıtım (Kule ile aynı desen: oku-kapat, tekrar bas).
+    if (!(await getSeen('ageIntro'))) {
+      setShowAgeIntro(true);
+      return;
+    }
+    if (!(await isOnline())) {
+      setError('Turnuva için internet bağlantısı gerekli.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { matchId } = await ageFindMatch();
+      router.push({ pathname: '/age/[id]', params: { id: matchId } });
+    } catch (e) {
+      setError(e instanceof OnlineError ? e.message : 'Kuyruğa girilemedi.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, router]);
 
   const cont = useCallback(async () => {
     if (busy || !state) return;
@@ -233,7 +299,12 @@ export function TowerScreen() {
               onBack={() => setView('list')}
             />
           ) : (
-            <TowerList state={state} onSelect={() => setView('ladder')} />
+            <TowerList
+              state={state}
+              onSelect={() => setView('ladder')}
+              onSelectAge={enterAge}
+              onSelectAgeDemo={() => router.push({ pathname: '/age/[id]', params: { id: 'demo' } })}
+            />
           )}
         </>
       ) : null}
@@ -248,6 +319,19 @@ export function TowerScreen() {
         icon="award"
         accent={colors.gold}
         sections={INTRO}
+        ctaLabel="Anladım"
+      />
+
+      <InfoModal
+        visible={showAgeIntro}
+        onClose={() => {
+          setShowAgeIntro(false);
+          void markSeen('ageIntro');
+        }}
+        title="GİZEM ÇAĞI"
+        icon="map"
+        accent={colors.violet}
+        sections={AGE_INTRO}
         ctaLabel="Anladım"
       />
     </Screen>

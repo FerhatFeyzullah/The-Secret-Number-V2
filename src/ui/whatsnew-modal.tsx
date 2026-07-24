@@ -6,20 +6,20 @@ import { colors, cyanAlpha, mono } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'klan-mac-izleme-2026-07';
+export const WHATSNEW_ID = 'gizem-cagi-2026-07';
 
 type Note = { emoji: string; title: string; body: string };
 
 const WHATSNEW_NOTES: Note[] = [
   {
-    emoji: '👁',
-    title: 'Klan maçlarını canlı izle',
-    body: 'Klan ekranında bir üyen maçtaysa kartında göz simgesi belirir. Dokun, maçını onun gözünden canlı izle — tahminleri, saatler, tur skoru, her şey. Sadece izlersin: oyuna hiçbir müdahalen olmaz ve gizli sayı/kelime sana da kapalıdır.',
+    emoji: '⚔️',
+    title: 'Yeni turnuva: Gizem Çağı',
+    body: '3 hükümdar, tek diyar! Haritadaki kaleleri ve nöbet kulelerini gizli sayı/kelimeleri çözerek fethet, rakiplerinin topraklarına saldır, prestij puanıyla çağın hükümdarı ol. Turnuvalar sekmesinden gir.',
   },
   {
-    emoji: '🎉',
-    title: 'Tribünden tezahürat',
-    body: 'İzlerken sinyallerinle tezahürat gönder! Emojilerin oyuncunun ekranında aşağıdan yukarı süzülür ve kaç kişinin izlediğini gösteren göz rozeti belirir. Rakip bunları görmez — tribün senin klanının.',
+    emoji: '🛡️',
+    title: 'Savun, sabote et, yönet',
+    body: 'Kalene saldırı gelince savunmaya geç ve rakibini yavaşlat: süre düşür, sis bas ya da zamanını çal. Her maça eşit Sefer Verisi ile başlarsın — kazanan, kesesini iyi yöneten olur.',
   },
 ];
 
