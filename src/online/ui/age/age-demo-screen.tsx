@@ -15,6 +15,7 @@ import { getSeen, markSeen } from '@/storage';
 import { InfoModal, type InfoSection } from '@/ui/info-modal';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { AgeBackground } from './age-bg';
+import { AGE, ageColors } from './age-colors';
 import { AgeEliminated } from './age-eliminated';
 import { AgeMap } from './age-map';
 import { AgeQueue } from './age-queue';
@@ -30,6 +31,8 @@ const GREEN = 'p3';
 /** Kule şifresi + kale kelimeleri (harf sayısına göre). Intro'da kullanıcıya açık. */
 const TOWER_SECRET = '123';
 const WORDS: Record<number, string> = { 4: 'OKUL', 5: 'KEMAN', 6: 'KAPTAN' };
+/** Savunmada botun 3 haneli sayısı (deneyerek çözülür; yanlışlar listelenir). */
+const DEFENSE_SECRET = '456';
 
 type Seed = {
   id: string;
@@ -143,9 +146,9 @@ function wordMarks(guess: string, secret: string): { win: boolean; marks: string
 }
 
 const REWARD: Record<number, { k: number; v: number }> = {
-  1: { k: 25, v: 60 },
-  2: { k: 5, v: 20 },
-  3: { k: -15, v: 0 },
+  1: { k: 60, v: 60 },
+  2: { k: 40, v: 20 },
+  3: { k: 15, v: 0 },
 };
 
 /** Sonuç sıralaması: "me" istenen sırada, diğer ikisi kalan sıralara. */
@@ -172,7 +175,7 @@ const INTRO: InfoSection[] = [
   {
     icon: 'key',
     title: 'ŞİFRELER',
-    body: 'Kule şifresi: 123 · Kale kelimeleri: 4 harf OKUL · 5 harf KEMAN · 6 harf KAPTAN. Yanlış tahmin edip geri bildirimi de görebilirsin. Savunmada herhangi bir 3 rakam çözülmüş sayılır.',
+    body: 'Kule şifresi: 123 · Kale kelimeleri: 4 harf OKUL · 5 harf KEMAN · 6 harf KAPTAN · Savunmada botun sayısı 456. Yanlış deneyip geri bildirimi görebilirsin; denemelerin panelde listelenir.',
     accent: colors.amber,
   },
   {
@@ -200,9 +203,13 @@ export function AgeDemoScreen() {
   const [resetKey, setResetKey] = useState(0);
   // Bar'dan "Eşleşme"ye basınca kuyrukta beklet (otomatik hazırlığa geçme).
   const [queueHold, setQueueHold] = useState(false);
+  // 3/3 dolunca "savaş ortamı hazırlanıyor" arası (eşleşme ekranında ~5 sn).
+  const [prepShownAt, setPrepShownAt] = useState<number | null>(null);
   // Maç‑içi kese (herkes eşit başlar; sabotaj/yenileme bundan düşer). Demo değeri.
   const [veri, setVeri] = useState(200);
   const [sheet, setSheet] = useState<Sheet>(null);
+  // Savunmada botun sayısını çözme denemeleri (sunucu tutmaz; feedback'ten biriktir).
+  const [defenseGuesses, setDefenseGuesses] = useState<{ guess: string; feedback: string }[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -232,6 +239,7 @@ export function AgeDemoScreen() {
       ? null
       : setTimeout(() => {
           setSt((s) => (s.phase === 'queue' ? { ...s, phase: 'prep', prepEndsAt: iso(300_000) } : s));
+          setPrepShownAt(Date.now()); // 3/3 → "savaş ortamı hazırlanıyor" arası
         }, 2600);
     return () => {
       clearTimeout(t1);
@@ -240,7 +248,16 @@ export function AgeDemoScreen() {
     };
   }, [resetKey, showIntro, queueHold, st.phase]);
 
+  // "Hazırlanıyor" arasını ~5 sn sonra kapat (haritayı aç).
+  useEffect(() => {
+    if (prepShownAt == null) return;
+    const t = setTimeout(() => setPrepShownAt(null), 5000);
+    return () => clearTimeout(t);
+  }, [prepShownAt]);
+  const preparing = prepShownAt != null;
+
   const me = st.me;
+  const myColor = ageColors(st.players)[ME] ?? AGE.you;
   const meElim = !!st.players.find((p) => p.player === me)?.eliminated;
   const byId = Object.fromEntries(st.territories.map((t) => [t.id, t])) as Record<string, AgeTerritory>;
   // Sahip adı; nötr bölge için boş (UI'da "Bot" göstermeyiz).
@@ -256,6 +273,7 @@ export function AgeDemoScreen() {
     setSt(freshState());
     setSheet(null);
     setQueueHold(false);
+    setPrepShownAt(null);
     setVeri(200);
     setResetKey((k) => k + 1);
   };
@@ -263,6 +281,7 @@ export function AgeDemoScreen() {
   const goQueue = () => {
     setSheet(null);
     setQueueHold(true);
+    setPrepShownAt(null);
     setSt((s) => ({ ...s, phase: 'queue', incoming: [] }));
   };
 
@@ -393,10 +412,20 @@ export function AgeDemoScreen() {
     // Hak = 1 (ana kale, yalnız süre) + sahip olunan kule sayısı; premium = kule sayısı.
     const towers = st.territories.filter((t) => t.castleId === territoryId && t.owner === me).length;
     const start: AgeDefenseStart = { defenseId: 'def-demo', solvedCount: 0, slots: 1 + towers, deadline: null };
+    setDefenseGuesses([]);
     setSheet({ t: 'defense', attackId, territoryId, start, solvedCount: 0, premiumUsed: 0 });
   };
   const onDefenseSolve = (value: string, sabotage: 'time' | 'fog' | 'thief') => {
     if (sheet?.t !== 'defense' || value.length < 3) return;
+    const r = evalNumber(value, DEFENSE_SECRET);
+    if (!r.win) {
+      // Yanlış → geçmişe ekle (gerçek maçtaki gibi feedback'li), avantaj UYGULANMAZ.
+      setDefenseGuesses((g) => [...g, { guess: value, feedback: r.feedback }]);
+      showToast('Yanlış — tekrar dene.');
+      return;
+    }
+    // Doğru → hak dolar, avantaj + ücret uygulanır, geçmiş sıfırlanır (yeni sayı).
+    setDefenseGuesses([]);
     setSheet((s) => {
       if (s?.t !== 'defense') return s;
       return {
@@ -410,6 +439,7 @@ export function AgeDemoScreen() {
     showToast(sabotage === 'time' ? 'Çözdün — saldırgan −15 sn!' : sabotage === 'fog' ? 'Sis uygulandı · −◈50' : 'Zaman Hırsızı · −◈60');
   };
   const onDefenseTimeout = () => {
+    setDefenseGuesses([]);
     setSheet((s) => (s?.t === 'defense' ? { ...s, solvedCount: Math.min(s.solvedCount + 1, s.start.slots) } : s));
     showToast('Süre doldu — bu savunma hakkı yandı.');
   };
@@ -434,8 +464,14 @@ export function AgeDemoScreen() {
   };
 
   /* ── DEMO barı eylemleri ── */
-  const goPrep = () => setSt((s) => ({ ...s, phase: 'prep', prepEndsAt: iso(300_000), incoming: [] }));
-  const goWar = () => setSt((s) => ({ ...s, phase: 'war', warEndsAt: iso(600_000) }));
+  const goPrep = () => {
+    setPrepShownAt(null); // bar'dan doğrudan geç (hazırlanıyor arası yok)
+    setSt((s) => ({ ...s, phase: 'prep', prepEndsAt: iso(300_000), incoming: [] }));
+  };
+  const goWar = () => {
+    setPrepShownAt(null);
+    setSt((s) => ({ ...s, phase: 'war', warEndsAt: iso(600_000) }));
+  };
   const attackMe = () => {
     setSt((s) => ({
       ...s,
@@ -464,8 +500,8 @@ export function AgeDemoScreen() {
           <AgeResult state={st} onRequeue={requeue} onMenu={backToMenu} />
         ) : meElim ? (
           <AgeEliminated state={st} onMenu={backToMenu} />
-        ) : st.phase === 'queue' ? (
-          <AgeQueue players={st.players.slice(0, joined)} onCancel={backToMenu} />
+        ) : st.phase === 'queue' || preparing ? (
+          <AgeQueue players={st.players.slice(0, joined)} onCancel={backToMenu} preparing={preparing} />
         ) : (
           <AgeMap state={st} veri={veri} onTapNode={onTapNode} onDefend={onDefend} />
         )}
@@ -511,10 +547,12 @@ export function AgeDemoScreen() {
           solvedCount={sheet.solvedCount}
           premiumLeft={Math.max(0, sheet.start.slots - 1 - sheet.premiumUsed)}
           veri={veri}
+          guesses={defenseGuesses}
+          accent={myColor}
           busy={false}
           onSolve={onDefenseSolve}
           onTimeout={onDefenseTimeout}
-          onClose={() => setSheet(null)}
+          onClose={() => { setSheet(null); setDefenseGuesses([]); }}
         />
       ) : null}
 
@@ -525,9 +563,11 @@ export function AgeDemoScreen() {
           deadline={sheet.deadline}
           mode="set"
           veri={veri}
+          accent={myColor}
           busy={false}
           onSet={onSetCode}
           onRandom={closeSetCode}
+          onClose={closeSetCode}
         />
       ) : null}
 
@@ -538,9 +578,11 @@ export function AgeDemoScreen() {
           deadline={null}
           mode="refresh"
           veri={veri}
+          accent={myColor}
           busy={false}
           onSet={onRefreshCastle}
           onRandom={() => setSheet(null)}
+          onClose={() => setSheet(null)}
         />
       ) : null}
 

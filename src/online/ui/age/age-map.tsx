@@ -1,12 +1,14 @@
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 
 import type { AgeState, AgeTerritory } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
+import { AgePhaseAnnounce } from './age-announce';
 import { AGE, ageColors, ownerColor } from './age-colors';
 import { AgeCastle, AgeSiege, AgeTower } from './age-icons';
+import { useAgeClock } from './use-age-clock';
 
 /** Harita mantıksal boyutu (düğümler yüzde, bağlantılar bu viewBox). */
 const VB_W = 360;
@@ -35,19 +37,23 @@ function nodePos(t: AgeTerritory): [number, number] {
   return [base[0] + off[0], base[1] + off[1]];
 }
 
-function useNow(active: boolean) {
-  const [, setT] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    const iv = setInterval(() => setT((x) => x + 1), 1000);
-    return () => clearInterval(iv);
-  }, [active]);
-  return Date.now();
-}
-
 function fmt(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Faz süresi (HAZIRLIK/SAVAŞ MM:SS). Saat sayacı BURADA yaşar → tik geldiğinde
+ *  yalnız bu minik bileşen yeniden çizilir; ağır harita (20 düğüm + SVG çizgiler)
+ *  her saniye yeniden render OLMAZ (eski donma/tutukluk buradan geliyordu). */
+function PhaseTimer({ label, deadline, active }: { label: string; deadline: string | null; active: boolean }) {
+  const now = useAgeClock(active);
+  const remaining = deadline ? Date.parse(deadline) - now : 0;
+  return (
+    <>
+      <Text style={styles.phaseLabel}>{label}</Text>
+      <Text style={styles.phaseTime}>{fmt(remaining)}</Text>
+    </>
+  );
 }
 
 /** Gizem Çağı harita ekranı (hazırlık + savaş): HUD + düğüm haritası + savunma
@@ -55,16 +61,18 @@ function fmt(ms: number) {
 export function AgeMap({
   state,
   veri,
+  coach = false,
   onTapNode,
   onDefend,
 }: {
   state: AgeState;
   /** Kalan maç‑içi Sefer Verisi (undefined → sayaç gizli). */
   veri?: number;
+  /** Öğretici (örnek harita) modu: canlı sayaç/faz duyurusu yok, "ÖĞRETİCİ" etiketi. */
+  coach?: boolean;
   onTapNode: (t: AgeTerritory) => void;
   onDefend: (attackId: string, territoryId: string) => void;
 }) {
-  const now = useNow(state.phase === 'prep' || state.phase === 'war');
   // Bağlantı SVG'sine sayısal boyut (absoluteFill stil-only Android'de çizmiyor).
   const [mapSize, setMapSize] = useState({ w: 0, h: 0 });
   const onMapLayout = (e: LayoutChangeEvent) => {
@@ -84,17 +92,27 @@ export function AgeMap({
   const incoming = state.incoming[0] ?? null;
   const incKind = incoming ? byId[incoming.territoryId]?.kind : null;
 
-  const deadline =
+  const timerActive = state.phase === 'prep' || state.phase === 'war';
+  const timerDeadline =
     state.phase === 'prep' ? state.prepEndsAt : state.phase === 'war' ? state.warEndsAt : null;
-  const remaining = deadline ? Date.parse(deadline) - now : 0;
 
   return (
     <View style={styles.wrap}>
       {/* HUD */}
       <View style={styles.hud}>
         <View style={styles.phaseBox}>
-          <Text style={styles.phaseLabel}>{state.phase === 'prep' ? 'HAZIRLIK' : 'SAVAŞ'}</Text>
-          <Text style={styles.phaseTime}>{fmt(remaining)}</Text>
+          {coach ? (
+            <>
+              <Text style={styles.phaseLabel}>ÖĞRETİCİ</Text>
+              <Text style={styles.phaseTime}>—</Text>
+            </>
+          ) : (
+            <PhaseTimer
+              label={state.phase === 'prep' ? 'HAZIRLIK' : 'SAVAŞ'}
+              deadline={timerDeadline}
+              active={timerActive}
+            />
+          )}
           {veri != null ? (
             <View style={styles.veriChip}>
               <Feather name="hexagon" size={9} color={colors.teal} />
@@ -204,7 +222,7 @@ export function AgeMap({
                   marginTop: -size / 2,
                 },
               ]}>
-              {t.kind === 'castle' ? <AgeCastle size={size} color={c} /> : <AgeTower size={size} color={c} />}
+              {t.kind === 'castle' ? <AgeCastle size={size} color={c} level={t.level} /> : <AgeTower size={size} color={c} />}
               {atkC ? (
                 <View
                   style={[
@@ -218,6 +236,8 @@ export function AgeMap({
           );
         })}
       </View>
+
+      {coach ? null : <AgePhaseAnnounce phase={state.phase} />}
     </View>
   );
 }
