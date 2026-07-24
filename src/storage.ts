@@ -97,7 +97,9 @@ export type SeenKey =
   | 'towerFog' // Kule yetenek: Sis (ilk karşılaşma)
   | 'towerTimeThief' // Kule yetenek: Zaman Hırsızı
   | 'towerCursed' // Kule yetenek: Lanetli Harf
-  | 'towerMemory'; // Kule yetenek: Hafıza Kaybı
+  | 'towerMemory' // Kule yetenek: Hafıza Kaybı
+  | 'ageDemoIntro' // Gizem Çağı demo modu tanıtımı
+  | 'ageIntro'; // Gizem Çağı turnuvası tanıtımı
 
 /** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
 const SEEN_KEYS: readonly SeenKey[] = [
@@ -118,6 +120,8 @@ const SEEN_KEYS: readonly SeenKey[] = [
   'towerTimeThief',
   'towerCursed',
   'towerMemory',
+  'ageDemoIntro',
+  'ageIntro',
 ];
 
 /** Bayrak okundu mu? AsyncStorage'dan gelene kadar çağıran beklemeli

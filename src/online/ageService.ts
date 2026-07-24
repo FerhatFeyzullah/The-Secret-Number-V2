@@ -72,6 +72,8 @@ export type AgeState = {
   warEndsAt: string | null;
   ranking: AgeRankEntry[];
   me: string;
+  /** Çağıranın kalan maç‑içi Sefer Verisi (age v3). */
+  myVeri?: number;
   players: AgePlayer[];
   territories: AgeTerritory[];
   myAttacks: AgeAttack[];
@@ -116,6 +118,7 @@ type StatePayload = {
   war_ends_at: string | null;
   ranking: { player: string; rank: number; kupa_delta: number; veri_delta: number }[] | null;
   me: string;
+  my_veri: number | null;
   players: {
     player: string;
     slot: number;
@@ -167,6 +170,7 @@ export function mapAgeState(p: StatePayload): AgeState {
       veriDelta: r.veri_delta,
     })),
     me: p.me,
+    myVeri: Number(p.my_veri ?? 0),
     players: (p.players ?? []).map((pl) => ({
       player: pl.player,
       slot: pl.slot,

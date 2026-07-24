@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { AgeAttack, AgeDefenseStart, AgeIncoming, AgeKind, AgeSabotageChoice } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
@@ -133,6 +133,7 @@ export function AttackPanel({
   onClose: () => void;
 }) {
   const [entry, setEntry] = useState<string[]>([]);
+  const glRef = useRef<ScrollView>(null);
   const total = kind === 'tower' ? 90000 : 120000;
   const undefendedCastle = kind === 'castle' && !defended;
   const submit = () => {
@@ -151,7 +152,7 @@ export function AttackPanel({
               {kind === 'tower' ? <AgeTower size={40} color={AGE.gray} /> : <AgeCastle size={44} color={AGE.gray} />}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.htitle}>{kind === 'tower' ? 'Nöbet Kulesi' : `Kale · ${targetName}`}</Text>
+              <Text style={styles.htitle}>{kind === 'tower' ? 'Nöbet Kulesi' : targetName ? `Kale · ${targetName}` : 'Kale'}</Text>
               <Text style={styles.hsub}>
                 {undefendedCastle ? 'SAVUNMASIZ' : kind === 'tower' ? '3 haneli şifre' : `${level} harfli kelime`}
               </Text>
@@ -171,8 +172,15 @@ export function AttackPanel({
           ) : (
             <>
               <TimerBar deadline={attack?.deadline ?? null} total={total} />
-              <View style={styles.glist}>
-                {(attack?.guesses ?? []).slice(-4).map((g, i) =>
+              {/* Tüm geçmiş sorgular; en fazla ~4 satır görünür, gerisi scroll
+                  (modal dikeyde şişmesin). Yeni sorguda sona kayar. */}
+              <ScrollView
+                ref={glRef}
+                style={{ maxHeight: kind === 'tower' ? 116 : 164 }}
+                contentContainerStyle={styles.glist}
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={() => glRef.current?.scrollToEnd({ animated: true })}>
+                {(attack?.guesses ?? []).map((g, i) =>
                   kind === 'tower' ? (
                     <View key={i} style={styles.grow}>
                       <Text style={styles.gdigits}>{g.guess}</Text>
@@ -191,7 +199,7 @@ export function AttackPanel({
                     </View>
                   ),
                 )}
-              </View>
+              </ScrollView>
 
               {kind === 'tower' ? (
                 <>
@@ -225,81 +233,190 @@ export function AttackPanel({
 }
 
 /* ── SAVUNMA paneli ─────────────────────────────────────────────────────── */
+// Akış: (1) avantajı SEÇ → (2) 60 sn içinde botun sayısını çöz → çözersen avantaj
+// otomatik uygulanır; süre dolarsa o savunma hakkı yanar. Toplam hak = 1 (ana kale,
+// yalnız süre) + sahip olunan kule sayısı; premium (sis/hırsız) hakkı = kule sayısı.
 export function DefensePanel({
   incoming,
   start,
   solvedCount,
+  premiumLeft,
+  veri,
   busy,
   onSolve,
+  onTimeout,
   onClose,
 }: {
   incoming: AgeIncoming;
   start: AgeDefenseStart;
   solvedCount: number;
+  premiumLeft: number;
+  /** Kalan maç‑içi Sefer Verisi (undefined → bakiye/ücret kilidi kapalı). */
+  veri?: number;
   busy: boolean;
   onSolve: (value: string, sabotage: AgeSabotageChoice) => void;
+  onTimeout: () => void;
   onClose: () => void;
 }) {
-  const [entry, setEntry] = useState<string[]>([]);
   const slots = start.slots;
   const full = solvedCount >= slots;
-  const fire = (sab: AgeSabotageChoice) => {
-    if (entry.length < 3 || full) return;
-    onSolve(entry.join(''), sab);
+  const poor = (c: number) => veri != null && veri < c;
+  const [stage, setStage] = useState<'choose' | 'solve'>('choose');
+  const [chosen, setChosen] = useState<AgeSabotageChoice | null>(null);
+  const [entry, setEntry] = useState<string[]>([]);
+  const [solveEndsAt, setSolveEndsAt] = useState<string | null>(null);
+  const rem = useCountdown(solveEndsAt);
+
+  // Yeni hak (solvedCount değişince) → seçim aşamasına dön.
+  useEffect(() => {
+    setStage('choose');
+    setChosen(null);
+    setEntry([]);
+    setSolveEndsAt(null);
+  }, [solvedCount]);
+
+  // 60 sn dolunca → bu savunma hakkı başarısız (yanar), sıradakine geç.
+  useEffect(() => {
+    if (stage === 'solve' && solveEndsAt && rem <= 0) {
+      setSolveEndsAt(null);
+      setStage('choose');
+      setChosen(null);
+      setEntry([]);
+      onTimeout();
+    }
+  }, [stage, solveEndsAt, rem, onTimeout]);
+
+  const pick = (sab: AgeSabotageChoice) => {
+    setChosen(sab);
+    setEntry([]);
+    setStage('solve');
+    setSolveEndsAt(new Date(Date.now() + 60000).toISOString());
+  };
+  const submit = () => {
+    if (entry.length < 3 || !chosen) return;
+    onSolve(entry.join(''), chosen);
     setEntry([]);
   };
+
+  const gp = incoming.lastGreen ?? 0;
+  const yp = incoming.lastYellow ?? 0;
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.root}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.head}>
-            <View style={styles.hicon}><AgeCastle size={44} color={AGE.blue} /></View>
+            <View style={styles.hicon}><AgeCastle size={44} color={AGE.you} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.htitle}>Kaleni Savun</Text>
-              <Text style={styles.hsub}>Botun sayısını çöz → dezavantaj uygula</Text>
+              <Text style={styles.hsub}>Sayıyı çöz → seçtiğin avantaj uygulanır</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={8} style={styles.hx}>
               <Feather name="x" size={16} color={colors.dim} />
             </Pressable>
           </View>
 
+          {/* Saldırganın ilerlemesi — yeşil/sarı (normal moddaki gibi) */}
           <View style={styles.attacker}>
             <Feather name="alert-triangle" size={14} color={AGE.red} />
-            <Text style={styles.attackerText}>
-              Saldırgan · {incoming.guessCount} tahmin
-              {incoming.lastGreen != null ? ` · son ${incoming.lastGreen} doğru yerde` : ''}
-            </Text>
+            {incoming.guessCount > 0 && (gp > 0 || yp > 0) ? (
+              <View style={styles.pipRow}>
+                {Array.from({ length: gp }).map((_, i) => (
+                  <View key={`g${i}`} style={[styles.pip, styles.pipG]} />
+                ))}
+                {Array.from({ length: yp }).map((_, i) => (
+                  <View key={`y${i}`} style={[styles.pip, styles.pipY]} />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.attackerText}>Saldırgan henüz ilerlemedi</Text>
+            )}
           </View>
 
+          {/* Savunma hakları */}
           <View style={styles.slots}>
             {Array.from({ length: slots }).map((_, i) => (
               <View key={i} style={[styles.slot, i < solvedCount && styles.slotOn]} />
             ))}
           </View>
-          <Text style={styles.freeNote}>{slots - solvedCount} hakkın kaldı · sayıyı çöz, dezavantaj seç</Text>
 
-          <NumPad
-            entry={entry}
-            locked={busy || full}
-            onDigit={(d) => setEntry((g) => (g.length >= 3 || g.includes(d) ? g : [...g, d]))}
-            onDelete={() => setEntry((g) => g.slice(0, -1))}
-          />
+          {veri != null ? (
+            <View style={styles.veriLine}>
+              <Feather name="hexagon" size={12} color={colors.teal} />
+              <Text style={styles.veriLineText}>Sefer kesen · ◈ {veri}</Text>
+            </View>
+          ) : null}
 
-          <View style={styles.sabRow}>
-            <Pressable onPress={() => fire('time')} disabled={busy || full || entry.length < 3} style={[styles.sab, (busy || full || entry.length < 3) && styles.sabOff]}>
-              <Text style={styles.sabTitle}>⏱ Süre −15</Text>
-              <Text style={styles.sabCostFree}>ücretsiz</Text>
-            </Pressable>
-            <Pressable onPress={() => fire('fog')} disabled={busy || full || entry.length < 3} style={[styles.sab, styles.sabFog, (busy || full || entry.length < 3) && styles.sabOff]}>
-              <Text style={styles.sabTitle}>🌫 Sis</Text>
-              <Text style={styles.sabCost}>◈ 50</Text>
-            </Pressable>
-            <Pressable onPress={() => fire('thief')} disabled={busy || full || entry.length < 3} style={[styles.sab, styles.sabThief, (busy || full || entry.length < 3) && styles.sabOff]}>
-              <Text style={styles.sabTitle}>⌛ Z.Hırsızı</Text>
-              <Text style={styles.sabCost}>◈ 60</Text>
-            </Pressable>
-          </View>
+          {full ? (
+            <Text style={styles.freeNote}>Savunma hakların bitti.</Text>
+          ) : stage === 'choose' ? (
+            <>
+              <Text style={styles.freeNote}>{slots - solvedCount} hakkın kaldı · çözünce uygulanacak avantajı seç</Text>
+              <View style={styles.sabCol}>
+                <Pressable onPress={() => pick('time')} disabled={busy} style={styles.sabPick}>
+                  <View style={styles.sabTexts}>
+                    <Text style={styles.sabTitle}>⏱ Süre −15 sn</Text>
+                    <Text style={styles.sabDesc}>Saldırganın süresi azalır</Text>
+                  </View>
+                  <Text style={styles.sabCostFree}>ücretsiz</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => pick('fog')}
+                  disabled={busy || premiumLeft <= 0 || poor(50)}
+                  style={[styles.sabPick, styles.sabFog, (premiumLeft <= 0 || poor(50)) && styles.sabOff]}>
+                  <View style={styles.sabTexts}>
+                    <Text style={styles.sabTitle}>🌫 Sis</Text>
+                    <Text style={styles.sabDesc}>Saldırganın sonraki 3 tahmininde geri bildirim maskeli</Text>
+                  </View>
+                  <Text style={styles.sabCost}>◈ 50</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => pick('thief')}
+                  disabled={busy || premiumLeft <= 0 || poor(60)}
+                  style={[styles.sabPick, styles.sabThief, (premiumLeft <= 0 || poor(60)) && styles.sabOff]}>
+                  <View style={styles.sabTexts}>
+                    <Text style={styles.sabTitle}>⌛ Zaman Hırsızı</Text>
+                    <Text style={styles.sabDesc}>Gri harfler saldırganın süresini yer</Text>
+                  </View>
+                  <Text style={styles.sabCost}>◈ 60</Text>
+                </Pressable>
+              </View>
+              {premiumLeft <= 0 ? (
+                <Text style={styles.freeNote}>Sis/Hırsızı için kule hakkın yok — yalnız süre düşürme kullanılabilir.</Text>
+              ) : veri != null && poor(50) ? (
+                <Text style={styles.freeNote}>Sefer Verisi yetersiz — yalnız ücretsiz süre düşürme kullanılabilir.</Text>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.chosenRow}>
+                <Pressable
+                  onPress={() => {
+                    setStage('choose');
+                    setChosen(null);
+                    setSolveEndsAt(null);
+                  }}
+                  hitSlop={8}>
+                  <Feather name="chevron-left" size={18} color={colors.dim} />
+                </Pressable>
+                <Text style={styles.chosenChip}>
+                  {chosen === 'time' ? '⏱ Süre −15' : chosen === 'fog' ? '🌫 Sis' : '⌛ Z.Hırsızı'}
+                </Text>
+                <Text style={styles.chosenClock}>0:{String(Math.ceil(rem / 1000)).padStart(2, '0')}</Text>
+              </View>
+              <TimerBar deadline={solveEndsAt} total={60000} />
+              <NumPad
+                entry={entry}
+                locked={busy}
+                onDigit={(d) => setEntry((g) => (g.length >= 3 || g.includes(d) ? g : [...g, d]))}
+                onDelete={() => setEntry((g) => g.slice(0, -1))}
+              />
+              <Pressable onPress={submit} disabled={busy || entry.length < 3} style={[styles.confirm, (busy || entry.length < 3) && styles.confirmOff]}>
+                <Text style={styles.confirmText}>Çöz → Uygula</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -312,6 +429,7 @@ export function SetCodePanel({
   level,
   deadline,
   mode,
+  veri,
   busy,
   onSet,
   onRandom,
@@ -320,6 +438,8 @@ export function SetCodePanel({
   level: number;
   deadline: string | null;
   mode: 'set' | 'refresh';
+  /** Kalan maç‑içi Sefer Verisi (yalnız yenileme ücretlidir). */
+  veri?: number;
   busy: boolean;
   onSet: (value: string) => void;
   onRandom: () => void;
@@ -330,18 +450,20 @@ export function SetCodePanel({
     if (deadline && rem <= 0) onRandom();
   }, [deadline, rem, onRandom]);
   const need = kind === 'tower' ? 3 : level;
+  const refresh = mode === 'refresh';
+  const refreshCost = kind === 'tower' ? 40 : 60;
+  const cantAfford = refresh && veri != null && veri < refreshCost;
   const submit = () => {
-    if (entry.length < need) return;
+    if (entry.length < need || cantAfford) return;
     onSet(entry.join(''));
   };
-  const refresh = mode === 'refresh';
   return (
     <Modal visible transparent animationType="slide" statusBarTranslucent>
       <View style={styles.root}>
         <View style={styles.sheet}>
           <View style={styles.head}>
             <View style={styles.hicon}>
-              {kind === 'tower' ? <AgeTower size={40} color={AGE.blue} /> : <AgeCastle size={44} color={AGE.blue} />}
+              {kind === 'tower' ? <AgeTower size={40} color={AGE.you} /> : <AgeCastle size={44} color={AGE.you} />}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.kicker}>{refresh ? 'ŞİFRE YENİLEME' : 'FETHEDİLDİ · SENİN'}</Text>
@@ -357,11 +479,19 @@ export function SetCodePanel({
 
           <Text style={styles.note}>
             {refresh
-              ? `Yeni ${kind === 'tower' ? 'sayı' : 'kelime'} · saldırganın biriktirdiği ipuçları silinir`
+              ? `Yeni ${kind === 'tower' ? 'sayı' : 'kelime'} · ◈ ${refreshCost} Sefer Verisi · saldırganın biriktirdiği ipuçları silinir`
               : kind === 'tower'
-                ? 'Rakip çözmeye çalışır · 3 farklı rakam'
-                : 'Rakip çözmeye çalışır · geçerli kelime — girmezsen SAVUNMASIZ kalır'}
+                ? 'Rakip çözmeye çalışır · 3 farklı rakam · belirlemek ücretsiz'
+                : 'Rakip çözmeye çalışır · geçerli kelime — girmezsen SAVUNMASIZ kalır · ücretsiz'}
           </Text>
+          {refresh && veri != null ? (
+            <View style={styles.veriLine}>
+              <Feather name="hexagon" size={12} color={cantAfford ? colors.danger : colors.teal} />
+              <Text style={[styles.veriLineText, cantAfford && { color: colors.danger }]}>
+                {cantAfford ? `Yetersiz — kesende ◈ ${veri}` : `Sefer kesen · ◈ ${veri}`}
+              </Text>
+            </View>
+          ) : null}
 
           {kind === 'tower' ? (
             <>
@@ -371,7 +501,7 @@ export function SetCodePanel({
                 onDigit={(d) => setEntry((g) => (g.length >= 3 || g.includes(d) ? g : [...g, d]))}
                 onDelete={() => setEntry((g) => g.slice(0, -1))}
               />
-              <Pressable onPress={submit} disabled={busy || entry.length < 3} style={[styles.confirm, (busy || entry.length < 3) && styles.confirmOff]}>
+              <Pressable onPress={submit} disabled={busy || entry.length < 3 || cantAfford} style={[styles.confirm, (busy || entry.length < 3 || cantAfford) && styles.confirmOff]}>
                 <Text style={styles.confirmText}>Şifreyi Kur</Text>
               </Pressable>
             </>
@@ -379,7 +509,7 @@ export function SetCodePanel({
             <WordEntry
               length={level}
               entry={entry}
-              busy={busy}
+              busy={busy || cantAfford}
               label="Şifreyi Kur"
               onKey={(k) => setEntry((g) => (g.length >= level ? g : [...g, k]))}
               onDelete={() => setEntry((g) => g.slice(0, -1))}
@@ -447,19 +577,37 @@ const styles = StyleSheet.create({
   confirmOff: { opacity: 0.5 },
   confirmText: { fontFamily: mono, fontSize: 14, fontWeight: '800', color: colors.ice, letterSpacing: 0.5 },
   attacker: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.glass, borderWidth: 1, borderColor: withAlpha(AGE.red, 0.35) },
-  attackerText: { fontFamily: mono, fontSize: 11, color: colors.ice, flex: 1 },
+  attackerText: { fontFamily: mono, fontSize: 11, color: colors.dim, flex: 1 },
+  pipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, flex: 1 },
+  pip: { width: 16, height: 16, borderRadius: 4 },
+  pipG: { backgroundColor: '#2f9d57' },
+  pipY: { backgroundColor: '#c8952a' },
   slots: { flexDirection: 'row', gap: 6 },
   slot: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)' },
   slotOn: { backgroundColor: colors.amber },
-  freeNote: { fontFamily: mono, fontSize: 10, color: colors.dim, textAlign: 'center' },
-  sabRow: { flexDirection: 'row', gap: 8 },
-  sab: { flex: 1, alignItems: 'center', gap: 3, paddingVertical: 11, borderRadius: 12, backgroundColor: colors.glass, borderWidth: 1, borderColor: withAlpha(colors.success, 0.35) },
-  sabFog: { borderColor: 'rgba(169,199,238,0.4)' },
-  sabThief: { borderColor: withAlpha(colors.violet, 0.4) },
+  freeNote: { fontFamily: mono, fontSize: 10, color: colors.dim, textAlign: 'center', lineHeight: 15 },
+  veriLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  veriLineText: { fontFamily: mono, fontSize: 11, fontWeight: '800', color: colors.teal },
+  sabCol: { gap: 8 },
+  sabPick: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 13,
+    borderRadius: 12, backgroundColor: colors.glass, borderWidth: 1, borderColor: withAlpha(colors.success, 0.4),
+  },
+  sabTexts: { flex: 1, gap: 2 },
+  sabFog: { borderColor: 'rgba(169,199,238,0.45)' },
+  sabThief: { borderColor: withAlpha(colors.violet, 0.45) },
   sabOff: { opacity: 0.4 },
-  sabTitle: { fontFamily: mono, fontSize: 11, fontWeight: '800', color: colors.ice },
-  sabCost: { fontFamily: mono, fontSize: 10, color: colors.teal },
-  sabCostFree: { fontFamily: mono, fontSize: 10, color: colors.success },
+  sabTitle: { fontFamily: mono, fontSize: 12, fontWeight: '800', color: colors.ice },
+  sabDesc: { fontFamily: mono, fontSize: 9.5, color: colors.dim, lineHeight: 13 },
+  sabCost: { fontFamily: mono, fontSize: 11, fontWeight: '800', color: colors.teal },
+  sabCostFree: { fontFamily: mono, fontSize: 11, fontWeight: '800', color: colors.success },
+  chosenRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2 },
+  chosenChip: {
+    flex: 1, fontFamily: mono, fontSize: 12, fontWeight: '800', color: colors.ice,
+    paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1,
+    borderColor: colors.glassBorder, backgroundColor: colors.glass, textAlign: 'center',
+  },
+  chosenClock: { fontFamily: mono, fontSize: 14, fontWeight: '800', color: colors.amber, minWidth: 42, textAlign: 'right' },
   randomBtn: { alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glass },
   randomText: { fontFamily: mono, fontSize: 12, fontWeight: '700', color: colors.dim, letterSpacing: 0.5, textTransform: 'uppercase' },
 });

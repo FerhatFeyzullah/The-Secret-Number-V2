@@ -48,7 +48,7 @@ export function AgeResult({
 
       <View style={styles.hero}>
         {myRank === 1 ? <AgeCrown size={52} /> : null}
-        <Text style={[styles.name, { color: colorMap[state.me] ?? AGE.blue }]} numberOfLines={1}>
+        <Text style={[styles.name, { color: colorMap[state.me] ?? AGE.you }]} numberOfLines={1}>
           {meName}
         </Text>
         <Text style={[styles.verdict, { color: rankColor }]}>{VERDICT[myRank].t}</Text>
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11, paddingHorizontal: 12,
     borderRadius: 14, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder,
   },
-  rowYou: { borderColor: withAlpha(AGE.blue, 0.55), backgroundColor: withAlpha(AGE.blue, 0.08) },
+  rowYou: { borderColor: withAlpha(AGE.you, 0.55), backgroundColor: withAlpha(AGE.you, 0.08) },
   medal: {
     width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5,
   },
@@ -145,8 +145,8 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   rname: { fontFamily: mono, fontSize: 14, fontWeight: '700', color: colors.ice, flexShrink: 1 },
   youTag: {
-    fontFamily: mono, fontSize: 9, letterSpacing: 1, color: AGE.blue,
-    borderWidth: 1, borderColor: withAlpha(AGE.blue, 0.45), borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1,
+    fontFamily: mono, fontSize: 9, letterSpacing: 1, color: AGE.you,
+    borderWidth: 1, borderColor: withAlpha(AGE.you, 0.45), borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1,
   },
   hold: { fontFamily: mono, fontSize: 11, color: colors.dim },
   rrew: { alignItems: 'flex-end' },
