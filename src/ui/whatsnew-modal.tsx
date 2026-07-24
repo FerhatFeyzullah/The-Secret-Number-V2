@@ -1,29 +1,15 @@
 import { Feather } from '@expo/vector-icons';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, cyanAlpha, mono } from './theme';
 
-/** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
- *  modal, o güncellemenin ilk açılışında bir kez görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'gizem-cagi-2026-07';
+/** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek duyuru varsa) BUMP et →
+ *  modal, o güncellemenin ana ekran ilk açılışında BİR KEZ görünür (AsyncStorage ile). */
+export const WHATSNEW_ID = 'gizem-cagi-mod-2026-07';
 
-type Note = { emoji: string; title: string; body: string };
-
-const WHATSNEW_NOTES: Note[] = [
-  {
-    emoji: '⚔️',
-    title: 'Yeni turnuva: Gizem Çağı',
-    body: '3 hükümdar, tek diyar! Haritadaki kaleleri ve nöbet kulelerini gizli sayı/kelimeleri çözerek fethet, rakiplerinin topraklarına saldır, prestij puanıyla çağın hükümdarı ol. Turnuvalar sekmesinden gir.',
-  },
-  {
-    emoji: '🛡️',
-    title: 'Savun, sabote et, yönet',
-    body: 'Kalene saldırı gelince savunmaya geç ve rakibini yavaşlat: süre düşür, sis bas ya da zamanını çal. Her maça eşit Sefer Verisi ile başlarsın — kazanan, kesesini iyi yöneten olur.',
-  },
-];
-
-/** Güncelleme sonrası ilk açılışta BİR KEZ görünen "Yenilikler" modalı. */
+/** Güncelleme sonrası ana ekran ilk açılışında BİR KEZ görünen duyuru pankartı:
+ *  başlık + tam görsel (çerçeveli) + sağ üstte kapatma ×. Sadece yeni mod duyurusu. */
 export function WhatsNewModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   return (
@@ -31,31 +17,26 @@ export function WhatsNewModal({ visible, onClose }: { visible: boolean; onClose:
       <View style={[styles.root, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.card}>
+          {/* üst enerji şeridi */}
+          <View style={styles.beam} />
+
+          <Pressable onPress={onClose} hitSlop={12} style={styles.close}>
+            <Feather name="x" size={16} color={colors.ice} />
+          </Pressable>
+
           <View style={styles.head}>
-            <View style={styles.headIcon}>
-              <Feather name="gift" size={17} color={colors.cyan} />
-            </View>
-            <Text style={styles.title}>YENİLİKLER</Text>
-            <Pressable onPress={onClose} hitSlop={10} style={styles.close}>
-              <Feather name="x" size={16} color={colors.dim} />
-            </Pressable>
+            <Text style={styles.kicker}>YENİ MOD</Text>
+            <Text style={styles.title}>GİZEM ÇAĞI</Text>
+            <Text style={styles.tag}>Üç hükümdar, tek diyar.</Text>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-            {WHATSNEW_NOTES.map((n) => (
-              <View key={n.title} style={styles.note}>
-                <Text style={styles.noteEmoji}>{n.emoji}</Text>
-                <View style={styles.noteText}>
-                  <Text style={styles.noteTitle}>{n.title}</Text>
-                  <Text style={styles.noteBody}>{n.body}</Text>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          <Pressable onPress={onClose} style={styles.cta}>
-            <Text style={styles.ctaText}>Anladım</Text>
-          </Pressable>
+          <View style={styles.frame}>
+            <Image
+              source={require('../../assets/images/whatsnew-gizem-cagi.png')}
+              style={styles.img}
+              resizeMode="cover"
+            />
+          </View>
         </View>
       </View>
     </Modal>
@@ -65,57 +46,70 @@ export function WhatsNewModal({ visible, onClose }: { visible: boolean; onClose:
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: 'rgba(3,7,18,0.72)',
+    backgroundColor: 'rgba(3,7,18,0.78)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
   card: {
     width: '100%',
-    maxWidth: 400,
-    maxHeight: '80%',
+    maxWidth: 420,
     backgroundColor: colors.bgMid,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.glassBorder,
-    overflow: 'hidden',
-  },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: cyanAlpha(0.4),
+    paddingTop: 20,
+    paddingBottom: 18,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.glassBorder,
+    overflow: 'hidden',
+    boxShadow: `0 18px 48px rgba(0,0,0,0.55), 0 0 30px ${cyanAlpha(0.14)}`,
   },
-  headIcon: {
+  beam: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: colors.cyan,
+    boxShadow: `0 0 18px ${colors.cyan}`,
+  },
+  close: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 5,
     width: 30,
     height: 30,
-    borderRadius: 9,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: cyanAlpha(0.13),
+    backgroundColor: 'rgba(0,0,0,0.35)',
     borderWidth: 1,
-    borderColor: cyanAlpha(0.4),
+    borderColor: colors.glassBorder,
   },
-  title: { flex: 1, color: colors.ice, fontSize: 14, fontWeight: '800', letterSpacing: 2.5, fontFamily: mono },
-  close: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: 16, gap: 16 },
-  note: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  noteEmoji: { fontSize: 22, lineHeight: 26 },
-  noteText: { flex: 1, gap: 3 },
-  noteTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
-  noteBody: { color: colors.dim, fontSize: 12.5, lineHeight: 18 },
-  cta: {
-    margin: 14,
-    marginTop: 4,
-    paddingVertical: 13,
-    borderRadius: 14,
-    alignItems: 'center',
+  head: { alignItems: 'center', gap: 4, marginBottom: 14, paddingHorizontal: 30 },
+  kicker: { fontFamily: mono, fontSize: 10, letterSpacing: 4, color: colors.cyan },
+  title: {
+    fontFamily: mono,
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 3,
+    color: colors.ice,
+    textShadowColor: cyanAlpha(0.7),
+    textShadowRadius: 16,
+    textAlign: 'center',
+  },
+  tag: { fontSize: 12.5, color: colors.dim, textAlign: 'center' },
+  frame: {
+    width: '100%',
+    aspectRatio: 1376 / 768,
+    borderRadius: 16,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: cyanAlpha(0.55),
-    backgroundColor: cyanAlpha(0.2),
+    borderColor: cyanAlpha(0.35),
+    backgroundColor: '#0a1220',
   },
-  ctaText: { color: colors.ice, fontSize: 14, fontWeight: '800', letterSpacing: 1, fontFamily: mono },
+  img: { width: '100%', height: '100%' },
 });
