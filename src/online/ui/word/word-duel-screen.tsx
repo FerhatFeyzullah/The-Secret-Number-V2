@@ -89,6 +89,7 @@ export function WordDuelScreen({
     guesses,
     loading,
     error,
+    addLocalGuess,
     sendSignal,
     incomingSignal,
     sendText,
@@ -420,6 +421,21 @@ export function WordDuelScreen({
         const { guessId, marks } = outcome;
         setMyMarks((prev) => ({ ...prev, [guessId]: marks }));
       }
+      // OWN-RENDER: kelime satırının KENDİSİ de anında düşsün (realtime echo'yu
+      // beklemeden). id ile dedupe; renkler zaten yukarıda myMarks'a staged.
+      if (outcome.guessId != null && outcome.feedback != null) {
+        addLocalGuess({
+          id: outcome.guessId,
+          matchId,
+          guesser: myId,
+          digits: parsed.word,
+          feedback: outcome.feedback,
+          round,
+          createdAt: new Date().toISOString(),
+          ...(outcome.fogged ? { fogged: true } : {}),
+          ...(outcome.greenCount != null ? { greenCount: outcome.greenCount } : {}),
+        });
+      }
       if (outcome.feedback === 'win') {
         play('win');
         buzz('win');
@@ -435,7 +451,7 @@ export function WordDuelScreen({
       submitLatchRef.current = false;
       setSubmitting(false);
     }
-  }, [locked, submitting, entry, wordLength, matchId, play, buzz]);
+  }, [locked, submitting, entry, wordLength, matchId, play, buzz, addLocalGuess, myId, round]);
 
   // ── Render ────────────────────────────────────────────────────
   const exitButton = (
