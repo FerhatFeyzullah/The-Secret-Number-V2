@@ -48,6 +48,11 @@ export type UseMatchResult = {
   error: string | null;
   /** Tüm durumu sunucudan yeniden çeker (ör. ekrana dönünce). */
   refresh: () => Promise<void>;
+  /** OWN-RENDER: kendi tahminini make_guess RPC dönüşünden ANINDA tahtaya ekler
+   *  (realtime echo'yu beklemeden → sorgu sonucu ms'de görünür). id ile dedupe:
+   *  postgres_changes INSERT aynı satırı getirince yok sayılır, poll ile yetkili
+   *  sürüm uzlaşır. Sunucu otoritesi değişmez; bu yalnız görünürlük hızlandırması. */
+  addLocalGuess: (guess: OnlineGuess) => void;
   /** Maç kanalına efemeral SİNYAL id'si yayınlar (maç sonu reaksiyonu; realtime
    *  broadcast; DB'ye YAZMAZ). Kullanılabilir set oyuncunun sinyal destesidir. */
   sendSignal: (signalId: string) => void;
@@ -685,6 +690,12 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
     return () => clearInterval(iv);
   }, [matchId, phase, spectateAs]);
 
+  // OWN-RENDER: kendi tahmin satırını yerel olarak ekle (realtime INSERT'le aynı
+  // dedupe deseni). Sunucu-otoriter değerlendirme RPC'de yapıldı; bu yalnız görünüm.
+  const addLocalGuess = useCallback((guess: OnlineGuess) => {
+    setGuesses((prev) => (prev.some((g) => g.id === guess.id) ? prev : [...prev, guess]));
+  }, []);
+
   // Efemeral sinyal yayını: kanal üzerinden broadcast (DB'ye yazmaz).
   const sendSignal = useCallback((signalId: string) => {
     const ch = channelRef.current;
@@ -729,6 +740,7 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
     loading,
     error,
     refresh,
+    addLocalGuess,
     sendSignal,
     incomingSignal,
     sendText,

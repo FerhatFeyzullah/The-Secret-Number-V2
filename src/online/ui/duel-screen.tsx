@@ -69,6 +69,7 @@ export function DuelScreen({
     guesses,
     loading,
     error,
+    addLocalGuess,
     sendSignal,
     incomingSignal,
     sendText,
@@ -621,6 +622,20 @@ export function DuelScreen({
     try {
       const outcome = await makeGuess(matchId, digits);
       setEntry([]);
+      // OWN-RENDER: kendi tahmin satırını ANINDA tahtaya bas (realtime echo'yu
+      // beklemeden). id ile dedupe; postgres_changes/poll yetkili sürümle uzlaşır.
+      if (outcome.guessId != null && outcome.feedback != null) {
+        addLocalGuess({
+          id: outcome.guessId,
+          matchId,
+          guesser: myId,
+          digits,
+          feedback: outcome.feedback,
+          round,
+          createdAt: new Date().toISOString(),
+          ...(outcome.fogged ? { fogged: true } : {}),
+        });
+      }
       if (outcome.feedback === 'win') {
         play('win');
         buzz('win');
@@ -634,7 +649,7 @@ export function DuelScreen({
       submitLatchRef.current = false;
       setSubmitting(false);
     }
-  }, [locked, submitting, entry, matchId, play, buzz]);
+  }, [locked, submitting, entry, matchId, play, buzz, addLocalGuess, myId, round]);
 
   // ── Render ────────────────────────────────────────────────────
   const exitButton = (
