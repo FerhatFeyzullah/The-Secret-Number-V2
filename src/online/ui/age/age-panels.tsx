@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import type { AgeAttack, AgeDefenseStart, AgeIncoming, AgeKind, AgeSabotageChoice } from '@/online';
+import type { LetterMark } from '@/game';
+import type { AgeAttack, AgeDefenseStart, AgeGuess, AgeIncoming, AgeKind, AgeSabotageChoice } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { TrKeyboard } from '../word/tr-keyboard';
 import { AGE } from './age-colors';
@@ -14,6 +15,25 @@ function numFeedback(fb: string): string {
   if (fb === 'digits_correct_wrong_order') return '3 doğru · yer yanlış';
   const n = fb.startsWith('partial:') ? fb.split(':')[1] : '0';
   return `${n} rakam doğru`;
+}
+
+/** Kelime tahmin geçmişinden klavye harf renkleri (G>Y>X) — kule-katı deseni. */
+function keyStatesFromGuesses(guesses: AgeGuess[]): Record<string, LetterMark> {
+  const rank: Record<LetterMark, number> = { X: 0, Y: 1, G: 2 };
+  const map: Record<string, LetterMark> = {};
+  for (const g of guesses) {
+    if (!g.marks) continue;
+    const letters = Array.from(g.guess.toLocaleLowerCase('tr'));
+    const marks = Array.from(g.marks) as LetterMark[];
+    for (let i = 0; i < letters.length; i++) {
+      const mk = marks[i];
+      if (mk !== 'G' && mk !== 'Y' && mk !== 'X') continue;
+      const ch = letters[i];
+      const cur = map[ch];
+      if (cur === undefined || rank[mk] > rank[cur]) map[ch] = mk;
+    }
+  }
+  return map;
 }
 function useCountdown(deadline: string | null): number {
   const [, tick] = useState(0);
@@ -74,7 +94,8 @@ function NumPad({
   );
 }
 
-/** Kelime girişi (kale/şifre): karolar + TrKeyboard + Onayla. */
+/** Kelime girişi (kale/şifre): karolar + TrKeyboard + Onayla. letterStates verilirse
+ *  (saldırıda) klavye tuşları Wordle renklerini alır. */
 function WordEntry({
   length,
   entry,
@@ -83,6 +104,7 @@ function WordEntry({
   onSubmit,
   busy,
   label = 'Onayla',
+  letterStates,
 }: {
   length: number;
   entry: string[];
@@ -91,6 +113,7 @@ function WordEntry({
   onSubmit: () => void;
   busy: boolean;
   label?: string;
+  letterStates?: Record<string, LetterMark>;
 }) {
   return (
     <View style={{ gap: 12 }}>
@@ -107,7 +130,7 @@ function WordEntry({
         style={[styles.confirm, (busy || entry.length < length) && styles.confirmOff]}>
         <Text style={styles.confirmText}>{label}</Text>
       </Pressable>
-      <TrKeyboard large onKey={onKey} onDelete={onDelete} locked={busy} />
+      <TrKeyboard large onKey={onKey} onDelete={onDelete} locked={busy} letterStates={letterStates} />
     </View>
   );
 }
@@ -136,6 +159,11 @@ export function AttackPanel({
   const glRef = useRef<ScrollView>(null);
   const total = kind === 'tower' ? 90000 : 120000;
   const undefendedCastle = kind === 'castle' && !defended;
+  // Kelime saldırısında klavye tuş renkleri (geçmiş tahminlerin işaretlerinden).
+  const keyStates = useMemo(
+    () => (kind === 'castle' ? keyStatesFromGuesses(attack?.guesses ?? []) : undefined),
+    [kind, attack?.guesses],
+  );
   const submit = () => {
     const need = kind === 'tower' ? 3 : level;
     if (entry.length < need) return;
@@ -149,7 +177,7 @@ export function AttackPanel({
         <View style={styles.sheet}>
           <View style={styles.head}>
             <View style={styles.hicon}>
-              {kind === 'tower' ? <AgeTower size={40} color={AGE.gray} /> : <AgeCastle size={44} color={AGE.gray} />}
+              {kind === 'tower' ? <AgeTower size={40} color={AGE.gray} /> : <AgeCastle size={44} color={AGE.gray} level={level} />}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.htitle}>{kind === 'tower' ? 'Nöbet Kulesi' : targetName ? `Kale · ${targetName}` : 'Kale'}</Text>
@@ -219,6 +247,7 @@ export function AttackPanel({
                   entry={entry}
                   busy={busy}
                   label="Dene"
+                  letterStates={keyStates}
                   onKey={(k) => setEntry((g) => (g.length >= level ? g : [...g, k]))}
                   onDelete={() => setEntry((g) => g.slice(0, -1))}
                   onSubmit={submit}
@@ -242,6 +271,8 @@ export function DefensePanel({
   solvedCount,
   premiumLeft,
   veri,
+  guesses,
+  accent = AGE.you,
   busy,
   onSolve,
   onTimeout,
@@ -253,6 +284,10 @@ export function DefensePanel({
   premiumLeft: number;
   /** Kalan maç‑içi Sefer Verisi (undefined → bakiye/ücret kilidi kapalı). */
   veri?: number;
+  /** Bu hakta çözülen botun sayısına dair kendi tahmin geçmişin (sayı + feedback). */
+  guesses?: { guess: string; feedback: string }[];
+  /** İzleyicinin kendi takım rengi (kale ikonu). */
+  accent?: string;
   busy: boolean;
   onSolve: (value: string, sabotage: AgeSabotageChoice) => void;
   onTimeout: () => void;
@@ -266,6 +301,8 @@ export function DefensePanel({
   const [entry, setEntry] = useState<string[]>([]);
   const [solveEndsAt, setSolveEndsAt] = useState<string | null>(null);
   const rem = useCountdown(solveEndsAt);
+  const glRef = useRef<ScrollView>(null);
+  const history = guesses ?? [];
 
   // Yeni hak (solvedCount değişince) → seçim aşamasına dön.
   useEffect(() => {
@@ -307,7 +344,7 @@ export function DefensePanel({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.head}>
-            <View style={styles.hicon}><AgeCastle size={44} color={AGE.you} /></View>
+            <View style={styles.hicon}><AgeCastle size={44} color={accent} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.htitle}>Kaleni Savun</Text>
               <Text style={styles.hsub}>Sayıyı çöz → seçtiğin avantaj uygulanır</Text>
@@ -406,6 +443,23 @@ export function DefensePanel({
                 <Text style={styles.chosenClock}>0:{String(Math.ceil(rem / 1000)).padStart(2, '0')}</Text>
               </View>
               <TimerBar deadline={solveEndsAt} total={60000} />
+              {history.length > 0 ? (
+                <ScrollView
+                  ref={glRef}
+                  style={styles.defHist}
+                  contentContainerStyle={styles.glist}
+                  showsVerticalScrollIndicator={false}
+                  onContentSizeChange={() => glRef.current?.scrollToEnd({ animated: true })}>
+                  {history.map((g, i) => (
+                    <View key={i} style={styles.grow}>
+                      <Text style={styles.gdigits}>{g.guess}</Text>
+                      <Text style={styles.gfb}>{numFeedback(g.feedback)}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={styles.freeNote}>Botun 3 haneli sayısını çöz — denemelerin aşağıda listelenir.</Text>
+              )}
               <NumPad
                 entry={entry}
                 locked={busy}
@@ -430,9 +484,11 @@ export function SetCodePanel({
   deadline,
   mode,
   veri,
+  accent = AGE.you,
   busy,
   onSet,
   onRandom,
+  onClose,
 }: {
   kind: AgeKind;
   level: number;
@@ -440,9 +496,13 @@ export function SetCodePanel({
   mode: 'set' | 'refresh';
   /** Kalan maç‑içi Sefer Verisi (yalnız yenileme ücretlidir). */
   veri?: number;
+  /** İzleyicinin kendi takım rengi (yenileme ikonu). */
+  accent?: string;
   busy: boolean;
   onSet: (value: string) => void;
   onRandom: () => void;
+  /** × / arka plan ile kapat (garantili çıkış). */
+  onClose?: () => void;
 }) {
   const [entry, setEntry] = useState<string[]>([]);
   const rem = useCountdown(deadline);
@@ -453,27 +513,38 @@ export function SetCodePanel({
   const refresh = mode === 'refresh';
   const refreshCost = kind === 'tower' ? 40 : 60;
   const cantAfford = refresh && veri != null && veri < refreshCost;
+  // Fetih sonrası ŞİFRE KUR: kullanıcı fark etsin diye modal KIRMIZI vurgulu.
+  const alert = !refresh;
+  // Yenileme modunda ikon kendi rengin; şifre kurmada dikkat için kırmızı.
+  const iconColor = alert ? AGE.red : accent;
   const submit = () => {
     if (entry.length < need || cantAfford) return;
     onSet(entry.join(''));
   };
   return (
-    <Modal visible transparent animationType="slide" statusBarTranslucent>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.root}>
-        <View style={styles.sheet}>
+        {onClose ? <Pressable style={StyleSheet.absoluteFill} onPress={onClose} /> : null}
+        <View style={[styles.sheet, alert && styles.sheetAlert]}>
+          <View style={[styles.beam, alert && styles.beamAlert]} />
           <View style={styles.head}>
             <View style={styles.hicon}>
-              {kind === 'tower' ? <AgeTower size={40} color={AGE.you} /> : <AgeCastle size={44} color={AGE.you} />}
+              {kind === 'tower' ? <AgeTower size={40} color={iconColor} /> : <AgeCastle size={44} color={iconColor} level={level} />}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.kicker}>{refresh ? 'ŞİFRE YENİLEME' : 'FETHEDİLDİ · SENİN'}</Text>
+              <Text style={[styles.kicker, alert && styles.kickerAlert]}>{refresh ? 'ŞİFRE YENİLEME' : 'FETHEDİLDİ · ŞİFRENİ KUR'}</Text>
               <Text style={styles.htitle}>{kind === 'tower' ? 'Nöbet Kulesi' : `Kale · ${level} harf`}</Text>
               <Text style={styles.hsub}>{refresh ? 'Kuşatmayı sıfırla' : 'Savunma şifreni kur'}</Text>
             </View>
             {deadline ? (
               <View style={styles.timerChip}>
-                <Text style={styles.timerText}>0:{String(Math.ceil(rem / 1000)).padStart(2, '0')}</Text>
+                <Text style={[styles.timerText, alert && { color: AGE.red }]}>0:{String(Math.ceil(rem / 1000)).padStart(2, '0')}</Text>
               </View>
+            ) : null}
+            {onClose ? (
+              <Pressable onPress={onClose} hitSlop={8} style={styles.hx}>
+                <Feather name="x" size={16} color={colors.dim} />
+              </Pressable>
             ) : null}
           </View>
 
@@ -533,8 +604,16 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: colors.bgMid, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     borderTopWidth: 1, borderColor: withAlpha(AGE.blue, 0.4), paddingHorizontal: 18, paddingTop: 14,
-    paddingBottom: 26, gap: 12,
+    paddingBottom: 26, gap: 12, overflow: 'hidden',
   },
+  // Fetih sonrası "şifre kur" — dikkat çekmek için kırmızı çerçeve + üst şerit.
+  sheetAlert: { borderColor: withAlpha(AGE.red, 0.7), borderTopWidth: 2 },
+  beam: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: AGE.blue,
+  },
+  beamAlert: { height: 4, backgroundColor: AGE.red, boxShadow: `0 0 16px ${AGE.red}` },
+  kickerAlert: { color: AGE.red, fontWeight: '900' },
   head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   hicon: { width: 46, alignItems: 'center' },
   kicker: { fontFamily: mono, fontSize: 9, letterSpacing: 2, color: AGE.blue },
@@ -547,6 +626,7 @@ const styles = StyleSheet.create({
   tbar: { height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
   tbarFill: { height: '100%', borderRadius: 3, backgroundColor: colors.amber },
   glist: { gap: 6 },
+  defHist: { maxHeight: 92, alignSelf: 'stretch' },
   grow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   gdigits: { fontFamily: mono, fontSize: 18, fontWeight: '800', color: colors.ice, letterSpacing: 4 },
   gfb: { fontFamily: mono, fontSize: 11, color: colors.amber },

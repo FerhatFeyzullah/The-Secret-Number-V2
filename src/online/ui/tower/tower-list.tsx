@@ -16,11 +16,14 @@ export function TowerList({
   state,
   onSelect,
   onSelectAge,
+  onInfoAge,
   onSelectAgeDemo,
 }: {
   state: TowerState;
   onSelect: () => void;
   onSelectAge: () => void;
+  /** Gizem Çağı kartındaki "?" — öğretici ekranını açar. */
+  onInfoAge: () => void;
   onSelectAgeDemo: () => void;
 }) {
   const countdown = useCountdown(state.period.endsAt);
@@ -70,7 +73,8 @@ export function TowerList({
           accent={colors.violet}
           title="Gizem Çağı"
           subtitle="3 hükümdar · harita fethi · sayı + kelime"
-          onPress={onSelectAge}>
+          onPress={onSelectAge}
+          onInfo={onInfoAge}>
           <View style={styles.badges}>
             <View style={styles.badge}>
               <View style={styles.triRow}>

@@ -99,7 +99,7 @@ export type SeenKey =
   | 'towerCursed' // Kule yetenek: Lanetli Harf
   | 'towerMemory' // Kule yetenek: Hafıza Kaybı
   | 'ageDemoIntro' // Gizem Çağı demo modu tanıtımı
-  | 'ageIntro'; // Gizem Çağı turnuvası tanıtımı
+  | 'ageIntro'; // Gizem Çağı öğreticisi (maç öncesi örnek harita ekranı)
 
 /** Tüm bilgilendirme bayrakları — resetSeen() bunların hepsini siler. */
 const SEEN_KEYS: readonly SeenKey[] = [

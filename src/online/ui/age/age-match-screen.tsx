@@ -22,6 +22,7 @@ import {
 } from '@/online';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { AgeBackground } from './age-bg';
+import { AGE, ageColors } from './age-colors';
 import { AgeEliminated } from './age-eliminated';
 import { AgeMap } from './age-map';
 import { AgeQueue } from './age-queue';
@@ -45,6 +46,8 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
   const { state, loading, error, refresh } = useAgeMatch(matchId);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [busy, setBusy] = useState(false);
+  // Savunmada botun sayısını çözme denemelerin (sunucu tutmaz; feedback'ten biriktir).
+  const [defenseGuesses, setDefenseGuesses] = useState<{ guess: string; feedback: string }[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const leavingRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,8 +59,25 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
   }, []);
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
+  // 3. oyuncu gelip hazırlık başlayınca eşleşme ekranında ~5 sn "savaş ortamı
+  // hazırlanıyor" beklet (yalnız queue→prep ilk geçişte; maça yeniden girişte değil).
+  const [prepShownAt, setPrepShownAt] = useState<number | null>(null);
+  const prevPhaseRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = state?.phase;
+    if (prev === 'queue' && state?.phase === 'prep') setPrepShownAt(Date.now());
+  }, [state?.phase]);
+  useEffect(() => {
+    if (prepShownAt == null) return;
+    const t = setTimeout(() => setPrepShownAt(null), 5000);
+    return () => clearTimeout(t);
+  }, [prepShownAt]);
+  const preparing = prepShownAt != null;
+
   const me = state?.me ?? '';
   const meElim = !!state?.players.find((p) => p.player === me)?.eliminated;
+  const myColor = state ? ageColors(state.players)[me] ?? AGE.you : AGE.you;
   const byId = state ? Object.fromEntries(state.territories.map((t) => [t.id, t])) : {};
   // Sahip adı; nötr (fethedilmemiş) bölge için boş (UI'da "Bot" göstermeyiz).
   const nameOf = (pid: string | null) =>
@@ -189,6 +209,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
   const onDefend = (attackId: string, territoryId: string) => {
     void run(async () => {
       const start = await ageStartDefense(attackId);
+      setDefenseGuesses([]);
       setSheet({ t: 'defense', attackId, territoryId, start, solvedCount: start.solvedCount, premiumUsed: 0 });
       await refresh();
     });
@@ -199,6 +220,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
     void run(async () => {
       const out = await ageDefenseGuess(aid, value, sabotage);
       if (out.status === 'solved') {
+        setDefenseGuesses([]); // yeni hak → yeni sayı
         setSheet((s) =>
           s?.t === 'defense'
             ? { ...s, solvedCount: out.solvedCount, premiumUsed: s.premiumUsed + (sabotage === 'time' ? 0 : 1) }
@@ -206,6 +228,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
         );
         showToast(sabotage === 'time' ? 'Çözdün — saldırgan −15 sn!' : sabotage === 'fog' ? 'Sis uygulandı.' : 'Zaman Hırsızı uygulandı.');
       } else if (out.status === 'continue') {
+        setDefenseGuesses((g) => [...g, { guess: value, feedback: out.feedback }]);
         showToast('Yanlış — tekrar dene.');
       } else if (out.status === 'attack_gone') {
         setSheet(null);
@@ -216,6 +239,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
   };
   // NOT: 60 sn hak-süresi şu an istemci-tarafı (backend enforcement bekliyor — v3).
   const onDefenseTimeout = () => {
+    setDefenseGuesses([]);
     setSheet((s) => (s?.t === 'defense' ? { ...s, solvedCount: Math.min(s.solvedCount + 1, s.start.slots) } : s));
     showToast('Süre doldu — bu savunma hakkı yandı.');
   };
@@ -286,8 +310,8 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           <AgeResult state={state} onRequeue={requeue} onMenu={() => router.back()} />
         ) : meElim ? (
           <AgeEliminated state={state} onMenu={leaveToMenu} />
-        ) : state.phase === 'queue' ? (
-          <AgeQueue players={state.players} onCancel={leaveToMenu} />
+        ) : state.phase === 'queue' || preparing ? (
+          <AgeQueue players={state.players} onCancel={leaveToMenu} preparing={preparing} />
         ) : (
           <AgeMap state={state} veri={state.myVeri} onTapNode={onTapNode} onDefend={onDefend} />
         )}
@@ -313,10 +337,12 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           solvedCount={sheet.solvedCount}
           premiumLeft={Math.max(0, sheet.start.slots - 1 - sheet.premiumUsed)}
           veri={state.myVeri}
+          guesses={defenseGuesses}
+          accent={myColor}
           busy={busy}
           onSolve={onDefenseSolve}
           onTimeout={onDefenseTimeout}
-          onClose={() => setSheet(null)}
+          onClose={() => { setSheet(null); setDefenseGuesses([]); }}
         />
       ) : null}
 
@@ -327,9 +353,11 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           deadline={sheet.deadline}
           mode="set"
           veri={state.myVeri}
+          accent={myColor}
           busy={busy}
           onSet={onSetCode}
           onRandom={closeSetCode}
+          onClose={closeSetCode}
         />
       ) : null}
 
@@ -340,9 +368,11 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
           deadline={null}
           mode="refresh"
           veri={state.myVeri}
+          accent={myColor}
           busy={busy}
           onSet={onRefreshCastle}
           onRandom={() => setSheet(null)}
+          onClose={() => setSheet(null)}
         />
       ) : null}
 

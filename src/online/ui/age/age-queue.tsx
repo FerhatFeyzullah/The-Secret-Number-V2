@@ -9,6 +9,27 @@ import { colors, mono, withAlpha } from '@/ui/theme';
 const DISPLAY = 'Comfortaa-SemiBold';
 const SOFT = 'Comfortaa';
 
+/** 3 savaşçı toplanınca çalan "hazırlanıyor" ilerleme çubuğu (~5 sn). */
+function PreparingBar() {
+  const w = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(w, { toValue: 1, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: false }).start();
+  }, [w]);
+  const width = w.interpolate({ inputRange: [0, 1], outputRange: ['4%', '100%'] });
+  return (
+    <View style={styles.prepWrap}>
+      <View style={styles.prepBadge}>
+        <Feather name="loader" size={14} color={colors.amber} />
+        <Text style={styles.prepText}>SAVAŞ ORTAMI HAZIRLANIYOR</Text>
+      </View>
+      <View style={styles.prepTrack}>
+        <Animated.View style={[styles.prepFill, { width }]} />
+      </View>
+      <Text style={styles.prepSub}>Harita çiziliyor, hükümdarlar yerleşiyor…</Text>
+    </View>
+  );
+}
+
 /** Dönen kuşatma mührü (matchmaking göstergesi — artifact stili). */
 function SiegeSeal({ count }: { count: number }) {
   const spin = useRef(new Animated.Value(0)).current;
@@ -44,13 +65,23 @@ function SiegeSeal({ count }: { count: number }) {
   );
 }
 
-/** Gizem Çağı bekleme ekranı: dönen mühür + 3 hükümdar sancağı (artifact stili). */
-export function AgeQueue({ players, onCancel }: { players: AgePlayer[]; onCancel: () => void }) {
-  const count = players.length;
+/** Gizem Çağı bekleme ekranı: dönen mühür + 3 hükümdar sancağı (artifact stili).
+ *  preparing: 3/3 dolunca ~5 sn "savaş ortamı hazırlanıyor" arası (harita açılmadan
+ *  önce). Bu sırada iptal yok. */
+export function AgeQueue({
+  players,
+  onCancel,
+  preparing = false,
+}: {
+  players: AgePlayer[];
+  onCancel: () => void;
+  preparing?: boolean;
+}) {
+  const count = preparing ? 3 : players.length;
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text style={styles.kicker}>İLK ÇAĞLARIN KUŞATMASI</Text>
+        <Text style={styles.kicker}>{preparing ? 'ÜÇ HÜKÜMDAR TOPLANDI' : 'İLK ÇAĞLARIN KUŞATMASI'}</Text>
         <Text style={styles.title}>GİZEM ÇAĞI</Text>
         <Text style={styles.tag}>Üç hükümdar, tek zafer.</Text>
       </View>
@@ -60,26 +91,32 @@ export function AgeQueue({ players, onCancel }: { players: AgePlayer[]; onCancel
       <View style={styles.banners}>
         {[0, 1, 2].map((i) => {
           const p = players[i];
+          const filled = preparing || !!p;
           return (
-            <View key={i} style={[styles.banner, p ? styles.bannerFilled : styles.bannerEmpty]}>
-              <View style={[styles.sigil, p ? styles.sigilFilled : null]}>
-                <Text style={[styles.sigilText, p ? styles.sigilTextFilled : null]}>
+            <View key={i} style={[styles.banner, filled ? styles.bannerFilled : styles.bannerEmpty]}>
+              <View style={[styles.sigil, filled ? styles.sigilFilled : null]}>
+                <Text style={[styles.sigilText, filled ? styles.sigilTextFilled : null]}>
                   {p ? (p.username?.charAt(0) || '?').toLocaleUpperCase('tr') : '?'}
                 </Text>
               </View>
               <Text style={styles.bname} numberOfLines={1}>{p ? p.username ?? 'Oyuncu' : 'Meçhul'}</Text>
-              <Text style={[styles.chip, p ? styles.chipFilled : null]}>{p ? 'Katıldı' : 'bekleniyor'}</Text>
+              <Text style={[styles.chip, filled ? styles.chipFilled : null]}>{filled ? 'Katıldı' : 'bekleniyor'}</Text>
             </View>
           );
         })}
       </View>
 
-      <Text style={styles.lore}>Kuleler sayı, kaleler kelime ile korunur. Üç savaşçı toplanınca harita açılır.</Text>
-
-      <Pressable onPress={onCancel} style={styles.cancel}>
-        <Feather name="x" size={15} color={colors.danger} />
-        <Text style={styles.cancelText}>Vazgeç</Text>
-      </Pressable>
+      {preparing ? (
+        <PreparingBar />
+      ) : (
+        <>
+          <Text style={styles.lore}>Kuleler sayı, kaleler kelime ile korunur. Üç savaşçı toplanınca harita açılır.</Text>
+          <Pressable onPress={onCancel} style={styles.cancel}>
+            <Feather name="x" size={15} color={colors.danger} />
+            <Text style={styles.cancelText}>Vazgeç</Text>
+          </Pressable>
+        </>
+      )}
     </View>
   );
 }
@@ -122,4 +159,10 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(colors.danger, 0.1),
   },
   cancelText: { color: colors.danger, fontWeight: '800', fontFamily: mono, letterSpacing: 0.5 },
+  prepWrap: { alignSelf: 'stretch', alignItems: 'center', gap: 12, paddingHorizontal: 10 },
+  prepBadge: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  prepText: { fontFamily: mono, fontSize: 11, letterSpacing: 1.5, fontWeight: '800', color: colors.amber },
+  prepTrack: { alignSelf: 'stretch', height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  prepFill: { height: '100%', borderRadius: 4, backgroundColor: colors.amber },
+  prepSub: { fontFamily: SOFT, fontSize: 12.5, color: colors.dim, textAlign: 'center' },
 });

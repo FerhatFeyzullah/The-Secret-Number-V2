@@ -65,6 +65,24 @@ export type AgeIncoming = {
 
 export type AgeRankEntry = { player: string; rank: number; kupaDelta: number; veriDelta: number };
 
+/** "Son Maçlar" — bir Gizem Çağı maçında bir oyuncunun özeti (public-safe: isim). */
+export type AgeMatchStanding = {
+  name: string | null;
+  rank: number;
+  points: number;
+  towers: number;
+  castles: number;
+  kupaDelta: number;
+  veriDelta: number;
+};
+
+/** "Son Maçlar" — bitmiş bir Gizem Çağı maçının 3 oyunculu özeti. */
+export type AgeRecentMatch = {
+  matchId: string;
+  endedAt: string;
+  standings: AgeMatchStanding[];
+};
+
 export type AgeState = {
   matchId: string;
   phase: AgePhase;
@@ -353,4 +371,37 @@ export async function ageClaimPhase(matchId: string): Promise<void> {
 /** Maçtan çık (topraklar bota döner, oyuncu son sıraya). */
 export async function ageLeave(matchId: string): Promise<void> {
   await callRpc('age_leave', { p_match_id: matchId });
+}
+
+/** Global son 30 Gizem Çağı maçı ("Son Maçlar" sekmesi). jsonb → AgeRecentMatch[]. */
+type AgeRecentPayload = {
+  match_id: string;
+  ended_at: string;
+  standings:
+    | {
+        name: string | null;
+        rank: number;
+        points: number;
+        towers: number;
+        castles: number;
+        kupa_delta: number;
+        veri_delta: number;
+      }[]
+    | null;
+};
+export async function getRecentAgeMatches(): Promise<AgeRecentMatch[]> {
+  const rows = await callRpc<AgeRecentPayload[]>('get_recent_age_matches');
+  return (rows ?? []).map((r) => ({
+    matchId: r.match_id,
+    endedAt: r.ended_at,
+    standings: (r.standings ?? []).map((s) => ({
+      name: s.name ?? null,
+      rank: Number(s.rank),
+      points: Number(s.points ?? 0),
+      towers: Number(s.towers ?? 0),
+      castles: Number(s.castles ?? 0),
+      kupaDelta: Number(s.kupa_delta ?? 0),
+      veriDelta: Number(s.veri_delta ?? 0),
+    })),
+  }));
 }
