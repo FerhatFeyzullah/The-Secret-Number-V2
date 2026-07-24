@@ -135,6 +135,37 @@ export {
   wordRaceReveal,
 } from './matchService';
 export { useMatch, type UseMatchOptions, type UseMatchResult } from './useMatch';
+export {
+  ageFindMatch,
+  ageGetState,
+  ageStartAttack,
+  ageAttackGuess,
+  ageAbandonAttack,
+  ageSetCode,
+  ageStartDefense,
+  ageDefenseGuess,
+  ageRefreshCode,
+  ageClaimPhase,
+  ageLeave,
+  type AgeState,
+  type AgePhase,
+  type AgeKind,
+  type AgeAttackStatus,
+  type AgeSabotage,
+  type AgeSabotageChoice,
+  type AgePlayer,
+  type AgeTerritory,
+  type AgeGuess,
+  type AgeAttack,
+  type AgePublicAttack,
+  type AgeIncoming,
+  type AgeRankEntry,
+  type AgeStartAttack,
+  type AgeGuessOutcome,
+  type AgeDefenseStart,
+  type AgeDefenseOutcome,
+} from './ageService';
+export { useAgeMatch, type UseAgeMatchResult } from './useAgeMatch';
 export { useLiveClocks } from './useLiveClocks';
 export { MatchSessionProvider, useMatchSession } from './match-session';
 export { RankProvider, useRank } from './rank-context';
