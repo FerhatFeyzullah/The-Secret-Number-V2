@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useAuth } from '@/auth';
 import { isOnline } from '@/net';
 import {
+  ageFindMatch,
   enterTower,
   getTowerState,
   OnlineError,
@@ -133,6 +134,25 @@ export function TowerScreen() {
     }
   }, [busy]);
 
+  // Gizem Çağı: kuyruğa gir (ya da aktif maçı sürdür) → maç route'una git.
+  const enterAge = useCallback(async () => {
+    if (busy) return;
+    if (!(await isOnline())) {
+      setError('Turnuva için internet bağlantısı gerekli.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { matchId } = await ageFindMatch();
+      router.push({ pathname: '/age/[id]', params: { id: matchId } });
+    } catch (e) {
+      setError(e instanceof OnlineError ? e.message : 'Kuyruğa girilemedi.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, router]);
+
   const cont = useCallback(async () => {
     if (busy || !state) return;
     if (!(await isOnline())) {
@@ -233,7 +253,11 @@ export function TowerScreen() {
               onBack={() => setView('list')}
             />
           ) : (
-            <TowerList state={state} onSelect={() => setView('ladder')} />
+            <TowerList
+              state={state}
+              onSelect={() => setView('ladder')}
+              onSelectAge={enterAge}
+            />
           )}
         </>
       ) : null}
