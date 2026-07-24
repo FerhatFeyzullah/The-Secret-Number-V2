@@ -16,10 +16,12 @@ export function TowerList({
   state,
   onSelect,
   onSelectAge,
+  onSelectAgeDemo,
 }: {
   state: TowerState;
   onSelect: () => void;
   onSelectAge: () => void;
+  onSelectAgeDemo: () => void;
 }) {
   const countdown = useCountdown(state.period.endsAt);
   const run = state.run;
@@ -83,6 +85,25 @@ export function TowerList({
             </View>
           </View>
         </ChoiceCard>
+
+        {/* Gizem Çağı DEMO — sunucusuz, tek başına ekran testi. Yalnız geliştirme
+            derlemesinde görünür (__DEV__); yayında gizli, kod korunur (gerçek
+            oyuncu testlerinden sonra tekrar gerekebilir). */}
+        {__DEV__ ? (
+          <ChoiceCard
+            iconNode={<AgeEmblem size={32} color={colors.teal} />}
+            accent={colors.teal}
+            title="Gizem Çağı · Demo"
+            subtitle="Sunucusuz · 2 sanal rakiple ekranları test et"
+            onPress={onSelectAgeDemo}>
+            <View style={styles.badges}>
+              <View style={[styles.badge, { borderColor: withAlpha(colors.teal, 0.4) }]}>
+                <Feather name="monitor" size={11} color={colors.teal} />
+                <Text style={[styles.badgeText, { color: colors.teal }]}>Yerel Deneme</Text>
+              </View>
+            </View>
+          </ChoiceCard>
+        ) : null}
 
         <View style={styles.soon}>
           <Feather name="plus-circle" size={16} color={withAlpha(colors.dim, 0.5)} />
