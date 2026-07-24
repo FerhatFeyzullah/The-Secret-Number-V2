@@ -2,15 +2,25 @@ import { Feather } from '@expo/vector-icons';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { TowerState } from '@/online';
+import { AgeEmblem } from '../age/age-icons';
 import { ChoiceCard } from '../parts';
 import { colors, mono, withAlpha } from '@/ui/theme';
 import { TowerLogo } from '@/ui/tower-logo';
 import { useCountdown } from './tower-ladder';
 
-/** Turnuva seçim ekranı — çok oyunculu mod seçimi gibi kartlar. Şimdilik tek
- *  turnuva (Gizemli Kule); alt alta yeni turnuva kartları eklemek için hazır.
- *  Karta basınca merdiven (o turnuvanın ekranı) açılır. */
-export function TowerList({ state, onSelect }: { state: TowerState; onSelect: () => void }) {
+const TEAM = { blue: '#4a90ff', red: '#ff5b5b', green: '#46cf7c' };
+
+/** Turnuva seçim ekranı — çok oyunculu mod seçimi gibi kartlar (Gizemli Kule +
+ *  Gizem Çağı). Karta basınca o turnuvanın ekranı açılır. */
+export function TowerList({
+  state,
+  onSelect,
+  onSelectAge,
+}: {
+  state: TowerState;
+  onSelect: () => void;
+  onSelectAge: () => void;
+}) {
   const countdown = useCountdown(state.period.endsAt);
   const run = state.run;
 
@@ -52,7 +62,28 @@ export function TowerList({ state, onSelect }: { state: TowerState; onSelect: ()
           </View>
         </ChoiceCard>
 
-        {/* İleride: yeni turnuva kartları buraya (alt alta). */}
+        {/* Gizem Çağı — 3 oyunculu harita fethi (mor "gizem" aksanı). */}
+        <ChoiceCard
+          iconNode={<AgeEmblem size={32} color={colors.violet} />}
+          accent={colors.violet}
+          title="Gizem Çağı"
+          subtitle="3 hükümdar · harita fethi · sayı + kelime"
+          onPress={onSelectAge}>
+          <View style={styles.badges}>
+            <View style={styles.badge}>
+              <View style={styles.triRow}>
+                <View style={[styles.tri, { backgroundColor: TEAM.blue }]} />
+                <View style={[styles.tri, { backgroundColor: TEAM.red }]} />
+                <View style={[styles.tri, { backgroundColor: TEAM.green }]} />
+              </View>
+              <Text style={[styles.badgeText, { color: colors.text }]}>1v1v1</Text>
+            </View>
+            <View style={[styles.badge, { borderColor: withAlpha(colors.violet, 0.4) }]}>
+              <Text style={[styles.badgeText, { color: colors.violet }]}>Kuyruğa Gir</Text>
+            </View>
+          </View>
+        </ChoiceCard>
+
         <View style={styles.soon}>
           <Feather name="plus-circle" size={16} color={withAlpha(colors.dim, 0.5)} />
           <Text style={styles.soonText}>Yeni turnuvalar yakında</Text>
@@ -78,6 +109,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   badgeText: { fontFamily: mono, fontSize: 11, fontWeight: '700' },
+  triRow: { flexDirection: 'row', gap: 3 },
+  tri: { width: 7, height: 7, borderRadius: 2 },
   soon: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingVertical: 18, opacity: 0.6,
