@@ -109,19 +109,19 @@ export function WordSetupPanel({
 
   const handleKey = useCallback(
     (k: string) => {
-      if (locked || !active) return;
+      if (locked || busy || !active) return; // busy: setSecret uçuşta → düzenleme YOK
       setError(null);
       setNotInPoolWord(null);
       setTyped((p) => (p.length < wordLength ? [...p, k] : p));
     },
-    [locked, active, wordLength],
+    [locked, busy, active, wordLength],
   );
   const handleDelete = useCallback(() => {
-    if (locked) return;
+    if (locked || busy || !active) return; // busy: gönderim sırasında sil/yeniden-yaz ENGELLİ
     setError(null);
     setNotInPoolWord(null); // harf silinince "Sözlüğe öner" kaybolur (kısa kelime önerilemez)
     setTyped((p) => p.slice(0, -1));
-  }, [locked]);
+  }, [locked, busy, active]);
 
   const confirm = useCallback(async () => {
     if (locked || busy || !complete || !active) return;
@@ -290,11 +290,11 @@ export function WordSetupPanel({
       <View style={styles.kbWrap}>
         <WordConfirmButton
           label="Kelimeyi Belirle"
-          enabled={complete && active && !locked}
+          enabled={complete && active && !locked && !busy}
           busy={busy}
           onPress={confirm}
         />
-        <TrKeyboard onKey={handleKey} onDelete={handleDelete} locked={locked || !active} />
+        <TrKeyboard onKey={handleKey} onDelete={handleDelete} locked={locked || busy || !active} />
       </View>
 
       {/* Kilitlendi overlay'i */}

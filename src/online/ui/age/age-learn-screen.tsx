@@ -59,7 +59,12 @@ const SAMPLE: AgeState = {
     defended: s.kind === 'tower' ? true : s.owner != null,
   })) as AgeTerritory[],
   myAttacks: [],
-  incoming: [{ attackId: 'atk', territoryId: 'c0', attacker: RED, guessCount: 2, lastGreen: 1, lastYellow: 0 }],
+  incoming: [
+    {
+      attackId: 'atk', territoryId: 'c0', attacker: RED, guessCount: 2,
+      lastGreen: 1, lastYellow: 1, bestGreen: 1, bestYellow: 1, wordLength: 4,
+    },
+  ],
   attacksPublic: [{ territoryId: 'c4', attacker: RED }],
 };
 

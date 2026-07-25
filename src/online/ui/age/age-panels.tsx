@@ -335,8 +335,13 @@ export function DefensePanel({
     setEntry([]);
   };
 
-  const gp = incoming.lastGreen ?? 0;
-  const yp = incoming.lastYellow ?? 0;
+  // MONOTON ibre: son tahmin DEĞİL, tutarlı best (yeşil öncelikli) → geri gitmez.
+  const gp = incoming.bestGreen ?? 0;
+  const yp = incoming.bestYellow ?? 0;
+  const wlen =
+    incoming.wordLength && incoming.wordLength > 0 ? incoming.wordLength : Math.max(gp + yp, 1);
+  const gPct = Math.round((gp / wlen) * 100);
+  const yPct = Math.round((yp / wlen) * 100);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -354,17 +359,38 @@ export function DefensePanel({
             </Pressable>
           </View>
 
-          {/* Saldırganın ilerlemesi — yeşil/sarı (normal moddaki gibi) */}
+          {/* Saldıranın ilerlemesi — Kelime Yarışı gauge'ı: artan ibre + miktar
+              (harf sızmaz; yalnız tutarlı yeşil/sarı SAYI). */}
           <View style={styles.attacker}>
             <Feather name="alert-triangle" size={14} color={AGE.red} />
             {incoming.guessCount > 0 && (gp > 0 || yp > 0) ? (
-              <View style={styles.pipRow}>
-                {Array.from({ length: gp }).map((_, i) => (
-                  <View key={`g${i}`} style={[styles.pip, styles.pipG]} />
-                ))}
-                {Array.from({ length: yp }).map((_, i) => (
-                  <View key={`y${i}`} style={[styles.pip, styles.pipY]} />
-                ))}
+              <View style={styles.gaugeWrap}>
+                <View style={styles.gaugeRow}>
+                  <Text style={styles.gaugeLabel}>
+                    {gp}/{wlen} yeşil
+                  </Text>
+                  <View style={styles.gaugeTrack}>
+                    <View
+                      style={[
+                        styles.gaugeFill,
+                        { width: `${gPct}%` as `${number}%`, backgroundColor: '#22C55E' },
+                      ]}
+                    />
+                  </View>
+                </View>
+                <View style={styles.gaugeRow}>
+                  <Text style={styles.gaugeLabel}>
+                    {yp}/{wlen} sarı
+                  </Text>
+                  <View style={styles.gaugeTrack}>
+                    <View
+                      style={[
+                        styles.gaugeFill,
+                        { width: `${yPct}%` as `${number}%`, backgroundColor: '#EAB308' },
+                      ]}
+                    />
+                  </View>
+                </View>
               </View>
             ) : (
               <Text style={styles.attackerText}>Saldırgan henüz ilerlemedi</Text>
@@ -658,10 +684,17 @@ const styles = StyleSheet.create({
   confirmText: { fontFamily: mono, fontSize: 14, fontWeight: '800', color: colors.ice, letterSpacing: 0.5 },
   attacker: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.glass, borderWidth: 1, borderColor: withAlpha(AGE.red, 0.35) },
   attackerText: { fontFamily: mono, fontSize: 11, color: colors.dim, flex: 1 },
-  pipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, flex: 1 },
-  pip: { width: 16, height: 16, borderRadius: 4 },
-  pipG: { backgroundColor: '#2f9d57' },
-  pipY: { backgroundColor: '#c8952a' },
+  gaugeWrap: { flex: 1, gap: 6 },
+  gaugeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  gaugeLabel: { fontFamily: mono, fontSize: 10, color: colors.dim, width: 58 },
+  gaugeTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: withAlpha('#ffffff', 0.1),
+    overflow: 'hidden',
+  },
+  gaugeFill: { height: '100%', borderRadius: 4 },
   slots: { flexDirection: 'row', gap: 6 },
   slot: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)' },
   slotOn: { backgroundColor: colors.amber },

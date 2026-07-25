@@ -47,6 +47,24 @@ import { WordSetupPanel } from './word-setup-panel';
 
 const canHaptics = Platform.OS === 'ios' || Platform.OS === 'android';
 
+/** Tutarlı best (oppKnow fallback'i): tek tahminden yeşil-öncelikli, sarı-ikincil
+ *  en iyi ilerleme. Bağımsız max'ın "sarı yeşile dönünce şişme" hatasını önler. */
+function bestFromCounts(
+  guesses: readonly { greenCount?: number | null; yellowCount?: number | null }[],
+): { green: number; yellow: number } {
+  let green = 0;
+  let yellow = 0;
+  for (const g of guesses) {
+    const gc = g.greenCount ?? 0;
+    const yc = g.yellowCount ?? 0;
+    if (gc > green || (gc === green && yc > yellow)) {
+      green = gc;
+      yellow = yc;
+    }
+  }
+  return { green, yellow };
+}
+
 const errMsg = (e: unknown) => {
   if (e instanceof OnlineError) {
     if (e.code === 'invalid_digits') return 'Bu kelime sözlükte yok ya da uzunluk yanlış.';
@@ -173,7 +191,7 @@ export function WordDuelScreen({
   // Kendi gizlim elimde (recallMySecret) → rakip tahminlerinin işaretlerini
   // istemcide hesaplarız (rakibin digits'i RLS ile zaten gelir; sunucu değişmez).
   // Gizli yerelde yoksa (nadir: farklı cihaz/temiz depo) sunucu sayılarının
-  // bağımsız-max'ına düşeriz — asla çökmez. Hiç rakip tahmini yoksa 0.
+  // TUTARLI best'ine düşeriz — asla çökmez. Hiç rakip tahmini yoksa 0.
   const hasOppGuess = oppGuesses.length > 0;
   const oppGuessKey = oppGuesses.map((g) => g.digits).join('|');
   const oppKnow = useMemo(
@@ -182,12 +200,12 @@ export function WordDuelScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mySecret, oppGuessKey],
   );
-  const oppBestGreen = oppKnow
-    ? oppKnow.green
-    : oppGuesses.reduce((mx, g) => Math.max(mx, g.greenCount ?? 0), 0);
-  const oppBestYellow = oppKnow
-    ? oppKnow.yellow
-    : oppGuesses.reduce((mx, g) => Math.max(mx, g.yellowCount ?? 0), 0);
+  // Fallback: bağımsız max DEĞİL — tek tahminden TUTARLI best (yeşil öncelikli,
+  // sarı ikincil). Yeşil artınca sarı o tahminin sarısına iner; green+yellow ≤
+  // uzunluk korunur (wordrace best'iyle aynı mantık; sarı-yeşil şişmesi olmaz).
+  const oppBest = oppKnow ?? bestFromCounts(oppGuesses);
+  const oppBestGreen = oppBest.green;
+  const oppBestYellow = oppBest.yellow;
   const greenPct = wordLength > 0 ? oppBestGreen / wordLength : 0;
   const yellowPct = wordLength > 0 ? oppBestYellow / wordLength : 0;
 

@@ -164,7 +164,7 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
 
   const setDial = useCallback(
     (i: number, v: number) => {
-      if (locked) return;
+      if (locked || submitting) return; // submitting: setSecret uçuşta → dial değişimi YOK
       setDials((prev) => {
         const n = [...prev];
         n[i] = v;
@@ -173,7 +173,7 @@ export function SecretSetupScreen({ matchId }: { matchId: string }) {
       setShowHint(false);
       buzz('tap');
     },
-    [locked, buzz],
+    [locked, submitting, buzz],
   );
 
   const lock = useCallback(async () => {
