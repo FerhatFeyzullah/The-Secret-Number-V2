@@ -61,6 +61,11 @@ export type AgeIncoming = {
   guessCount: number;
   lastGreen: number | null;
   lastYellow: number | null;
+  /** MONOTON ibre: saldıranın tutarlı en iyi ilerlemesi (yeşil öncelikli). */
+  bestGreen: number | null;
+  bestYellow: number | null;
+  /** Gauge paydası (saldırılan kalenin uzunluğu 4/5/6). */
+  wordLength: number | null;
 };
 
 export type AgeRankEntry = { player: string; rank: number; kupaDelta: number; veriDelta: number };
@@ -168,8 +173,10 @@ type StatePayload = {
     attack_id: string;
     territory_id: string;
     attacker: string;
+    word_length: number | null;
     guess_count: number;
     last_marks_summary: { green: number; yellow: number } | null;
+    best_marks_summary: { green: number; yellow: number } | null;
   }[];
   attacks_public: { territory_id: string; attacker: string }[];
 };
@@ -227,6 +234,9 @@ export function mapAgeState(p: StatePayload): AgeState {
       guessCount: Number(i.guess_count ?? 0),
       lastGreen: i.last_marks_summary ? Number(i.last_marks_summary.green) : null,
       lastYellow: i.last_marks_summary ? Number(i.last_marks_summary.yellow) : null,
+      bestGreen: i.best_marks_summary ? Number(i.best_marks_summary.green) : null,
+      bestYellow: i.best_marks_summary ? Number(i.best_marks_summary.yellow) : null,
+      wordLength: i.word_length != null ? Number(i.word_length) : null,
     })),
     attacksPublic: (p.attacks_public ?? []).map((x) => ({
       territoryId: x.territory_id,
