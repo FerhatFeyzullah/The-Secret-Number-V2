@@ -257,7 +257,7 @@ export function AgeDemoScreen() {
   const preparing = prepShownAt != null;
 
   const me = st.me;
-  const myColor = ageColors(st.players)[ME] ?? AGE.you;
+  const myColor = ageColors(st.players, ME)[ME] ?? AGE.you;
   const meElim = !!st.players.find((p) => p.player === me)?.eliminated;
   const byId = Object.fromEntries(st.territories.map((t) => [t.id, t])) as Record<string, AgeTerritory>;
   // Sahip adı; nötr bölge için boş (UI'da "Bot" göstermeyiz).
