@@ -90,8 +90,6 @@ export function WordRaceScreen({
     guesses,
     loading,
     error,
-    refresh,
-    notifyPeers,
     sendSignal,
     incomingSignal,
     sendText,
@@ -222,17 +220,15 @@ export function WordRaceScreen({
       if (raceRemaining(m) > 0) return;
       if (claimedRoundRef.current === m.turnStartedAt) return;
       claimedRoundRef.current = m.turnStartedAt;
-      void claimWordRaceTimeout(matchId)
-        .then(() => { void refresh(); notifyPeers(); }) // matches postgres_changes YOK → çek + dürt
-        .catch((e) => {
-          // Drift/ağ: sunucu "henüz dolmadı" ya da timeout → kilidi aç, tekrar dene.
-          if (e instanceof OnlineError && (e.code === 'clock_not_expired' || e.code === 'timeout')) {
-            claimedRoundRef.current = null;
-          }
-        });
+      void claimWordRaceTimeout(matchId).catch((e) => {
+        // Drift/ağ: sunucu "henüz dolmadı" ya da timeout → kilidi aç, tekrar dene.
+        if (e instanceof OnlineError && (e.code === 'clock_not_expired' || e.code === 'timeout')) {
+          claimedRoundRef.current = null;
+        }
+      });
     }, 500);
     return () => clearInterval(iv);
-  }, [status, matchId, refresh, notifyPeers]);
+  }, [status, matchId]);
 
   // ── Tur geçişi: kararlaşan turu yakala + reveal getir ──────────
   // Turu ÇÖZEN oyuncu (submit) roundEnd'i doğrudan kurar; DİĞER oyuncu (ve süre
@@ -430,13 +426,8 @@ export function WordRaceScreen({
     try {
       const outcome = await wordRaceGuess(matchId, parsed.word, round);
       setEntry([]);
-      // BROADCAST/own: wordrace'te own-render YOK (RPC guessId döndürmez) + guesses
-      // postgres_changes kaldırıldı → kendi satırın için refresh (Frankfurt ~20ms, eski
-      // realtime echo'dan hızlı), rakip/seyirci için notifyPeers.
-      void refresh();
-      notifyPeers();
       if (outcome.status === 'match_won') {
-        // Maç bitişi: refresh/poke ile status='finished' → ResultOverlay. Ses finishFx'te.
+        // Maç bitişi: realtime status='finished' → ResultOverlay. Ses finishFx'te.
       } else if (outcome.status === 'round_won') {
         // Turu ÇÖZDÜM: reveal + winner elimde → ara ekranı doğrudan kur (realtime
         // aynı turu tekrar işlemesin diye handled işaretle).
@@ -445,7 +436,7 @@ export function WordRaceScreen({
         setRoundEnd({ round: decided, winnerIsMe: true });
         setRoundEndSecret(outcome.reveal);
       } else {
-        // 'playing': kendi tahmin satırım yukarıdaki refresh ile tahtaya düşer.
+        // 'playing': kendi tahmin satırım realtime echo ile tahtaya düşer.
         play('good');
         buzz('feedback');
       }
@@ -466,7 +457,7 @@ export function WordRaceScreen({
       submitLatchRef.current = false;
       setSubmitting(false);
     }
-  }, [locked, entry, wordLength, matchId, round, play, buzz, refresh, notifyPeers]);
+  }, [locked, entry, wordLength, matchId, round, play, buzz]);
 
   // ── Render ────────────────────────────────────────────────────
   const exitButton = (

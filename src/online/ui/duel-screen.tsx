@@ -69,9 +69,7 @@ export function DuelScreen({
     guesses,
     loading,
     error,
-    refresh,
     addLocalGuess,
-    notifyPeers,
     sendSignal,
     incomingSignal,
     sendText,
@@ -638,8 +636,6 @@ export function DuelScreen({
           ...(outcome.fogged ? { fogged: true } : {}),
         });
       }
-      notifyPeers(); // BROADCAST: rakip/seyirci sıra-geçişi + ilerlemeyi anında çeksin
-      void refresh(); // kendi maç durumun (sıra kilidi + kazanma/tur-sonu) — matches CDC yok
       if (outcome.feedback === 'win') {
         play('win');
         buzz('win');
@@ -653,7 +649,7 @@ export function DuelScreen({
       submitLatchRef.current = false;
       setSubmitting(false);
     }
-  }, [locked, submitting, entry, matchId, play, buzz, addLocalGuess, notifyPeers, refresh, myId, round]);
+  }, [locked, submitting, entry, matchId, play, buzz, addLocalGuess, myId, round]);
 
   // ── Render ────────────────────────────────────────────────────
   const exitButton = (
