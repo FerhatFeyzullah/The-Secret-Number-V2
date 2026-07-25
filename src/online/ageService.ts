@@ -36,6 +36,9 @@ export type AgeTerritory = {
   /** Kale: kelime belirlenmiş mi (false = SAVUNMASIZ, tek hamlede kapılır).
    *  Kule: her zaman true. */
   defended: boolean;
+  /** Kale sahibi kelimeyi ŞU AN değiştirebilir mi: kuşatmalı başarısız ('open')
+   *  saldırı var + aktif saldırı yok. Kuleler için her zaman false (kural muaf). */
+  canChangeWord: boolean;
 };
 
 export type AgeGuess = { guess: string; feedback: string; marks: string | null };
@@ -159,6 +162,7 @@ type StatePayload = {
     conquer_count: number;
     code_deadline: string | null;
     defended: boolean;
+    can_change_word?: boolean;
   }[];
   my_attacks: {
     territory_id: string;
@@ -213,6 +217,7 @@ export function mapAgeState(p: StatePayload): AgeState {
       conquerCount: Number(t.conquer_count ?? 0),
       codeDeadline: t.code_deadline ?? null,
       defended: t.defended !== false,
+      canChangeWord: t.can_change_word === true,
     })),
     myAttacks: (p.my_attacks ?? []).map((a) => ({
       territoryId: a.territory_id,

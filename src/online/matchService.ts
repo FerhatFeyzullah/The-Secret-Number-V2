@@ -177,6 +177,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_guess: 'Geçersiz tahmin.',
   code_window_closed: 'Şifre belirleme süresi doldu.',
   not_owner: 'Burası senin değil.',
+  under_attack: 'Kale saldırı altındayken kelimeyi değiştiremezsin.',
+  no_failed_attack: 'Kelimeyi ancak başarısız bir saldırıdan sonra değiştirebilirsin.',
   invalid_code: 'Geçersiz şifre.',
   attack_not_found: 'Saldırı bulunamadı.',
   not_your_territory: 'Bu bölge senin değil.',

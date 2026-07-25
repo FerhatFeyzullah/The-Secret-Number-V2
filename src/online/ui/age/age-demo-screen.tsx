@@ -101,7 +101,7 @@ function freshState(): AgeState {
     ranking: [],
     me: ME,
     players: PLAYERS.map((p) => ({ ...p })),
-    territories: SEED.map((s) => ({ ...s, conquerCount: 0, codeDeadline: null })),
+    territories: SEED.map((s) => ({ ...s, conquerCount: 0, codeDeadline: null, canChangeWord: false })),
     myAttacks: [],
     incoming: [],
     attacksPublic: [

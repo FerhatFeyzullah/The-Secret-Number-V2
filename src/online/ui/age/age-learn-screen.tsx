@@ -57,6 +57,7 @@ const SAMPLE: AgeState = {
     conquerCount: 0,
     codeDeadline: null,
     defended: s.kind === 'tower' ? true : s.owner != null,
+    canChangeWord: false,
   })) as AgeTerritory[],
   myAttacks: [],
   incoming: [
