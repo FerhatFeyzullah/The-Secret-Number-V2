@@ -4,13 +4,9 @@ import { AppState } from 'react-native';
 
 import { supabase } from '../supabase';
 import {
-  guessRowToGuess,
   displayClocks,
-  matchRowToState,
   presenceRowToInfo,
   protocolUseRowToUse,
-  type GuessRow,
-  type MatchRow,
   type PresenceRow,
   type ProtocolUseRow,
 } from './mapping';
@@ -53,6 +49,9 @@ export type UseMatchResult = {
    *  postgres_changes INSERT aynı satırı getirince yok sayılır, poll ile yetkili
    *  sürüm uzlaşır. Sunucu otoritesi değişmez; bu yalnız görünürlük hızlandırması. */
   addLocalGuess: (guess: OnlineGuess) => void;
+  /** BROADCAST: durum değiştiren RPC'den sonra çağır → rakip/seyirci 'sync' alır ve
+   *  refresh eder (postgres_changes yerine; hızlı + ucuz). Otorite değişmez. */
+  notifyPeers: () => void;
   /** Maç kanalına efemeral SİNYAL id'si yayınlar (maç sonu reaksiyonu; realtime
    *  broadcast; DB'ye YAZMAZ). Kullanılabilir set oyuncunun sinyal destesidir. */
   sendSignal: (signalId: string) => void;
@@ -160,6 +159,8 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
   const presenceRef = useRef<Record<string, PresenceInfo>>({});
   // A3: son realtime olay anı — emniyet poll'u realtime tazeyse turu atlar.
   const lastEventAtRef = useRef(0);
+  // Broadcast 'sync' poke burst throttle'ı (art arda poke'ta çift refetch olmasın).
+  const lastSyncRef = useRef(0);
   // A4: realtime maç-satırı olay sırası — refresh() fetch'i sürerken daha yeni
   // bir realtime UPDATE geldiyse bayat snapshot maçı ezmesin.
   const matchEventSeqRef = useRef(0);
@@ -277,6 +278,14 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
     }
   }, [matchId, withNames]);
 
+  // BROADCAST poke: durum değiştiren bir aksiyondan (tahmin/timeout) SONRA çağır →
+  // kanaldaki diğerleri (rakip + seyirci) 'sync' alır ve refresh eder. DB'ye yazmaz;
+  // yalnızca "yeni durum var, çek" dürtüsü. Otorite değişmez. (Efektlerden önce tanımlı.)
+  const notifyPeers = useCallback(() => {
+    const ch = channelRef.current;
+    if (ch) void ch.send({ type: 'broadcast', event: 'sync', payload: {} });
+  }, []);
+
   // matchMetaRef'i güncel tut — refresh() faz/moda göre gereksiz sorguları atlar.
   useEffect(() => {
     matchMetaRef.current = {
@@ -386,52 +395,20 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
             presence: { key: myIdRef.current ?? '' },
           },
         })
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
-          (payload) => {
-            const perspective = viewId();
-            if (!perspective) return;
-            lastEventAtRef.current = Date.now(); // A3: realtime canlı
-            matchEventSeqRef.current += 1; // A4: bayat refresh'i geçersizle
-            const row = payload.new as MatchRow;
-            setMatch((prev) => {
-              const next = matchRowToState(row, perspective);
-              if (!next) return prev;
-              // Realtime satırında profil adları yok; eldekinden/cache'ten doldur.
-              return {
-                ...next,
-                player1: {
-                  ...next.player1,
-                  username:
-                    prev?.player1.username ?? usernamesRef.current[next.player1.id] ?? null,
-                },
-                player2: next.player2
-                  ? {
-                      ...next.player2,
-                      username:
-                        prev?.player2?.username ??
-                        usernamesRef.current[next.player2.id] ??
-                        null,
-                    }
-                  : null,
-              };
-            });
-            // Adı hâlâ bilinmeyen oyuncu varsa (ör. rakip yeni katıldı) bir kez çek.
-            backfillUsernames([row.player1, row.player2]);
-          },
-        )
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'guesses', filter: `match_id=eq.${matchId}` },
-          (payload) => {
-            lastEventAtRef.current = Date.now(); // A3
-            const guess = guessRowToGuess(payload.new as GuessRow);
-            setGuesses((prev) =>
-              prev.some((g) => g.id === guess.id) ? prev : [...prev, guess],
-            );
-          },
-        )
+        // BROADCAST poke ('sync'): maç/tahmin güncellemeleri artık postgres_changes (CDC)
+        // YERİNE Broadcast ile gelir → CDC gecikmesi yok + fan-out ucuz (ölçek + Free kota).
+        // Bir oyuncu durum değiştirince (tahmin/timeout) notifyPeers() 'sync' yayınlar;
+        // alıcılar (rakip + seyirci) hafifçe refresh() eder. Kendi hamlen own-render + kendi
+        // RPC dönüşünle zaten anında (self:false → kendi poke'unu almazsın). Güvenlik ağı:
+        // emniyet poll'u kaçan poke'u ≤ periyot içinde yakalar. presence/protocol_uses hâlâ
+        // postgres_changes (düşük frekans + kendi bildirimlerini taşırlar).
+        .on('broadcast', { event: 'sync' }, () => {
+          const nowMs = Date.now();
+          lastEventAtRef.current = nowMs; // realtime canlı → poll o turu atlar
+          if (nowMs - lastSyncRef.current < 150) return; // burst throttle (art arda poke)
+          lastSyncRef.current = nowMs;
+          void refresh();
+        })
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'presence', filter: `match_id=eq.${matchId}` },
@@ -457,6 +434,9 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
             setProtocolUses((prev) =>
               prev.some((u) => u.id === use.id) ? prev : [...prev, use],
             );
+            // matches postgres_changes kaldırıldı → protokolün maç-durumu etkisini
+            // (kurbanın saati/feedback'i) burada çek (yalnız poll'u beklemeyelim).
+            void refresh();
             // Bildirim: rakibin canlı kullanımı (her outcome) YA DA kendi
             // protokolünün harcanması (wasted satırı kurbana yazılır). Kendi
             // normal kullanımın RPC dönüşüyle zaten onaylanır.
@@ -620,16 +600,19 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
       // Bu tur için zaten denendi/devam ediyor — tekrar tetikleme.
       if (claimedTurnRef.current === m.turnStartedAt) return;
       claimedTurnRef.current = m.turnStartedAt;
-      void claimTimeout(matchId).catch((e) => {
-        // Drift/timeout: sunucu "henüz dolmadı" ya da ağ zaman aşımı → kilidi aç,
-        // sonraki tikte tekrar dene.
-        if (e instanceof OnlineError && (e.code === 'clock_not_expired' || e.code === 'timeout')) {
-          claimedTurnRef.current = null;
-        }
-      });
+      void claimTimeout(matchId)
+        // Başarı → matches postgres_changes YOK; kendi durumunu çek + rakibi dürt.
+        .then(() => { void refresh(); notifyPeers(); })
+        .catch((e) => {
+          // Drift/timeout: sunucu "henüz dolmadı" ya da ağ zaman aşımı → kilidi aç,
+          // sonraki tikte tekrar dene.
+          if (e instanceof OnlineError && (e.code === 'clock_not_expired' || e.code === 'timeout')) {
+            claimedTurnRef.current = null;
+          }
+        });
     }, WATCH_MS);
     return () => clearInterval(iv);
-  }, [matchId, phase, spectateAs]);
+  }, [matchId, phase, spectateAs, refresh, notifyPeers]);
 
   // Tur-arası (Bo3, round ≥ 2) belirleme zaman aşımı: setup_deadline geçince
   // HER iki istemci de resolve eder (idempotent, karar sunucuda). Sırrını giren
@@ -650,15 +633,17 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
       const key = `${m.currentRound}:${m.setupDeadline}`;
       if (resolvedSetupRef.current === key) return;
       resolvedSetupRef.current = key;
-      void resolveSetupTimeout(matchId).catch((e) => {
-        // Drift/timeout: kilidi aç, sonraki tikte tekrar dene.
-        if (e instanceof OnlineError && (e.code === 'setup_not_expired' || e.code === 'timeout')) {
-          resolvedSetupRef.current = null;
-        }
-      });
+      void resolveSetupTimeout(matchId)
+        .then(() => { void refresh(); notifyPeers(); })
+        .catch((e) => {
+          // Drift/timeout: kilidi aç, sonraki tikte tekrar dene.
+          if (e instanceof OnlineError && (e.code === 'setup_not_expired' || e.code === 'timeout')) {
+            resolvedSetupRef.current = null;
+          }
+        });
     }, WATCH_MS);
     return () => clearInterval(iv);
-  }, [matchId, phase, spectateAs]);
+  }, [matchId, phase, spectateAs, refresh, notifyPeers]);
 
   // Hızlandırıcı: rakip "gitti" eşiğine (15 sn) ulaşınca hemen bir heartbeat at →
   // sunucu reap'i (hayatta olan lehine forfeit) periyodik 5 sn tikini beklemeden
@@ -741,6 +726,7 @@ export function useMatch(matchId: string | null, opts?: UseMatchOptions): UseMat
     error,
     refresh,
     addLocalGuess,
+    notifyPeers,
     sendSignal,
     incomingSignal,
     sendText,
