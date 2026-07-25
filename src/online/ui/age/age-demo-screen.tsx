@@ -477,7 +477,12 @@ export function AgeDemoScreen() {
       ...s,
       phase: 'war',
       warEndsAt: s.warEndsAt ?? iso(600_000),
-      incoming: [{ attackId: 'atk-demo', territoryId: 'c0', attacker: RED, guessCount: 2, lastGreen: 1, lastYellow: 0 }],
+      incoming: [
+        {
+          attackId: 'atk-demo', territoryId: 'c0', attacker: RED, guessCount: 2,
+          lastGreen: 1, lastYellow: 1, bestGreen: 1, bestYellow: 1, wordLength: 4,
+        },
+      ],
       attacksPublic: s.attacksPublic.some((a) => a.territoryId === 'c0')
         ? s.attacksPublic
         : [...s.attacksPublic, { territoryId: 'c0', attacker: RED }],
