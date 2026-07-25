@@ -77,7 +77,7 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
 
   const me = state?.me ?? '';
   const meElim = !!state?.players.find((p) => p.player === me)?.eliminated;
-  const myColor = state ? ageColors(state.players)[me] ?? AGE.you : AGE.you;
+  const myColor = state ? ageColors(state.players, me)[me] ?? AGE.you : AGE.you;
   const byId = state ? Object.fromEntries(state.territories.map((t) => [t.id, t])) : {};
   // Sahip adı; nötr (fethedilmemiş) bölge için boş (UI'da "Bot" göstermeyiz).
   const nameOf = (pid: string | null) =>
