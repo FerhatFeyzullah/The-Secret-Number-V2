@@ -78,7 +78,7 @@ export function RoundSetup({
 
   const setDial = useCallback(
     (i: number, v: number) => {
-      if (locked) return;
+      if (locked || busy) return; // busy: setSecret uçuşta → dial değişimi YOK
       setDials((prev) => {
         const n = [...prev];
         n[i] = v;
@@ -86,7 +86,7 @@ export function RoundSetup({
       });
       setError(null);
     },
-    [locked],
+    [locked, busy],
   );
 
   const lock = useCallback(async () => {
