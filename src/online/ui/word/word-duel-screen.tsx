@@ -89,7 +89,9 @@ export function WordDuelScreen({
     guesses,
     loading,
     error,
+    refresh,
     addLocalGuess,
+    notifyPeers,
     sendSignal,
     incomingSignal,
     sendText,
@@ -436,6 +438,8 @@ export function WordDuelScreen({
           ...(outcome.greenCount != null ? { greenCount: outcome.greenCount } : {}),
         });
       }
+      notifyPeers(); // BROADCAST: rakip/seyirci sıra + ilerleme (greenCount) anında çeksin
+      void refresh(); // kendi maç durumun (sıra kilidi + kazanma/tur-sonu) — matches CDC yok
       if (outcome.feedback === 'win') {
         play('win');
         buzz('win');
@@ -451,7 +455,7 @@ export function WordDuelScreen({
       submitLatchRef.current = false;
       setSubmitting(false);
     }
-  }, [locked, submitting, entry, wordLength, matchId, play, buzz, addLocalGuess, myId, round]);
+  }, [locked, submitting, entry, wordLength, matchId, play, buzz, addLocalGuess, notifyPeers, refresh, myId, round]);
 
   // ── Render ────────────────────────────────────────────────────
   const exitButton = (
