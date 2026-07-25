@@ -147,6 +147,14 @@ export function AgeMatchScreen({ matchId }: { matchId: string }) {
       // Kendi toprağın: Veri ile şifre yenile (kuşatmayı sıfırla). Yalnız savaşta anlamlı.
       if (state.phase !== 'war') return;
       if (t.kind === 'castle') {
+        // KALE: yalnız başarısız bir saldırıdan sonra (ve saldırı altında değilken).
+        if (!t.canChangeWord) {
+          Alert.alert(
+            'Kale kelimesi',
+            'Kale kelimesini yalnızca başarısız bir saldırıdan sonra — ve kale o an saldırı altında değilken — değiştirebilirsin (60 Sefer Verisi).',
+          );
+          return;
+        }
         setSheet({ t: 'refresh', territoryId: t.id, kind: 'castle', level: t.level });
       } else {
         Alert.alert('Kule şifresini yenile', 'Bu kulenin şifresini yenile? Saldırganın ilerlemesi sıfırlanır (40 Sefer Verisi).', [
