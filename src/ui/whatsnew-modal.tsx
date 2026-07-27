@@ -6,35 +6,35 @@ import { colors, cyanAlpha, mono, withAlpha } from './theme';
 
 /** "Yenilikler" sürüm kimliği. Her güncellemede (gösterilecek not varsa) BUMP et →
  *  modal, o güncellemenin ana ekran ilk açılışında BİR KEZ görünür (AsyncStorage ile). */
-export const WHATSNEW_ID = 'gizem-cagi-v3b-2026-07';
+export const WHATSNEW_ID = 'gizem-cagi-harita-2026-07';
 
 type Note = { icon: React.ComponentProps<typeof Feather>['name']; accent: string; title: string; body: string };
 
-/** Bu sürümün notları (Gizem Çağı v3b — öğretici + kale kademeleri + cila). */
+/** Bu sürümün notları (Gizem Çağı — savaş haritası yeniden tasarımı). */
 const NOTES: Note[] = [
   {
-    icon: 'compass',
-    accent: colors.violet,
-    title: 'Maç öncesi öğretici',
-    body: 'Gizem Çağı’na girmeden örnek harita üzerinde nasıl oynandığını öğren. Turnuva kartındaki “?” ile istediğin zaman tekrar aç.',
-  },
-  {
-    icon: 'flag',
+    icon: 'map',
     accent: colors.gold,
-    title: 'Kale kademeleri',
-    body: 'Kaleler artık harf sayısına göre farklı görünüyor — 4 / 5 / 6 harf dışarıdan bir bakışta ayırt ediliyor.',
+    title: 'Yeni savaş haritası',
+    body: 'Gizem Çağı haritası baştan çizildi: kaleler ve kuleler artık hacimli, sahibinin renginde sancak taşıyor ve meşaleleri yanıyor. Merkez kale tacıyla ayrı duruyor.',
   },
   {
-    icon: 'activity',
+    icon: 'clock',
     accent: colors.cyan,
-    title: 'Son Maçlar’da Gizem Çağı',
-    body: 'Gizem Çağı maçları Son Maçlar sekmesine eklendi: kim kaç kale/kule aldı ve kaç puan topladı.',
+    title: 'Yenilenen üst panel',
+    body: 'Faz süresi geri sayım halkasında akıyor, son 10 saniyede uyarıyor. Oyuncu kartlarında puan, hakimiyet çubuğu ve lider tacı var.',
+  },
+  {
+    icon: 'bell',
+    accent: colors.teal,
+    title: 'Anlık harita bildirimleri',
+    body: 'Bir bölge el değiştirdiğinde haritada anında görüyorsun. Saldırı altındaki bölgeler çapraz kılıçla işaretleniyor — kim nereye yükleniyor kaçmıyor.',
   },
   {
     icon: 'zap',
-    accent: colors.teal,
-    title: 'Daha akıcı, daha net',
-    body: 'Savunmada denemelerin geri bildirimiyle listeleniyor, kelimede klavye renkleniyor; süre sayacı, faz duyurusu ve oyuncu renkleri iyileştirildi.',
+    accent: colors.violet,
+    title: 'Süre sayacı düzeltildi',
+    body: 'Bazı durumlarda maç süresi ekranda ilerlemiyordu; sayaç artık her yerde doğru akıyor.',
   },
 ];
 

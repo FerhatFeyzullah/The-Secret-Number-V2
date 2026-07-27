@@ -643,7 +643,8 @@ const styles = StyleSheet.create({
   },
   chipText: { fontFamily: mono, fontSize: 11, fontWeight: '700', color: colors.dim },
   sep: { width: 1, height: 18, backgroundColor: withAlpha(colors.ice, 0.12) },
-  toastWrap: { position: 'absolute', top: 54, left: 0, right: 0, alignItems: 'center', zIndex: 200 },
+  // maç ekranıyla aynı: iki satırlık HUD'un (≈120 px) altına düşer.
+  toastWrap: { position: 'absolute', top: 122, left: 0, right: 0, alignItems: 'center', zIndex: 200 },
   toast: {
     paddingVertical: 9, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1,
     borderColor: withAlpha(colors.amber, 0.4), backgroundColor: 'rgba(10,20,40,0.98)',
