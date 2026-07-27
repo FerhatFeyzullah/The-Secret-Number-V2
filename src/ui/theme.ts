@@ -48,6 +48,10 @@ export const colors = {
   violet: '#a78bfa',
 };
 
+/** Gizem Çağı harita HUD'unun kalın "oyun" başlık fontu (Baloo 2 ExtraBold).
+ *  Yüklenmeden önce sistem fontuna düşer — bloke etmez. */
+export const display = 'Baloo2';
+
 /** Sayılar için monospace his. */
 export const mono = Platform.select({
   ios: 'Menlo',

@@ -402,7 +402,9 @@ const styles = StyleSheet.create({
   note: { color: colors.dim, fontFamily: mono, fontSize: 13 },
   exitBtn: { paddingVertical: 10, paddingHorizontal: 22, borderRadius: 12, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glass },
   exitText: { color: colors.text, fontFamily: mono, fontWeight: '700' },
-  toastWrap: { position: 'absolute', top: 60, left: 0, right: 0, alignItems: 'center', zIndex: 200 },
+  // HUD iki satır (faz sayacı + oyuncu kartları) ≈ 120 px → toast bunun ALTINA
+  // düşer, kartların üstünü örtmez.
+  toastWrap: { position: 'absolute', top: 128, left: 0, right: 0, alignItems: 'center', zIndex: 200 },
   toast: {
     flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, paddingHorizontal: 16, borderRadius: 12,
     borderWidth: 1, borderColor: withAlpha(colors.amber, 0.4), backgroundColor: 'rgba(10,20,40,0.98)',
