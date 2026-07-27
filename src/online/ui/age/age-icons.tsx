@@ -1,5 +1,7 @@
 import Svg, { Circle, Ellipse, G, Line, Path, Rect } from 'react-native-svg';
 
+import { AGE, palette, tone, type AgePalette } from './age-colors';
+
 /** Zafer tacı (sonuç ekranı 1. sıra). Altın. */
 export function AgeCrown({ size = 46 }: { size?: number }) {
   return (
@@ -13,23 +15,53 @@ export function AgeCrown({ size = 46 }: { size?: number }) {
   );
 }
 
-/** "Kuşatma altında" işareti — düğüm köşesine rozet olarak konur. Çapraz kılıç
- *  (flaticon 861908 tarzı, dolu/solid) — referanstan esinlenilmiş ÖZGÜN çizim
- *  (asset gömülmedi → lisans/atıf gerekmez). Tek renk. */
+/** "Kuşatma altında" işareti — düğüm köşesine rozet olarak konur. Çapraz kılıç:
+ *  kalın namlu + belirgin balçak, iki tonlu (ışık alan yüz açık) → 14–20 px'te
+ *  bile "kılıç" okunur. Referanstan esinlenilmiş ÖZGÜN çizim. */
 export function AgeSiege({ size = 18, color }: { size?: number; color: string }) {
+  const lit = tone(color, 0.45);
   const sword = (
     <>
-      <Path d="M12 1 L10.4 4.2 L13.6 4.2 Z" fill={color} />
-      <Rect x={10.9} y={4} width={2.2} height={11} fill={color} />
-      <Rect x={8} y={14.6} width={8} height={1.9} rx={0.6} fill={color} />
-      <Rect x={11} y={16.4} width={2} height={3.4} fill={color} />
-      <Circle cx={12} cy={20.7} r={1.5} fill={color} />
+      {/* namlu */}
+      <Path d="M12 1.4 L10.2 4.6 L13.8 4.6 Z" fill={lit} />
+      <Rect x={10.6} y={4.3} width={2.8} height={10.6} fill={color} />
+      <Rect x={10.6} y={4.3} width={1.1} height={10.6} fill={lit} />
+      {/* balçak */}
+      <Rect x={7.6} y={14.4} width={8.8} height={2.2} rx={0.9} fill={lit} />
+      {/* kabza + topuz */}
+      <Rect x={10.9} y={16.4} width={2.2} height={3.3} fill={color} />
+      <Circle cx={12} cy={20.6} r={1.7} fill={lit} />
     </>
   );
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <G transform="rotate(45 12 12)">{sword}</G>
       <G transform="rotate(-45 12 12)">{sword}</G>
+    </Svg>
+  );
+}
+
+/** Savunma kalkanı — alarm barı ve savunma başarılı geri bildirimi. */
+export function AgeShield({ size = 18, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 1.6 L21 4.8 V12 C21 17.4 16.6 21 12 22.4 C7.4 21 3 17.4 3 12 V4.8 Z" fill={color} />
+      <Path d="M12 1.6 L21 4.8 V12 C21 17.4 16.6 21 12 22.4 Z" fill="#050c18" opacity={0.2} />
+      <Path d="M12 5.4 L17.6 7.4 V12 C17.6 15.3 15 17.8 12 18.9 C9 17.8 6.4 15.3 6.4 12 V7.4 Z" fill="#050c18" opacity={0.35} />
+    </Svg>
+  );
+}
+
+/** Sancak — hazırlık fazı duyurusu / fetih işareti. */
+export function AgeFlag({ size = 18, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* kalın direk + geniş flama: 14–16 px'te bile "bayrak" okunur.
+          Direk AÇIK tonda — koyu zeminde kaybolmasın. */}
+      <Rect x={3.6} y={1.6} width={3.2} height={20.8} rx={1.5} fill={tone(color, 0.25)} />
+      {/* kırlangıç kuyruklu flama — düz üçgen "oynat" ikonuna benzemesin */}
+      <Path d="M6.8 2.6 L21.8 5.2 L17.2 8.6 L21.8 12 L6.8 14.6 Z" fill={color} />
+      <Path d="M6.8 2.6 L21.8 5.2 L17.2 8.6 L6.8 8.6 Z" fill="#fff" opacity={0.22} />
     </Svg>
   );
 }
@@ -59,8 +91,28 @@ export function AgeEmblem({ size = 32, color }: { size?: number; color: string }
   );
 }
 
-/** Mazgal (crenellation) yol üreteci — [x0,x1] arası n eşit diş. Mevcut keep
- *  mazgalını birebir üretir (n=4, taban / taban-8 / taban-3). */
+// ── Yapı çizim yardımcıları ─────────────────────────────────────────────────
+// Ortak dil: her blok ÜÇ tonda boyanır — ön yüz gövde, sağ yan koyu, sol kenar
+// ışık şeridi; tepedeki mazgal bandı en açık ton (üst yüz ışığı yakalar). Bu
+// üçlü, düz siluetleri düz renk kalmadan "hacimli oyuncak" gibi gösterir.
+
+/** Kale ikonunun çizim çerçevesi. Taç/sancak için tepede bol pay var; `base`
+ *  yapının oturduğu zemin çizgisi. */
+export const CASTLE_VB = { w: 72, h: 90, top: -52, base: 30 };
+
+/** Kale ikonu haritada dikey olarak nereye oturur: taban çizgisi, düğüm
+ *  noktasının `0.4722 × size` kadar ALTINA gelir. Bu oran eski (-40..34)
+ *  çerçevesinin merkezleme davranışından gelir — çerçeve büyüse de düğümler
+ *  yerinden oynamasın diye sabit tutulur. */
+const BASE_BELOW_CENTER = 0.4722;
+
+/** Haritada kale düğümünün `marginTop` değeri (çerçeve yüksekliğinden bağımsız
+ *  olarak taban çizgisini aynı yerde tutar). */
+export function castleMarginTop(size: number): number {
+  return -size * ((CASTLE_VB.base - CASTLE_VB.top) / CASTLE_VB.w - BASE_BELOW_CENTER);
+}
+
+/** Mazgal (crenellation) yol üreteci — [x0,x1] arası n eşit diş. */
 function cren(x0: number, x1: number, yBase: number, yTooth: number, yNotch: number, n: number): string {
   const seg = (x1 - x0) / (2 * n - 1);
   let x = x0;
@@ -74,100 +126,198 @@ function cren(x0: number, x1: number, yBase: number, yTooth: number, yNotch: num
   return d + ` L${x1} ${yBase} Z`;
 }
 
-/** Harita düğümü — detaylı KALE. `level` (harf sayısı, 4/5/6) dış görünümü
- *  belirler: 4 = mevcut (dar, tek sancak); 5 = yayvan + yüksek + burç kulesi;
- *  6 = en geniş + en yüksek + taç (taht). color = sahip rengi (nötr için gri). */
-export function AgeCastle({ size = 56, color, level = 4 }: { size?: number; color: string; level?: number }) {
-  // 4 (veya belirsiz) → mevcut ikon (birebir).
-  if (level < 5) {
-    return (
-      <Svg width={size} height={(size * 74) / 72} viewBox="-36 -40 72 74">
-        <Ellipse cx={0} cy={30} rx={34} ry={8} fill={color} opacity={0.16} />
-        <Path d="M-30 30 L-30 -4 L-18 -4 L-18 30 Z" fill={color} />
-        <Path d="M-30 -4 L-30 -11 L-27 -11 L-27 -7 L-24 -7 L-24 -11 L-21 -11 L-21 -7 L-18 -7 L-18 -4 Z" fill={color} />
-        <Path d="M18 30 L18 -4 L30 -4 L30 30 Z" fill={color} />
-        <Path d="M18 -4 L18 -11 L21 -11 L21 -7 L24 -7 L24 -11 L27 -11 L27 -7 L30 -7 L30 -11 L30 -4 Z" fill={color} />
-        <Path d="M-14 30 L-14 -16 L14 -16 L14 30 Z" fill={color} />
-        <Path d="M-14 -16 L-14 -24 L-10 -24 L-10 -19 L-6 -19 L-6 -24 L-2 -24 L-2 -19 L2 -19 L2 -24 L6 -24 L6 -19 L10 -19 L10 -24 L14 -24 L14 -16 Z" fill={color} />
-        <Path d="M0 -16 L14 -16 L14 30 L0 30 Z" fill="#000" opacity={0.16} />
-        <Path d="M18 -4 L30 -4 L30 30 L18 30 Z" fill="#000" opacity={0.14} />
-        <G stroke="#000" strokeWidth={1} opacity={0.12}>
-          <Line x1={-14} y1={-4} x2={14} y2={-4} />
-          <Line x1={-14} y1={8} x2={14} y2={8} />
-          <Line x1={-14} y1={20} x2={14} y2={20} />
-        </G>
-        <Path d="M-6 30 L-6 4 Q0 -3 6 4 L6 30 Z" fill="#050c18" opacity={0.92} />
-        <Path d="M-3 -9 L-3 -13 Q0 -16 3 -13 L3 -9 Z" fill="#050c18" opacity={0.9} />
-        <Line x1={0} y1={-24} x2={0} y2={-38} stroke={color} strokeWidth={1.6} />
-        <Path d="M0 -37 L13 -33 L0 -29 Z" fill={color} />
-        <Path d="M0 -37 L13 -33 L0 -29 Z" fill="#fff" opacity={0.18} />
-      </Svg>
-    );
-  }
-
-  // 5 / 6 → hem yukarı hem yana büyür (artifact ile aynı ölçüler).
-  const P =
-    level === 5
-      ? { outer: 32, inner: 17, kh: 16, kTop: -19, tTop: -6, tuH: 8, tuBase: -27, tuTop: -33 }
-      : { outer: 35, inner: 18, kh: 18, kTop: -22, tTop: -8, tuH: 9, tuBase: -30, tuTop: -35 };
+/** Mazgallı duvar bloğu (kale gövdesi / yan burç). */
+function Wall({
+  x0,
+  x1,
+  top,
+  base,
+  p,
+  teeth,
+  toothH = 7,
+}: {
+  x0: number;
+  x1: number;
+  top: number;
+  base: number;
+  p: AgePalette;
+  teeth: number;
+  toothH?: number;
+}) {
+  const w = x1 - x0;
+  const rightW = Math.min(w * 0.36, 13);
+  const leftW = Math.min(w * 0.14, 2.6);
   return (
-    <Svg width={size} height={(size * 74) / 72} viewBox="-36 -40 72 74">
-      <Ellipse cx={0} cy={30} rx={P.outer} ry={8} fill={color} opacity={0.16} />
-      {/* yan kuleler (dışa yayvan) */}
-      <Path d={`M${-P.outer} 30 L${-P.outer} ${P.tTop} L${-P.inner} ${P.tTop} L${-P.inner} 30 Z`} fill={color} />
-      <Path d={cren(-P.outer, -P.inner, P.tTop, P.tTop - 7, P.tTop - 3, 3)} fill={color} />
-      <Path d={`M${P.inner} 30 L${P.inner} ${P.tTop} L${P.outer} ${P.tTop} L${P.outer} 30 Z`} fill={color} />
-      <Path d={cren(P.inner, P.outer, P.tTop, P.tTop - 7, P.tTop - 3, 3)} fill={color} />
-      {/* keep (geniş) */}
-      <Path d={`M${-P.kh} 30 L${-P.kh} ${P.kTop} L${P.kh} ${P.kTop} L${P.kh} 30 Z`} fill={color} />
-      <Path d={cren(-P.kh, P.kh, P.kTop, P.kTop - 8, P.kTop - 3, 5)} fill={color} />
-      {/* gölge katmanları */}
-      <Path d={`M0 ${P.kTop} L${P.kh} ${P.kTop} L${P.kh} 30 L0 30 Z`} fill="#000" opacity={0.16} />
-      <Path d={`M${P.inner} ${P.tTop} L${P.outer} ${P.tTop} L${P.outer} 30 L${P.inner} 30 Z`} fill="#000" opacity={0.14} />
-      {/* banding */}
-      <G stroke="#000" strokeWidth={1} opacity={0.12}>
-        <Line x1={-P.kh} y1={P.kTop + 12} x2={P.kh} y2={P.kTop + 12} />
-        <Line x1={-P.kh} y1={P.kTop + 22} x2={P.kh} y2={P.kTop + 22} />
-        <Line x1={-P.kh} y1={P.kTop + 32} x2={P.kh} y2={P.kTop + 32} />
+    <>
+      {/* ön yüz */}
+      <Path d={`M${x0} ${base} L${x0} ${top} L${x1} ${top} L${x1} ${base} Z`} fill={p.body} />
+      {/* sağ yan gölge */}
+      <Path d={`M${x1 - rightW} ${base} L${x1 - rightW} ${top} L${x1} ${top} L${x1} ${base} Z`} fill={p.shade} />
+      {/* sol kenar ışığı */}
+      <Path d={`M${x0} ${base} L${x0} ${top} L${x0 + leftW} ${top} L${x0 + leftW} ${base} Z`} fill={p.light} />
+      {/* taş bantları */}
+      <G stroke={p.deep} strokeWidth={0.9} opacity={0.45}>
+        {[0.34, 0.62, 0.86].map((f) => {
+          const y = top + (base - top) * f;
+          return <Line key={f} x1={x0} y1={y} x2={x1} y2={y} />;
+        })}
       </G>
-      {/* kapı + pencere */}
-      <Path d="M-7 30 L-7 5 Q0 -3 7 5 L7 30 Z" fill="#050c18" opacity={0.92} />
-      <Path d={`M-3 ${P.kTop + 7} L-3 ${P.kTop + 3} Q0 ${P.kTop} 3 ${P.kTop + 3} L3 ${P.kTop + 7} Z`} fill="#050c18" opacity={0.9} />
-      {/* tepe burç kulesi */}
-      <Path d={`M${-P.tuH} ${P.tuBase} L${-P.tuH} ${P.tuTop} L${P.tuH} ${P.tuTop} L${P.tuH} ${P.tuBase} Z`} fill={color} />
-      <Path d={`M0 ${P.tuBase} L${P.tuH} ${P.tuBase} L${P.tuH} ${P.tuTop} L0 ${P.tuTop} Z`} fill="#000" opacity={0.13} />
-      {/* tepe süsü: 5 → sancak · 6 → taç */}
-      {level === 5 ? (
+      {/* mazgal bandı (üst yüz ışığı) + altındaki koyu ayrım */}
+      <Path d={cren(x0, x1, top, top - toothH, top - toothH * 0.44, teeth)} fill={p.light} />
+      <Path d={`M${x0} ${top} L${x1} ${top} L${x1} ${top + 1.4} L${x0} ${top + 1.4} Z`} fill={p.deep} opacity={0.55} />
+    </>
+  );
+}
+
+/** Kemerli kapı (koyu boşluk + çerçeve). */
+function Gate({ cx, base, w, h, p }: { cx: number; base: number; w: number; h: number; p: AgePalette }) {
+  const hw = w / 2;
+  const top = base - h;
+  return (
+    <>
+      <Path
+        d={`M${cx - hw - 1.3} ${base} L${cx - hw - 1.3} ${top + 1.5} Q${cx} ${top - 3.4} ${cx + hw + 1.3} ${top + 1.5} L${cx + hw + 1.3} ${base} Z`}
+        fill={p.light}
+      />
+      <Path
+        d={`M${cx - hw} ${base} L${cx - hw} ${top + 1.5} Q${cx} ${top - 1.6} ${cx + hw} ${top + 1.5} L${cx + hw} ${base} Z`}
+        fill="#050c18"
+        opacity={0.94}
+      />
+    </>
+  );
+}
+
+/** Meşale (yalnız sahiplenilmiş yapılarda) — sıcak amber nokta + halesi. */
+function Torch({ x, y, r = 1.5 }: { x: number; y: number; r?: number }) {
+  return (
+    <>
+      <Circle cx={x} cy={y} r={r * 2.6} fill="#ffb545" opacity={0.22} />
+      <Circle cx={x} cy={y} r={r} fill="#ffd98a" />
+    </>
+  );
+}
+
+/** Direkli sancak (kademe 4/5). */
+function Pennant({ x, yTop, yPole, p }: { x: number; yTop: number; yPole: number; p: AgePalette }) {
+  return (
+    <>
+      {/* direk açık taş tonunda — koyu harita zemininde silueti kaybolmasın */}
+      <Line x1={x} y1={yPole} x2={x} y2={yTop} stroke="#c3cee0" strokeWidth={1.9} strokeLinecap="round" />
+      <Path d={`M${x} ${yTop + 1} L${x + 13} ${yTop + 4.6} L${x} ${yTop + 8.2} Z`} fill={p.body} />
+      <Path d={`M${x} ${yTop + 1} L${x + 13} ${yTop + 4.6} L${x} ${yTop + 4.6} Z`} fill={p.light} />
+    </>
+  );
+}
+
+/** Harita düğümü — KADEMELİ KALE. `level` (şifre harf sayısı 4/5/6) dış görünümü
+ *  belirler: 4 = karakol (dar, tek sancak); 5 = hisar (yayvan + burç kulesi +
+ *  meşaleler); 6 = kale-i sultani (en geniş, taç + taş platform). color = sahip
+ *  rengi; nötr gri → meşale/pencere ışığı sönük, sancak yırtık. */
+export function AgeCastle({ size = 56, color, level = 4 }: { size?: number; color: string; level?: number }) {
+  const p = palette(color);
+  const neutral = color === AGE.gray;
+  const tier = level >= 6 ? 3 : level >= 5 ? 2 : 1;
+  // Kademe geometrisi (taban y = CASTLE_VB.base).
+  const G_ = {
+    1: { outer: 29, inner: 15, keepTop: -15, sideTop: -3, turret: 0, poleTop: -42 },
+    2: { outer: 32, inner: 17, keepTop: -19, sideTop: -6, turret: 8, poleTop: -46 },
+    3: { outer: 35, inner: 18, keepTop: -21, sideTop: -8, turret: 9, poleTop: -46 },
+  }[tier]!;
+  const base = CASTLE_VB.base;
+
+  return (
+    <Svg
+      width={size}
+      height={(size * CASTLE_VB.h) / CASTLE_VB.w}
+      viewBox={`${-CASTLE_VB.w / 2} ${CASTLE_VB.top} ${CASTLE_VB.w} ${CASTLE_VB.h}`}>
+      {/* sahiplik halesi + zemin gölgesi */}
+      <Ellipse cx={0} cy={base} rx={G_.outer + 5} ry={9} fill={p.body} opacity={neutral ? 0.1 : 0.24} />
+      <Ellipse cx={0} cy={base + 1} rx={G_.outer - 4} ry={5.5} fill="#040812" opacity={0.55} />
+
+      {/* kademe 3: taş platform (merkez ödülü havada duruyor hissi) */}
+      {tier === 3 ? (
         <>
-          <Line x1={0} y1={P.tuTop} x2={0} y2={-40} stroke={color} strokeWidth={1.6} />
-          <Path d="M0 -39 L11 -36 L0 -33 Z" fill={color} />
-          <Path d="M0 -39 L11 -36 L0 -33 Z" fill="#fff" opacity={0.18} />
+          <Path d={`M${-G_.outer - 3} ${base} L${-G_.outer + 3} ${base + 7} L${G_.outer - 3} ${base + 7} L${G_.outer + 3} ${base} Z`} fill={p.deep} />
+          <Path d={`M${-G_.outer - 3} ${base} L${G_.outer + 3} ${base} L${G_.outer + 3} ${base + 2} L${-G_.outer - 3} ${base + 2} Z`} fill={p.shade} />
         </>
+      ) : null}
+
+      {/* yan burçlar */}
+      <Wall x0={-G_.outer} x1={-G_.inner} top={G_.sideTop} base={base} p={p} teeth={3} toothH={6} />
+      <Wall x0={G_.inner} x1={G_.outer} top={G_.sideTop} base={base} p={p} teeth={3} toothH={6} />
+
+      {/* ana keep */}
+      <Wall x0={-G_.inner + 2} x1={G_.inner - 2} top={G_.keepTop} base={base} p={p} teeth={tier === 1 ? 4 : 5} toothH={8} />
+
+      {/* kapı + pencere */}
+      <Gate cx={0} base={base} w={12} h={tier === 1 ? 24 : 26} p={p} />
+      <Path
+        d={`M-3 ${G_.keepTop + 9} L-3 ${G_.keepTop + 5} Q0 ${G_.keepTop + 1.6} 3 ${G_.keepTop + 5} L3 ${G_.keepTop + 9} Z`}
+        fill={neutral ? '#050c18' : '#ffd98a'}
+        opacity={neutral ? 0.85 : 0.9}
+      />
+
+      {/* tepe burç kulesi (kademe 2/3) */}
+      {G_.turret ? (
+        <Wall x0={-G_.turret} x1={G_.turret} top={G_.keepTop - 13} base={G_.keepTop} p={p} teeth={3} toothH={5.5} />
+      ) : null}
+
+      {/* tepe süsü: 1-2 → sancak · 3 → burcun taşıdığı TAÇ */}
+      {tier === 3 ? (
+        <G transform={`translate(0 ${G_.keepTop - 21})`}>
+          <Path d="M-9 4 L-11 -7 L-4.5 -1.5 L0 -9 L4.5 -1.5 L11 -7 L9 4 Z" fill="#f5c451" stroke="#8a6a1e" strokeWidth={1.1} />
+          <Rect x={-9.5} y={4} width={19} height={3.2} rx={1.2} fill="#f5c451" stroke="#8a6a1e" strokeWidth={0.9} />
+          <Circle cx={0} cy={-9} r={1.5} fill="#ffe9a8" />
+          <Circle cx={-11} cy={-7} r={1.2} fill="#ffe9a8" />
+          <Circle cx={11} cy={-7} r={1.2} fill="#ffe9a8" />
+        </G>
       ) : (
+        <Pennant x={0} yTop={G_.poleTop} yPole={(G_.turret ? G_.keepTop - 13 : G_.keepTop) - 7} p={p} />
+      )}
+
+      {/* meşaleler (yalnız sahipli) */}
+      {neutral ? null : (
         <>
-          <Path d={`M-6 ${P.tuTop} L-6 -38 L-3 -36 L0 -40 L3 -36 L6 -38 L6 ${P.tuTop} Z`} fill={color} />
-          <Circle cx={-3.6} cy={-37} r={0.9} fill="#fff" opacity={0.55} />
-          <Circle cx={0} cy={-38.6} r={1.1} fill="#fff" opacity={0.65} />
-          <Circle cx={3.6} cy={-37} r={0.9} fill="#fff" opacity={0.55} />
+          <Torch x={-G_.inner - 3.5} y={G_.sideTop + 9} />
+          <Torch x={G_.inner + 3.5} y={G_.sideTop + 9} />
         </>
       )}
     </Svg>
   );
 }
 
-/** Harita düğümü — detaylı NÖBET KULESİ (mazgallı, kemerli kapı, banding, fener). */
+/** Harita düğümü — NÖBET KULESİ. Kalenin küçük kardeşi: aynı üç tonlu gövde,
+ *  mazgallı tepe, konik çatı ve sahiplenilince yanan fener. */
 export function AgeTower({ size = 34, color }: { size?: number; color: string }) {
+  const p = palette(color);
+  const neutral = color === AGE.gray;
   return (
     <Svg width={size} height={(size * 44) / 40} viewBox="-20 -24 40 44">
-      <Ellipse cx={0} cy={20} rx={17} ry={5} fill={color} opacity={0.16} />
-      <Path d="M-10 20 L-8.5 -8 L8.5 -8 L10 20 Z" fill={color} />
-      <Path d="M-9 -8 L-9 -15 L-6 -15 L-6 -11 L-3 -11 L-3 -15 L-1.5 -15 L-1.5 -11 L1.5 -11 L1.5 -15 L3 -15 L3 -11 L6 -11 L6 -15 L9 -15 L9 -8 Z" fill={color} />
-      <Path d="M0 -8 L8.5 -8 L10 20 L0 20 Z" fill="#000" opacity={0.16} />
-      <G stroke="#000" strokeWidth={0.9} opacity={0.13}>
-        <Line x1={-9} y1={0} x2={9} y2={0} />
-        <Line x1={-9.6} y1={10} x2={9.6} y2={10} />
+      <Ellipse cx={0} cy={20} rx={15} ry={5.5} fill={p.body} opacity={neutral ? 0.1 : 0.24} />
+      <Ellipse cx={0} cy={20.5} rx={10.5} ry={3.4} fill="#040812" opacity={0.55} />
+
+      {/* gövde (hafif konik) */}
+      <Path d="M-10 20 L-8.6 -7 L8.6 -7 L10 20 Z" fill={p.body} />
+      <Path d="M3 -7 L8.6 -7 L10 20 L3.6 20 Z" fill={p.shade} />
+      <Path d="M-8.6 -7 L-7.2 -7 L-8.6 20 L-10 20 Z" fill={p.light} />
+      <G stroke={p.deep} strokeWidth={0.85} opacity={0.4}>
+        <Line x1={-9.1} y1={3} x2={9.1} y2={3} />
+        <Line x1={-9.6} y1={12} x2={9.6} y2={12} />
       </G>
-      <Path d="M-3.5 20 L-3.5 6 Q0 2 3.5 6 L3.5 20 Z" fill="#050c18" opacity={0.9} />
+
+      {/* mazgallı tepe */}
+      <Path d={cren(-9.6, 9.6, -7, -13.5, -9.8, 3)} fill={p.light} />
+      <Path d="M-9.6 -7 L9.6 -7 L9.6 -5.8 L-9.6 -5.8 Z" fill={p.deep} opacity={0.5} />
+
+      {/* konik çatı */}
+      <Path d="M-7.6 -13.5 L0 -22.5 L7.6 -13.5 Z" fill={p.light} />
+      <Path d="M0 -22.5 L7.6 -13.5 L0 -13.5 Z" fill={p.shade} />
+      <Circle cx={0} cy={-22.8} r={1.6} fill={neutral ? p.shade : '#ffd98a'} />
+
+      {/* fener + kapı */}
+      <Rect x={-2} y={-3.6} width={4} height={5} rx={1.6} fill={neutral ? '#050c18' : '#ffd98a'} opacity={neutral ? 0.8 : 0.95} />
+      <Path d="M-3.4 20 L-3.4 8 Q0 4.4 3.4 8 L3.4 20 Z" fill="#050c18" opacity={0.9} />
     </Svg>
   );
 }
